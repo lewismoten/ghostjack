@@ -25,6 +25,6 @@ This repository holds what I learn about the camera and any code I write for it.
 
 ## Possible next steps
 
-1. Log in to the local web page with the password printed on the camera, from the isolated cable, and see what it offers (stream address, settings, firmware version).
-2. Try RTSP with that login and common stream paths.
-3. If there's no local video, identify the chip (photos of the circuit board, markings, serial pads) and make a full flash backup before considering open firmware such as OpenIPC.
+1. A small script that reads the device id from the camera's HelloRequest, signs in with the password from the macOS Keychain (never from a file), and saves a snapshot through `ccm_snapshot` and `/ccm/ccm_pic_get.jpg`.
+2. Ask `ccm_play` for an RTSP stream address and test it with VLC or ffmpeg.
+3. Only if neither works: identify the chip (photos of the circuit board, markings, serial pads) and make a full flash backup before considering open firmware such as OpenIPC.
