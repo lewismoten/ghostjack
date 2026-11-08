@@ -133,6 +133,7 @@ What it shows:
 - It talks to the camera with `ccm_*` messages (111 of them: login, Wi-Fi, date, disk, devices and more).
 - **Snapshot:** after `ccm_snapshot`, the picture is at `/ccm/ccm_pic_get.jpg?hfrom_handle=887330&dsess=1&dsess_nid=<session id>&dsess_sn=<device id>&dtoken=<token>`. The session id comes from signing in, and the token from the snapshot reply.
 - **Live video:** `ccm_play` returns a stream address; the settings offer the protocols rtmp, rtsp, rtdp and mutp.
+- VLC can't open `rtsp://192.168.187.254:554` ("Your input can't be opened"), as expected: the stream address only exists after a signed-in `ccm_play` request.
 - The device id doesn't need storing: the camera announces it in its port-3703 HelloRequest (step 5).
 
 ## Cleaning up
