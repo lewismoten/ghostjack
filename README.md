@@ -18,9 +18,9 @@ This repository holds what I learn about the camera and any code I write for it.
 | --- | --- |
 | Label | TETHYS, Model 825-C, SKU TT000074, DC 5V 1.2A |
 | Ports | 5 V input (USB cable, power only), reset button, microSD slot, RJ45 Ethernet (100 Mbps) |
-| Software | MIPC family (the maker's phone app), web server "MWS 0.01", web app mipc v2n 8.1 (built 2015-08-31) |
+| Software | MIPC family (the maker's phone app); firmware v5.3.3.2101181516 (2021-01-18), internal model F300; web server "MWS 0.01", web app mipc v2n 8.1 |
 | Network | Asks for DHCP; meanwhile uses a built-in address, 192.168.187.254 |
-| Open ports | 80 (web page titled "IPC"), 554 (accepts connections; no reply to a plain RTSP request yet) |
+| Open ports | 80 (login page titled "IPC"; `ccm_*` API with a snapshot URL and `ccm_play` stream setup), 554 (accepts connections; silent without a session) |
 | Maker's FAQ | Says local HTTP/RTSP video isn't supported, and it works only through the MIPC app |
 
 ## Possible next steps

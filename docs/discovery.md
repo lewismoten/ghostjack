@@ -113,6 +113,28 @@ Chrome's error was `https://192.168.187.254/ is unreachable. ERR_ADDRESS_UNREACH
 
 The login page fills in the user ID (the serial) by itself, but the password on the label was rejected. A secondhand camera usually means the previous owner changed it. Don't guess passwords. Hold the rear RESET button for about 10 seconds while it's powered (until it speaks or restarts) to restore factory settings, including the printed password; firmware isn't touched. Afterward, check whether the camera's built-in address changed (repeat step 4).
 
+## 11. After logging in: version, and how the web app gets video
+
+After a factory reset and a new password, the web page showed **software version v5.3.3.2101181516** (built 2021-01-18) and **model F300** (the internal model; the label says 825-C).
+
+Port 554 stays silent for every stream path tried (`live/ch00_0`, `live/ch00_1`, `11`, `12`, `onvif1`, `stream1`, `h264`, `ch0_0.h264`), and `/video.mjpg`, `/video.mpeg` and `/snapshot.jpg` are 404. So there's no plain RTSP or MJPEG address without a session.
+
+The web app's script shows how it does it (it's served gzipped; unzip it first):
+
+```sh
+curl -s -o mipc.js.gz "http://192.168.187.254/scripts/mipc.v2n.min.js?v2n.8.1.1508311025"
+gunzip -c mipc.js.gz > mipc.js
+python3 -c "import re;d=open('mipc.js',encoding='latin-1').read();print(sorted(set(re.findall(r'ccm_[a-z_]+',d))))"
+grep -o '.\{200\}ccm_pic_get.jpg.\{200\}' mipc.js
+```
+
+What it shows:
+
+- It talks to the camera with `ccm_*` messages (111 of them: login, Wi-Fi, date, disk, devices and more).
+- **Snapshot:** after `ccm_snapshot`, the picture is at `/ccm/ccm_pic_get.jpg?hfrom_handle=887330&dsess=1&dsess_nid=<session id>&dsess_sn=<device id>&dtoken=<token>`. The session id comes from signing in, and the token from the snapshot reply.
+- **Live video:** `ccm_play` returns a stream address; the settings offer the protocols rtmp, rtsp, rtdp and mutp.
+- The device id doesn't need storing: the camera announces it in its port-3703 HelloRequest (step 5).
+
 ## Cleaning up
 
 Remove the extra address when done:
