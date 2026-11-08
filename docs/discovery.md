@@ -85,7 +85,7 @@ curl -s -D - -o page.html http://192.168.187.254/
 grep -o -i 'title>[^<]*' page.html
 ```
 
-**Result:** `Server: MWS 0.01`, a page titled "IPC" that loads `mipc.v2n.min.js?v2n.8.1.1508311025` (MIPC web app 8.1, built 2015-08-31).
+**Result:** `Server: MWS 0.01`, a login page titled "IPC" that loads `mipc.v2n.min.js?v2n.8.1.1508311025` (MIPC web app 8.1, built 2015-08-31).
 
 RTSP's list of supported commands, without logging in:
 
@@ -94,6 +94,14 @@ printf 'OPTIONS rtsp://192.168.187.254:554/ RTSP/1.0\r\nCSeq: 1\r\n\r\n' | nc -w
 ```
 
 **Result:** the connection opens, but no reply in 8 seconds. Port 554 may need a stream path or a login first, or it may not be RTSP at all.
+
+## 8. The browser can't reach it, but curl can
+
+`curl http://192.168.187.254/` returned the page, yet Chrome just spun. A headless Chromium run from Terminal also loaded it fine: a dark login page with a language button, the user name already filled in (the camera's serial), a password box and "Stay signed in".
+
+**Cause:** macOS's Local Network privacy setting. Terminal (and anything run from it) had permission to reach local devices; Chrome didn't.
+
+**Fix:** System Settings → Privacy & Security → Local Network → turn on the browser, then quit it completely (Cmd+Q) and reopen. Type the address with `http://`. If the browser still upgrades to https, allow the insecure page (the camera has no https).
 
 ## Cleaning up
 
