@@ -15,17 +15,20 @@ It's a feature of the bridge (`src/server.mjs`), so it uses the same login, acce
      "reply": { "webhook": "http://localhost:9000/voice-reply", "timeout_s": 120 } }
    ```
    `kind` is `question` (wait for an answer) or `statement` (just say it). The bridge answers right away with a **ticket**: `{ "ticket": "vq_7f3k…", "status": "queued" }`.
-2. **Speak.** The bridge turns the text into speech with the chosen voice, plays a short chime, then the message.
-3. **Listen.** For a question, it records from the camera's microphone until I stop talking (silence detection), up to the timeout.
-4. **Transcribe.** Local Whisper turns my answer into text.
-5. **Deliver.** It stores the result under the ticket and, if a webhook was given, POSTs it there:
+2. **Chime and wait.** The bridge plays a short chime (each assistant has its own) and **waits for me to acknowledge** before saying anything. Acknowledge by saying "go ahead" (a short listen window after the chime), pressing a button on the control page, or later a gesture the camera can see. "Not now" or no acknowledgment within a set time leaves the message waiting (`pending`), and it chimes again later or waits until I ask "any messages?".
+3. **Speak.** After the acknowledgment, the bridge turns the text into speech in that assistant's voice and plays it.
+4. **Listen.** For a question, it records from the camera's microphone until I stop talking (silence detection), up to the timeout.
+5. **Transcribe.** Local Whisper turns my answer into text.
+6. **Deliver.** It stores the result under the ticket and, if a webhook was given, POSTs it there:
    ```json
    { "ticket": "vq_7f3k…", "status": "answered", "text": "Yes, go ahead.",
      "asked_at": "...", "answered_at": "...", "confidence": 0.93 }
    ```
-   Any caller can also check later with `GET /api/voice/tickets/vq_7f3k…`, which returns `queued`, `speaking`, `listening`, `answered`, `no_answer` (timed out) or `failed`.
+   Any caller can also check later with `GET /api/voice/tickets/vq_7f3k…`, which returns `queued`, `chimed`, `pending` (not acknowledged yet), `speaking`, `listening`, `answered`, `no_answer` (timed out), `declined` ("not now") or `failed`.
 
 ## Voices
+
+- **Each assistant has its own voice and chime** (for example Claude, Kaylee and Codex each sound different), set in the bridge's settings, so I know who's asking before the message plays. A caller can't pick another assistant's voice.
 
 - Generated locally with the voice tools I already use for the GameMaker tour (Pocket TTS and Kokoro in `.narrate`). A voice list comes from `GET /api/voice/voices`.
 - My own cloned voice is used only where I say so (for example as Doc Leo); the default is a clearly synthetic assistant voice, so nobody mistakes the camera for me. Each voice is labeled with whether it's my voice or a model's.
@@ -36,6 +39,12 @@ It's a feature of the bridge (`src/server.mjs`), so it uses the same login, acce
 - One speaker and one me, so asks wait in a **queue**, one at a time, with a `priority` for urgent ones. `GET /api/voice/queue` shows what's waiting; I can skip or cancel from the control page.
 - Each caller gets its own access token (named: "claude", "kaylee", "codex"), so tickets show who asked, and a token can be switched off without affecting the others.
 - **AI tools:** the MCP server gets `camera_say(text, voice)`, `camera_ask(text, voice, timeout)` (returns the ticket), `camera_get_reply(ticket)` and `camera_wait_reply(ticket, timeout)`.
+
+## Transcript log (optional, off by default)
+
+- When turned on, each exchange (time, assistant, ticket, what was said, my transcribed answer, confidence) is appended to a log, one file per day.
+- **Where:** the goal is the camera's microSD card, so the log lives with the camera. Whether the camera lets the bridge write its own files there is still unknown: its API shows SD status and control (`ccm_disk_get`, `ccm_disk_ctl`), but not file uploads. If it doesn't, the log goes to a folder on the Mac instead, and the setting says which.
+- Text only, never audio. It can be turned off, exported and cleared from the control page, and it's never committed to the repository.
 
 ## The control page
 
