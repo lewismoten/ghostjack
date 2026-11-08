@@ -12,7 +12,7 @@ The camera has no depth sensor (one fixed lens, no stereo or time-of-flight), an
 4. **Combine into a map.** Turn each picture's pixels into directions using the camera's estimated pan and tilt and its field of view, and push each one out by its estimated depth. The result is a point cloud around the camera, with labeled boxes where objects were found.
 5. **Real scale.** Enter one or two known sizes ("the door is 80 inches tall", "the desk is 30 inches high") to turn relative depth into rough distances.
 6. **Show it.** The three.js view draws the room as a neon point cloud with labeled objects, and the camera model in the middle. Clicking an object turns the camera toward it, and the AI tools can say "look at the left monitor".
-7. **Keep it current.** Re-sweep on request, or watch for changes (a moved chair, someone walking in).
+7. **Keep it current.** A **Re-sweep** button on the control page (and a `camera_resweep` AI tool) redoes the sweep and updates the map; later, the bridge can notice changes (a moved chair, someone walking in) and refresh just that area.
 
 ## Limits to keep in mind
 
