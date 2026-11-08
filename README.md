@@ -7,6 +7,8 @@ This repository holds what I learn about the camera and any code I write for it.
 - [Finding the camera on the network](docs/discovery.md): step-by-step troubleshooting, from "is the USB cable data?" to signing in and taking a snapshot, with what each step showed.
 - `tools/snapshot.mjs`: saves one 1920 x 1080 snapshot over the local network (no cloud). `tools/web-login-probe.mjs`: records the web app's requests after sign-in.
 
+- [The local bridge and control page](docs/bridge.md): `npm start` runs a token-protected local service (snapshot, aim, night vision, live stream) and a control page in `web/`; with Tailscale it can be reached from other devices.
+
 Both read the device id and password from the macOS Keychain item `tethys-camera` and need Playwright (`PLAYWRIGHT=<path>/playwright-core/index.mjs`).
 
 ## Ground rules

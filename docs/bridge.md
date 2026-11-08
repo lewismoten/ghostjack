@@ -1,0 +1,39 @@
+# The local bridge and control page
+
+`src/server.mjs` keeps one signed-in session with the camera's own web page (headless Chromium, through Playwright) and offers a small HTTP API; `web/` is a static control page for it. The camera stays on its isolated cable; only this service talks to it.
+
+## Run it
+
+```sh
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install   # once; uses Playwright's cached Chromium
+npm start                                        # http://127.0.0.1:8787
+```
+
+It reads the device id and password from the macOS Keychain item `tethys-camera` (see the README) and needs ffmpeg at `/opt/homebrew/bin/ffmpeg` (`FFMPEG=` to change). Environment: `PORT` (8787), `HOST` (127.0.0.1), `CAMERA_IP` (192.168.187.254). Open `http://localhost:8787/` for the page.
+
+## The token
+
+On first run the bridge creates `~/.config/tethys-camera/token` (mode 0600) and prints it once. Every `/api` route except `/api/hello` needs it, as `Authorization: Bearer <token>`. The live stream and snapshots also accept `?token=` because a `<video>` tag can't send headers; the page uses that for the stream only. Delete the file to make a new token.
+
+## Endpoints
+
+| Route | What it does |
+| --- | --- |
+| `GET /api/hello` | No token. `{ok:true}`; lets the page tell a bridge from nothing. |
+| `GET /api/status` | Night-vision mode (`auto` or `night`) and whether the IR is on now. |
+| `GET /api/snapshot.jpg?profile=p0&crop=x,y,w,h` | A JPEG (p0 is 1920x1080, p1 smaller). `crop` is fractions 0 to 1; the crop is scaled to 1280 wide (digital zoom; the lens has no optical zoom). |
+| `POST /api/move` `{dx,dy,speed}` | One small step; +dx right, +dy up. Clamped to 20 and 100, one per second (moves queue in the camera and a stop doesn't cancel them, so keep steps at 10). |
+| `POST /api/night` `{mode:'night'\|'auto'}` | Forced infrared, or automatic (the factory value). |
+| `GET /api/stream` | Live video and sound. |
+
+## The stream format
+
+Fragmented MP4 over chunked HTTP: ffmpeg reads a fresh RTSP address over TCP and copies the camera's H.264 and AAC without re-encoding (`-c copy -movflags frag_keyframe+empty_moov`). A `<video src>` plays it directly in Chromium; it takes a few seconds to start because the first fragment waits for a keyframe. Each client gets its own ffmpeg and its own RTSP address (they work once); ffmpeg is killed when the client disconnects and when the bridge exits. Headless WebKit did not start playback in testing, so Safari is unchecked. The MJPEG fallback wasn't needed.
+
+## Using it from another device (Tailscale)
+
+```sh
+tailscale serve --bg 8787
+```
+
+This gives `https://<mac>.<tailnet>.ts.net` for devices on your tailnet only. Open that address (it serves the page too), or open the hosted page and type that address and the token into the Bridge box. The bridge allows cross-origin requests only from `https://lewismoten.github.io` and answers Private Network Access preflights. Stop sharing with `tailscale serve reset`.
