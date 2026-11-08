@@ -10,3 +10,5 @@ page-text.txt
 *.mp4
 *.mov
 *.m4a
+node_modules/
+captures/
