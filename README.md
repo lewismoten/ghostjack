@@ -14,6 +14,7 @@ Both read the device id and password from the macOS Keychain item `tethys-camera
 - The camera stays on an isolated cable (straight into the computer) unless I decide otherwise. No cloud account, no internet access.
 - Look before touching: no logins, resets or firmware changes until the camera is identified and backed up.
 - Never commit passwords, serial numbers, device IDs or full hardware addresses. The serial doubles as the camera's cloud ID.
+- Never commit pictures, video or audio from the camera. They show my home and me; test captures stay local and get deleted after testing (`.gitignore` blocks the usual image, audio and video files).
 
 ## What's known so far
 

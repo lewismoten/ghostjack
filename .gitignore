@@ -3,3 +3,10 @@ out/
 *.png
 requests.json
 page-text.txt
+*.jpeg
+*.gif
+*.wav
+*.aiff
+*.mp4
+*.mov
+*.m4a
