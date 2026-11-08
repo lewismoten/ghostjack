@@ -172,7 +172,9 @@ All from inside the signed-in page (same `acs.send_msg` pattern as the snapshot,
 ```
 
 - It replies "success" to anything, so check with snapshots before and after (compare them; a real move changes most of the picture).
-- Small values (x = 0.1 or 0.5 with `space: ''`) did nothing. **x = 100 started a slow pan to the right that kept going** after the script ended; sending all zeros (trans and speed) stopped it. Units and the stop behavior still need pinning down, ideally with the camera on a tripod and nobody in front of it.
+- Small values (x = 0.1 or 0.5 with `space: ''`) did nothing visible.
+- **Moves queue and run one after another; each carries its own speed.** `trans` is the step size and `speed` how fast it runs: x = 100 at speed 1 crawled for over a minute, while the same step at speed 100 ran fast. An all-zero command does not cancel a step that's already running, and a "down" sent during a long "up" ran only after the "up" finished.
+- **A good nudge is a step of 10 at speed 100**: tilt down 10 then up 10 at speed 100 each took under 4 seconds, and the view came back close to where it started (positive y = up, negative y = down; positive x = right).
 - `ccm_video_srcs_get` reports video source `vs0` (25 fps) and its image settings.
 
 **Live stream: `ccm_play`** with `setup: { stream: 'RTP_Unicast', trans: { proto: 'rtsp' } }, token: 'p0'` returns
