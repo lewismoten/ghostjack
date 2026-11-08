@@ -35,3 +35,7 @@ Both read the device id and password from the macOS Keychain item `tethys-camera
 2. Pin down pan/tilt units and stopping (on a tripod).
 3. Speaking through the camera: work out the RTDP upload (`ccm_talk`).
 4. Set the camera's clock (`ccm_date_set`).
+
+## Credits
+
+The control page's 3D uses [three.js](https://threejs.org) (MIT), loaded from a CDN at run time and not bundled. See [NOTICE](NOTICE.md).

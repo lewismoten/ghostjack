@@ -24,7 +24,13 @@ On first run the bridge creates `~/.config/tethys-camera/token` (mode 0600) and 
 | `GET /api/snapshot.jpg?profile=p0&crop=x,y,w,h` | A JPEG (p0 is 1920x1080, p1 smaller). `crop` is fractions 0 to 1; the crop is scaled to 1280 wide (digital zoom; the lens has no optical zoom). |
 | `POST /api/move` `{dx,dy,speed}` | One small step; +dx right, +dy up. Clamped to 20 and 100, one per second (moves queue in the camera and a stop doesn't cancel them, so keep steps at 10). |
 | `POST /api/night` `{mode:'night'\|'auto'}` | Forced infrared, or automatic (the factory value). |
+| `GET /api/info` | Read-only: type, software version, network, camera clock, SD card, image settings, microphone, alerts. Serial, MAC and nickname are left out. |
+| `POST /api/image` `{brightness,contrast,saturation,sharpness}` | Any of them (0-100; sharpness 0-10); the whole image conf is written back with only those changed. |
+| `POST /api/mic` `{level}` | Microphone level 0-100. |
+| `POST /api/clock` | Sets the camera clock (UTC) from this computer's time (`ccm_date_set`, no timezone field; the camera has no time source). |
 | `GET /api/stream` | Live video and sound. |
+
+Not implemented on purpose: Wi-Fi setup, reboot, factory restore, firmware upgrade, disk format and password change. The page lists them as disabled ("not enabled in this build").
 
 ## The stream format
 
@@ -37,3 +43,7 @@ tailscale serve --bg 8787
 ```
 
 This gives `https://<mac>.<tailnet>.ts.net` for devices on your tailnet only. Open that address (it serves the page too), or open the hosted page and type that address and the token into the Bridge box. The bridge allows cross-origin requests only from `https://lewismoten.github.io` and answers Private Network Access preflights. Stop sharing with `tailscale serve reset`.
+
+## The page's look and the 3D
+
+`web/` is plain HTML, CSS and JavaScript (no build). The 3D extras load last, from `scene.js`, which imports three.js 0.170.0 from cdn.jsdelivr.net; if that fails or WebGL is missing, the page keeps its CSS grid and scanline look. The neon floor behind the panels and the wireframe camera model render at about 30 fps, stop when the tab is hidden (the model also when off screen), and hold still with `prefers-reduced-motion`. The model turns to an estimated pan/tilt counted from the moves sent (the camera can't report its position); "Re-center estimate" zeroes it. Sound (`sound.js`) is synthesized with Web Audio, off by default, and starts only after a click. In a headless test, CPU and dropped frames were the same with the 3D blocked, so the cost is software video decoding, not the scene.
