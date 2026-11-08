@@ -1,0 +1,5 @@
+out/
+*.jpg
+*.png
+requests.json
+page-text.txt

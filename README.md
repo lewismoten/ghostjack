@@ -4,7 +4,10 @@ A $2 thrift-store network camera (Tethys model 825-C, SKU TT000074) that I'm tur
 
 This repository holds what I learn about the camera and any code I write for it. It's kept separate from my other projects.
 
-- [Finding the camera on the network](docs/discovery.md): step-by-step troubleshooting, from "is the USB cable data?" to the camera's own announcement and open ports, with what each step showed.
+- [Finding the camera on the network](docs/discovery.md): step-by-step troubleshooting, from "is the USB cable data?" to signing in and taking a snapshot, with what each step showed.
+- `tools/snapshot.mjs`: saves one 1920 x 1080 snapshot over the local network (no cloud). `tools/web-login-probe.mjs`: records the web app's requests after sign-in.
+
+Both read the device id and password from the macOS Keychain item `tethys-camera` and need Playwright (`PLAYWRIGHT=<path>/playwright-core/index.mjs`).
 
 ## Ground rules
 
@@ -25,6 +28,6 @@ This repository holds what I learn about the camera and any code I write for it.
 
 ## Possible next steps
 
-1. A small script that reads the device id from the camera's HelloRequest, signs in with the password from the macOS Keychain (never from a file), and saves a snapshot through `ccm_snapshot` and `/ccm/ccm_pic_get.jpg`.
-2. Ask `ccm_play` for an RTSP stream address and test it with VLC or ffmpeg.
-3. Only if neither works: identify the chip (photos of the circuit board, markings, serial pads) and make a full flash backup before considering open firmware such as OpenIPC.
+1. Ask `ccm_play` for an RTSP stream address (profile p0) and test it in VLC or ffmpeg.
+2. Set the camera's clock (`ccm_date_set`) so pictures carry the right time.
+3. Pan and tilt from a script (the web app has `relative_move_request`).

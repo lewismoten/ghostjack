@@ -136,6 +136,30 @@ What it shows:
 - VLC can't open `rtsp://192.168.187.254:554` ("Your input can't be opened"), as expected: the stream address only exists after a signed-in `ccm_play` request.
 - The device id doesn't need storing: the camera announces it in its port-3703 HelloRequest (step 5).
 
+## 12. Signing in and taking a snapshot from a script
+
+Rebuilding the web app's sign-in by hand would mean reimplementing its Diffie-Hellman exchange (`cacs_dh_req`), MD5 password scrambling and session ids (`cacs_login_req`). Instead, `tools/web-login-probe.mjs` opens the camera's own page in a headless browser, types the password from the macOS Keychain, and records the requests the page makes:
+
+```sh
+security add-generic-password -s tethys-camera -a <device id> -w   # once
+PLAYWRIGHT=<path>/playwright-core/index.mjs node tools/web-login-probe.mjs out/probe
+```
+
+What it showed:
+
+- Every message is a script request: `GET /ccm/<message>.js?hfrom_handle=…&d<field>=…` (for example `cacs_dh_req.js?…&dbnum_prime&droot_num&dkey_a2b&dtid`, then `cacs_login_req.js?…&dlid&dnid&duser&dpass&dsession_req&dparam…`). After sign-in each request carries `dsess`, `dsess_nid` and `dsess_sn`.
+- On a direct connection the page fills in and locks the user name (the device id) itself; only the password is typed.
+- After "Successful login" the page asks to configure Wi-Fi; skipping it is fine.
+
+Then `ccm_snapshot` from inside the signed-in page:
+
+- It needs the device id as `sess.sn` **and** a profile token, `token: "p0"` (main stream). Without them the reply is `ccm.system.err`.
+- The reply is `{ ret: {code: ""}, uri: { url: ".../ccm/ccm_pic_get/-dtoken-p0_….jpg" }, token: "p0_…" }`.
+- Fetching that `uri.url` as-is returns a 525-byte error. Fetching `/ccm/ccm_pic_get.jpg?hfrom_handle=887330&dsess=1&dsess_nid=<nid>&dsess_sn=<device id>&dtoken=<token>` returns the picture: **a 1920 x 1080 JPEG** (about 130 KB).
+- The picture's on-screen clock read 1971: the camera has no time source on an isolated cable.
+
+`tools/snapshot.mjs out/now.jpg` does all of this in one step.
+
 ## Cleaning up
 
 Remove the extra address when done:
