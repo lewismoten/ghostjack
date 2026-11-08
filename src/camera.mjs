@@ -140,3 +140,82 @@ export function streamUrl() {
 }
 
 export const shutdown = close;
+
+// Raw read of one message (used by info readers; the caller decides what to expose).
+export function raw(name, extra = {}) { return run(() => call(name, extra)); }
+
+const safe = (fn) => fn().catch(() => null);
+const pick = (o, ks) => Object.fromEntries(ks.filter((k) => o && o[k] !== undefined).map((k) => [k, o[k]]));
+
+// Read-only information for the settings panel. Serial, MAC and nickname are never included.
+export function info() { return run(infoNow); }
+async function infoNow() {
+  const [i, n, d, k, v, m, al] = await Promise.all(
+    [['ccm_info_get'], ['ccm_net_get'], ['ccm_date_get'], ['ccm_disk_get'], ['ccm_video_srcs_get'], ['ccm_mic_get'], ['ccm_alert_action_get']].map(([name]) => safe(() => call(name, {}))),
+  );
+  const nic = n?.info?.ifs?.[0];
+  const disk = k?.disks?.[0];
+  const conf = v?.vss?.[0]?.extension?.conf;
+  const pad = (x) => String(x).padStart(2, '0');
+  const u = d?.utc_date;
+  return {
+    system: i && { type: i.type, version: i.ver, model: '825-C (internal F300)' },
+    network: nic && {
+      link: nic.phy?.info?.stat, mtu: nic.phy?.conf?.mtu, mode: nic.ipv4?.conf?.mode,
+      ip: nic.ipv4?.info?.ip, dns: n.info.dns?.info?.dns,
+    },
+    date: u && { utc: `${u.date.year}-${pad(u.date.mon)}-${pad(u.date.day)} ${pad(u.time.hour)}:${pad(u.time.min)}:${pad(u.time.sec)}` },
+    disk: disk && pick(disk, ['stat', 'size', 'available_size', 'used_size']),
+    image: conf && {
+      resolution: v.vss[0].resolution, framerate: v.vss[0].framerate, mode: conf.mode || 'auto', dayOrNight: conf.day_or_night,
+      brightness: conf.brightness, contrast: conf.contrast, saturation: conf.color_saturation, sharpness: conf.sharpness,
+      wdr: conf.wide_dynamic_range?.mode, backlight: conf.backlight_compensation?.mode, whiteBalance: conf.white_balance?.mode, exposure: conf.exposure?.mode,
+    },
+    mic: m?.conf?.[0] && pick(m.conf[0], ['level', 'silent']),
+    alerts: al && { enabled: al.Enable ?? al.enable ?? null },
+  };
+}
+
+const clampN = (n, lo, hi) => Math.max(lo, Math.min(hi, Math.round(Number(n))));
+
+// Image settings: brightness, contrast, saturation 0-100, sharpness 0-10. Applies to the current
+// settings and to the day or night set in use. The whole conf is written back, as the web app does.
+export function setImage(p) {
+  return run(async () => {
+    const conf = await readConf();
+    const set = (key, name, lo, hi) => {
+      if (p[name] === undefined) return;
+      const val = clampN(p[name], lo, hi);
+      conf[key] = val;
+      const set = conf.day_or_night === 2 || conf.mode === 'night' ? conf.night : conf.day;
+      if (set) set[key] = val;
+    };
+    set('brightness', 'brightness', 0, 100);
+    set('contrast', 'contrast', 0, 100);
+    set('color_saturation', 'saturation', 0, 100);
+    set('sharpness', 'sharpness', 0, 10);
+    await call('ccm_img_set', { token: 'vs0', conf });
+    return (await infoNow()).image;
+  });
+}
+
+export function setMic(level) {
+  return run(async () => {
+    const m = await call('ccm_mic_get', {});
+    const entry = { ...m.conf[0], level: clampN(level, 0, 100) };
+    await call('ccm_mic_set', { conf: entry, force_persistence: 1 });
+    return (await call('ccm_mic_get', {})).conf[0].level;
+  });
+}
+
+// Set the camera clock (UTC) from this computer's time. The camera has no time source of its own.
+export function setClock() {
+  return run(async () => {
+    const t = new Date();
+    await call('ccm_date_set', {
+      type: 'manually', daylight_savings: 0,
+      utc_date: { time: { hour: t.getUTCHours(), min: t.getUTCMinutes(), sec: t.getUTCSeconds() }, date: { year: t.getUTCFullYear(), mon: t.getUTCMonth() + 1, day: t.getUTCDate() } },
+    });
+    return (await infoNow()).date;
+  });
+}

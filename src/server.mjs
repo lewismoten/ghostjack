@@ -132,6 +132,20 @@ const server = createServer(async (req, res) => {
       if (!['night', 'auto'].includes(b.mode)) return json(res, 400, { error: "mode is 'night' or 'auto'" });
       return json(res, 200, { mode: await camera.setNight(b.mode) });
     }
+    if (route === 'GET /api/info') return json(res, 200, await camera.info());
+    if (route === 'POST /api/image') {
+      const b = await readBody(req);
+      const p = {};
+      for (const k of ['brightness', 'contrast', 'saturation', 'sharpness']) if (b[k] !== undefined && Number.isFinite(Number(b[k]))) p[k] = Number(b[k]);
+      if (!Object.keys(p).length) return json(res, 400, { error: 'brightness, contrast, saturation or sharpness needed' });
+      return json(res, 200, await camera.setImage(p));
+    }
+    if (route === 'POST /api/mic') {
+      const b = await readBody(req);
+      if (!Number.isFinite(Number(b.level))) return json(res, 400, { error: 'level 0-100 needed' });
+      return json(res, 200, { level: await camera.setMic(Number(b.level)) });
+    }
+    if (route === 'POST /api/clock') return json(res, 200, await camera.setClock());
     if (route === 'GET /api/stream') return await stream(req, res);
     json(res, 404, { error: 'no such route' });
   } catch (e) {
