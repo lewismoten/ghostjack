@@ -192,7 +192,7 @@ All from inside the signed-in page (same `acs.send_msg` pattern as the snapshot,
 
 - **`mode: "night"` forces night vision**: the picture turns black-and-white and the IR LEDs glow faint red. Confirmed by eye: set at 18:25:01, the red light came on; `mode: ""` at 18:25:14 turned it off and the picture returned to color. **`mode: ""` (the factory value) is automatic**: covering the lens with a hand also triggers night vision, with an audible click from the IR-cut filter. `mode: "day"` was accepted, but the next picture was still black-and-white; forcing day mode is unconfirmed.
 - `day_or_night` reads as the current state (2 while in night vision, 1 in day); writing 0 or 3 stored 1, and writing 2 back didn't stick, so it isn't the switch.
-- `red_or_white` is 0 (probably infrared versus a white light, if the camera has one); not yet tested.
+- **No white light on this model:** with night vision on, writing `red_or_white: 1` was accepted but stored as 0, and only the red IR glow appeared (seen by eye 18:26:57 to 18:27:22).
 - Write back the whole `conf` you read, with only the field you're changing altered, and restore the original afterward.
 
 **Talking (not working yet):** `ccm_talk` with `proto: 'rtdp'` returns an upload address `rtdp://192.168.187.254:7030/pub/<random>`; with `rtsp` or `rtmp` it returns nothing. The web app sends microphone audio to that address through a browser plugin, so speaking needs the maker's RTDP protocol worked out (the 826-x-ip-camera project documents this camera family and may help).
