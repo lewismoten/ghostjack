@@ -28,6 +28,7 @@ Both read the device id and password from the macOS Keychain item `tethys-camera
 
 ## Possible next steps
 
-1. Ask `ccm_play` for an RTSP stream address (profile p0) and test it in VLC or ffmpeg.
-2. Set the camera's clock (`ccm_date_set`) so pictures carry the right time.
-3. Pan and tilt from a script (the web app has `relative_move_request`).
+1. A small local service that stays signed in: snapshot, move, a fresh RTSP address per viewer, and audio clips; plus a little control page for manual use and an MCP server so an AI can look, listen and aim.
+2. Pin down pan/tilt units and stopping (on a tripod).
+3. Speaking through the camera: work out the RTDP upload (`ccm_talk`).
+4. Set the camera's clock (`ccm_date_set`).

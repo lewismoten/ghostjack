@@ -160,6 +160,34 @@ Then `ccm_snapshot` from inside the signed-in page:
 
 `tools/snapshot.mjs out/now.jpg` does all of this in one step. A snapshot described back to me matched the room exactly (laptop, monitors, the blue speaker on the shelf), so the picture is live, not cached. Colors run a little warm.
 
+## 13. Moving, live stream, listening and talking
+
+All from inside the signed-in page (same `acs.send_msg` pattern as the snapshot, with `sess: { nid, sn: <device id> }`).
+
+**Pan and tilt: `ccm_ptz_ctl`** with `token: "ptz0"` (found by trying; the web app never shows where it gets it):
+
+```js
+{ token: 'ptz0', trans: { pan_tilt: { x, y, space: '' }, _deprecated_zoom: { x: 0, space: '' } },
+  speed: { pan_tilt: { x: 1, y: 1, space: '' }, _deprecated_zoom: { x: 0, space: '' } } }
+```
+
+- It replies "success" to anything, so check with snapshots before and after (compare them; a real move changes most of the picture).
+- Small values (x = 0.1 or 0.5 with `space: ''`) did nothing. **x = 100 started a slow pan to the right that kept going** after the script ended; sending all zeros (trans and speed) stopped it. Units and the stop behavior still need pinning down, ideally with the camera on a tripod and nobody in front of it.
+- `ccm_video_srcs_get` reports video source `vs0` (25 fps) and its image settings.
+
+**Live stream: `ccm_play`** with `setup: { stream: 'RTP_Unicast', trans: { proto: 'rtsp' } }, token: 'p0'` returns
+`rtsp://192.168.187.254:554/live/<device id>_p0_<random>` (also `rtmp://…:7010/…` and the maker's `rtdp://…:7030/…`).
+
+- `ffprobe -rtsp_transport tcp <url>` shows **H.264 1920x1080 video and AAC 16 kHz mono audio**.
+- **Each address works for one connection only**: probing it used it up, and ffmpeg then failed with "Invalid data found when processing input". Ask `ccm_play` again for each connection.
+- The page must stay signed in while streaming.
+
+**Listening:** a 6-second recording from that stream (`ffmpeg -rtsp_transport tcp -i <url> -t 6 -map 0:a -c:a pcm_s16le listen.wav`), transcribed locally with `whisper-cli` (large-v3), came back as the exact sentence spoken near the camera. Level about -28 dB mean, -10 dB peak.
+
+**Microphone and speaker settings:** `ccm_mic_get` returns one mic (`dev3`, level 70, not silent). `ccm_speaker_get` with no arguments answers `InvalidArgVal` (it needs a token still to be found).
+
+**Talking (not working yet):** `ccm_talk` with `proto: 'rtdp'` returns an upload address `rtdp://192.168.187.254:7030/pub/<random>`; with `rtsp` or `rtmp` it returns nothing. The web app sends microphone audio to that address through a browser plugin, so speaking needs the maker's RTDP protocol worked out (the 826-x-ip-camera project documents this camera family and may help).
+
 ## Cleaning up
 
 Remove the extra address when done:
