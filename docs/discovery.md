@@ -101,7 +101,17 @@ printf 'OPTIONS rtsp://192.168.187.254:554/ RTSP/1.0\r\nCSeq: 1\r\n\r\n' | nc -w
 
 **Cause:** macOS's Local Network privacy setting. Terminal (and anything run from it) had permission to reach local devices; Chrome didn't.
 
-**Fix:** System Settings → Privacy & Security → Local Network → turn on the browser, then quit it completely (Cmd+Q) and reopen. Type the address with `http://`. If the browser still upgrades to https, allow the insecure page (the camera has no https).
+**Fix (when the entry exists):** System Settings → Privacy & Security → Local Network → turn on the browser, then quit it completely (Cmd+Q) and reopen. Type the address with `http://`. If the browser still upgrades to https, allow the insecure page (the camera has no https).
+
+## 9. Chrome still fails: it switched to https
+
+Chrome's error was `https://192.168.187.254/ is unreachable. ERR_ADDRESS_UNREACHABLE`, with only "provisional headers" in the network panel. Note the `https`: Chrome upgraded the typed `http://` address, and the camera has no https (port 443 is closed). Safari didn't upgrade and showed the login page. On this Mac there was no Local Network entry under Privacy & Security to change, so the permission wasn't the cause here.
+
+**Fix:** `chrome://settings/security` → turn off **Always use secure connections**, then type `http://192.168.187.254/` again (an Incognito window helps if Chrome remembered the upgrade).
+
+## 10. The printed password doesn't work
+
+The login page fills in the user ID (the serial) by itself, but the password on the label was rejected. A secondhand camera usually means the previous owner changed it. Don't guess passwords. Hold the rear RESET button for about 10 seconds while it's powered (until it speaks or restarts) to restore factory settings, including the printed password; firmware isn't touched. Afterward, check whether the camera's built-in address changed (repeat step 4).
 
 ## Cleaning up
 
