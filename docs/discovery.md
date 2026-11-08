@@ -190,7 +190,7 @@ All from inside the signed-in page (same `acs.send_msg` pattern as the snapshot,
 
 **Night vision (infrared LEDs and IR-cut filter):** the image settings come from `ccm_video_srcs_get` (`vss[0].extension.conf`) and are written back whole with `ccm_img_set { token: 'vs0', conf }`. Relevant fields: `mode`, `light_mode`, `day_or_night`, `red_or_white`, `ir_cut_filter_modes`, and separate `day` / `night` brightness, saturation, contrast and sharpness.
 
-- **`mode: "night"` forces night vision**: the picture turns black-and-white and the IR LEDs glow faint red. **`mode: ""` (the factory value) is automatic**: covering the lens with a hand also triggers night vision, with an audible click from the IR-cut filter. `mode: "day"` was accepted, but the next picture was still black-and-white; forcing day mode is unconfirmed.
+- **`mode: "night"` forces night vision**: the picture turns black-and-white and the IR LEDs glow faint red. Confirmed by eye: set at 18:25:01, the red light came on; `mode: ""` at 18:25:14 turned it off and the picture returned to color. **`mode: ""` (the factory value) is automatic**: covering the lens with a hand also triggers night vision, with an audible click from the IR-cut filter. `mode: "day"` was accepted, but the next picture was still black-and-white; forcing day mode is unconfirmed.
 - `day_or_night` reads as the current state (2 while in night vision, 1 in day); writing 0 or 3 stored 1, and writing 2 back didn't stick, so it isn't the switch.
 - `red_or_white` is 0 (probably infrared versus a white light, if the camera has one); not yet tested.
 - Write back the whole `conf` you read, with only the field you're changing altered, and restore the original afterward.
