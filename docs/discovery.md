@@ -177,6 +177,8 @@ All from inside the signed-in page (same `acs.send_msg` pattern as the snapshot,
 - **A good nudge is a step of 10 at speed 100**: tilt down 10 then up 10 at speed 100 each took under 4 seconds, and the view came back close to where it started (positive y = up, negative y = down; positive x = right).
 - `ccm_video_srcs_get` reports video source `vs0` (25 fps) and its image settings.
 
+**Zoom and focus: none.** `_deprecated_zoom` steps of +10 and -10 at speed 100 were accepted but changed nothing measurable (picture difference 7.3 and 5.4, about noise; no change in sharpness). The lens is fixed; the zoom and focus fields are leftovers from the shared MIPC software. Digital zoom (cropping the 1080p picture) is the way to look closer.
+
 **Live stream: `ccm_play`** with `setup: { stream: 'RTP_Unicast', trans: { proto: 'rtsp' } }, token: 'p0'` returns
 `rtsp://192.168.187.254:554/live/<device id>_p0_<random>` (also `rtmp://…:7010/…` and the maker's `rtdp://…:7030/…`).
 
