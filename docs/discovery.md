@@ -158,7 +158,7 @@ Then `ccm_snapshot` from inside the signed-in page:
 - Fetching that `uri.url` as-is returns a 525-byte error. Fetching `/ccm/ccm_pic_get.jpg?hfrom_handle=887330&dsess=1&dsess_nid=<nid>&dsess_sn=<device id>&dtoken=<token>` returns the picture: **a 1920 x 1080 JPEG** (about 130 KB).
 - The picture's on-screen clock read 1971: the camera has no time source on an isolated cable.
 
-`tools/snapshot.mjs out/now.jpg` does all of this in one step.
+`tools/snapshot.mjs out/now.jpg` does all of this in one step. A snapshot described back to me matched the room exactly (laptop, monitors, the blue speaker on the shelf), so the picture is live, not cached. Colors run a little warm.
 
 ## Cleaning up
 
