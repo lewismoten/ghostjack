@@ -23,10 +23,11 @@ and a mouth in meatspace.
 - Speech and chime levels are capped (speech level 0.08, default 0.035; chime
   cap -30 dBFS, default -36 dBFS) because the speaker is alarm-loud; the
   response returns the clamped values.
-- Cyberpunk control deck (Uplink, Eye, Neck, Chrome and Glassmouth panels, each
-  with a plain-language sublabel) with a three.js camera model, optional
-  generated sound (Web Audio, off by default), the "Glassmouth says" box and a
-  disabled voice-relay placeholder.
+- Cyberpunk control deck (an Eye panel with aim arrows over the video, a camera
+  model inset and a say bar, beside tabs for Uplink, Chrome, Glassmouth and
+  Deck, all on one screen, each with a plain-language sublabel) with a three.js
+  camera model, optional generated sound (Web Audio, off by default), the
+  "Glassmouth says" box and a disabled voice-relay placeholder.
 - Demo state for GitHub Pages (`docs/` copy of `web/`), Tailscale instructions,
   and Glassmouth, the voice of the interface.
 - Notes on how the camera was found and worked out (`docs/discovery.md`), plans

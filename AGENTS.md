@@ -55,3 +55,7 @@ camera, the room or the person in it.
   ones as solved instead of rewriting them.
 - Credit third-party code and AI tools in `NOTICE.md`.
 - Don't push, tag remotely or publish without the owner's go-ahead.
+- Before committing, run `npm run format` and `npm run lint` (`npm run check`
+  verifies both). Prettier uses 80 columns and wraps Markdown prose. A commit
+  that only reformats goes in `.git-blame-ignore-revs`; run
+  `git config blame.ignoreRevsFile .git-blame-ignore-revs` once in the clone.

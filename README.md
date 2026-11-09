@@ -3,7 +3,7 @@
 **Ghost Jack: the port agents jack into when they need eyes, ears and a mouth in
 meatspace. Glassmouth is the voice on the wire.**
 
-![The Ghost Jack control page in its demo state: a dark neon deck with panels named Uplink, Eye, Neck, Chrome and Glassmouth, a wireframe camera model, and a "No carrier, the bridge is flatlined" banner.](docs/images/preview.jpg)
+![The Ghost Jack control page in its demo state: a dark neon deck with an Eye panel with aim arrows over the video and a tabbed side panel (Uplink, Chrome, Glassmouth, Deck), a wireframe camera model, and a "No carrier, the bridge is flatlined" banner.](docs/images/preview.jpg)
 
 Ghost Jack gives AI agents (netrunners) a body in the meat world: a cheap
 network camera for an eye and ear, a neck that pans and tilts, and a speaker for
@@ -21,10 +21,11 @@ ffmpeg (the regular build is enough: tested with Homebrew `ffmpeg` 9.0.1;
 `ffmpeg-full` isn't needed). The bridge runs on your machine behind its own ICE
 (an access token); the hosted page is only its remote control and shows a demo
 when no bridge answers. The deck has a neon cyberpunk look: a live Eye panel
-with an on-screen display, a wireframe 3D camera model that turns to the
-estimated aim, a pan/tilt pad, night vision, zoom, camera settings, a
-"Glassmouth says" box, optional generated sound and a light theme. Every cryptic
-label has a plain-language sublabel.
+with an on-screen display, aim arrows over the video, a wireframe 3D camera
+model inset that turns to the estimated aim, night vision, zoom, camera
+settings, a "Glassmouth says" box, optional generated sound and a light theme.
+The whole deck fits one screen, with Uplink, Chrome, Glassmouth and Deck as
+tabs. Every cryptic label has a plain-language sublabel.
 
 ## Quick start
 
@@ -85,3 +86,11 @@ Ghost Jack talks to it, and its quirks.
 
 The control page's 3D uses [three.js](https://threejs.org) (MIT), loaded from a
 CDN at run time and not bundled. See [NOTICE](NOTICE.md).
+
+## Working on the code
+
+`npm run format` (Prettier, 80 columns, Markdown wrapped), `npm run lint`
+(ESLint) and `npm run check` (both, without changing files) keep the code
+readable; `npm run lint:fix` fixes what it can. After changing `web/`, run
+`npm run pages`. `git config blame.ignoreRevsFile .git-blame-ignore-revs` hides
+the formatting-only commit from `git blame`.

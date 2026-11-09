@@ -1,5 +1,6 @@
 // One long-lived signed-in session with the camera's own web page (headless Chromium).
 // Credentials come from the macOS Keychain item "tethys-camera" (this camera's credential; the name stays); nothing secret is logged.
+/* global acs, g_ref, window -- these run inside the camera's own web page (page.evaluate), where the page defines them */
 import { execFileSync } from 'node:child_process';
 import { chromium } from 'playwright-core';
 

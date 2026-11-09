@@ -8,6 +8,7 @@
 // Nothing secret is printed or written.
 //
 // Usage: PLAYWRIGHT=<path to playwright-core/index.mjs> node tools/snapshot.mjs <out.jpg> [camera ip] [profile]
+/* global acs, g_ref, window -- these run inside the camera's own web page (page.evaluate), where the page defines them */
 import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 

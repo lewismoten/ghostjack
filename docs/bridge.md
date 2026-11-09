@@ -131,7 +131,7 @@ decoding, not the scene.
 The page speaks in Glassmouth's voice ([guide](glassmouth.md)): status lines
 like "Eye's open", "Lost the angle" and "Back in sight" always carry the plain
 meaning too. "Who has the eye" shows You while this page is watching live and
-Nobody otherwise, with a relay click (if sound effects are on). The Glassmouth
-panel has a working "Glassmouth says" box (text, voice, level, Speak; its status
-line says "On air.", "Done. Said it." or "Line's busy.") above the disabled
+Nobody otherwise, with a relay click (if sound effects are on). The Eye panel
+has a working "Glassmouth says" box (text, voice, level, Speak; its status line
+says "On air.", "Done. Said it." or "Line's busy.") above the disabled
 placeholder for the [voice relay](voice-relay-plan.md).
