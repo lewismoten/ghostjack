@@ -7,6 +7,7 @@ import { netpath } from './netpath.js';
 import * as tape from './tape.js';
 import { createRecorder } from './record.js';
 import * as lim from './limits.js';
+import * as sph from './sphere.js';
 
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -297,6 +298,7 @@ async function snapshot(auto = false) {
     lastShot = await r.blob();
     rememberFrame(lastShot);
     rememberPose(lastShot);
+    if (!crop) paintBlob(lastShot);
     $('shotSave').disabled = $('shotDl').disabled = false;
     showImage(URL.createObjectURL(lastShot));
     setStatus(
@@ -575,7 +577,11 @@ let limits = null; // { panMin, panMax, tiltMin, tiltMax }
 const blocked = { l: false, r: false, u: false, d: false };
 const PAN_DEGREES = 350; // the camera's pan travel (about), from its specification
 const degPer = () =>
-  limits ? PAN_DEGREES / (limits.panMax - limits.panMin) : DEG_PER_STEP; // tilt assumed the same (unchecked)
+  limits ? PAN_DEGREES / (limits.panMax - limits.panMin) : DEG_PER_STEP;
+// The lens Find limits measured: { fovH, fovV, tiltDegPerUnit } (degrees), or null. Tilt uses the measured
+// degrees per unit when there are some, else the pan figure (unchecked).
+let lens = null;
+const degPerTilt = () => lens?.tiltDegPerUnit ?? degPer();
 // How much of a wanted move fits before a wall: returns [dx, dy] (zero where blocked).
 function room(dx, dy) {
   let rx = dx,
@@ -641,11 +647,11 @@ function saveAim(now) {
   clearTimeout(aimSaveTimer);
   aimSaveTimer = setTimeout(
     () => {
-      store.set(aimKey(), JSON.stringify({ pan, tilt, limits }));
+      store.set(aimKey(), JSON.stringify({ pan, tilt, limits, lens }));
       if (connected)
         api('/api/aim', {
           method: 'POST',
-          body: JSON.stringify({ pan, tilt, ...limits }),
+          body: JSON.stringify({ pan, tilt, ...limits, ...lens }),
         }).catch(() => {});
     },
     now ? 0 : 800,
@@ -664,13 +670,23 @@ async function loadAim() {
         tiltMin: theirs.tiltMin,
         tiltMax: theirs.tiltMax,
       };
+      lens =
+        theirs.fovH > 0
+          ? {
+              fovH: theirs.fovH,
+              fovV: theirs.fovV,
+              tiltDegPerUnit: theirs.tiltDegPerUnit,
+            }
+          : (mine?.lens ?? null);
       pan = theirs.pan ?? 0;
       tilt = theirs.tilt ?? 0;
     } else if (mine) {
       limits = mine.limits;
+      lens = mine.lens ?? null;
       pan = mine.pan ?? pan;
       tilt = mine.tilt ?? tilt;
     }
+    await loadSphere();
     showPose(true);
   } catch {
     /* keep the estimate as it is */
@@ -683,10 +699,11 @@ function showPose(instant) {
   store.set('gm-tilt', tilt);
   const mp = aim ? aim.p : pan,
     mt = aim ? aim.t : tilt,
-    k = degPer();
+    k = degPer(),
+    kt = degPerTilt();
   scene?.setPose(
     Math.max(-175, Math.min(175, mp * k)),
-    Math.max(-60, Math.min(60, mt * k)),
+    Math.max(-60, Math.min(60, mt * kt)),
     instant,
   );
   showRange();
@@ -984,10 +1001,11 @@ async function travel(dx, dy, me, quiet) {
     const sentAt = Date.now();
     lastMove = Date.now() + ms - 1100;
     const k = degPer(),
+      kt = degPerTilt(),
       units = tripUnits(dx, dy);
     scene?.travel(
       Math.max(-175, Math.min(175, (pan + dx) * k)),
-      Math.max(-60, Math.min(60, (tilt + dy) * k)),
+      Math.max(-60, Math.min(60, (tilt + dy) * kt)),
       units * msPerUnit + 250,
     );
     foley.servo(Math.min(4, ms / 1000));
@@ -1263,6 +1281,7 @@ async function survey() {
         b.classList.toggle('ir', ir);
       }
       rememberShotPic(st.slots, blob);
+      if (!st.crop) paintBlob(blob);
     } catch (e) {
       setStatus(`Lost the angle. Picture failed: ${e.message}`, true);
     }
@@ -1563,7 +1582,7 @@ document.addEventListener('keydown', (e) => {
   m.addEventListener('pointermove', (e) => {
     if (!from) return;
     const t = target(e);
-    scene?.setPose(t.p * degPer(), t.t * degPer(), true);
+    scene?.setPose(t.p * degPer(), t.t * degPerTilt(), true);
   });
   m.addEventListener('pointerup', (e) => {
     if (!from) return;
@@ -1908,22 +1927,249 @@ $('sayForm').addEventListener('submit', async (e) => {
   }
 });
 
+// The photo sphere (sphere.js, sphereView.js): every picture the camera takes is painted where it points,
+// live while Find limits and Sweep run. Needs the lens Find limits measures; during a Find limits run it
+// paints with a provisional lens (60 degrees wide, steps from the shifts so far) and repaints the run's
+// pictures with the final one.
+var sphereObj = null,
+  sphereKeep = null,
+  sphereView = null,
+  runFrames = [], // Find limits' small pictures, held until the final lens is known
+  liveLens = null, // the newest picture's pose and provisional lens during a run
+  sweeping = false;
+function sphereNow() {
+  if (!sphereObj) {
+    sphereObj = sph.createSphere();
+    sphereKeep = sph.keep(sphereObj);
+  }
+  return sphereObj;
+}
+const calibNow = () =>
+  lens && limits ? { ...lens, panDegPerUnit: degPer() } : null;
+async function loadSphere() {
+  const sp = sphereNow();
+  sp.clear();
+  await sphereKeep.use(`gm-sphere:${base}`);
+  if (sp.calib && !lens && limits)
+    lens = {
+      fovH: sp.calib.fovH,
+      fovV: sp.calib.fovV,
+      tiltDegPerUnit: sp.calib.tiltDegPerUnit,
+    };
+}
+// Paint a picture the camera just took at the estimated pose (not while it is moving, and not zoomed).
+function paintBlob(blob) {
+  if (aim || finding || !lens || !limits) return;
+  const at = { p: pan, t: tilt };
+  createImageBitmap(blob)
+    .then((bmp) => {
+      const sp = sphereNow();
+      sp.calib = calibNow();
+      sp.paint(bmp, at.p * degPer(), at.t * degPerTilt(), lens.fovH, lens.fovV);
+      bmp.close();
+    })
+    .catch(() => {});
+}
+function runFrame(f, prov) {
+  runFrames.push(f);
+  liveLens = {
+    yaw: f.pan * prov.panDegPerUnit,
+    pitch: f.tilt * prov.tiltDegPerUnit,
+    fovH: prov.fovH,
+    fovV: prov.fovV,
+  };
+  sphereNow().paint(f.bmp, liveLens.yaw, liveLens.pitch, prov.fovH, prov.fovV);
+}
+// The final lens is known: paint the run's pictures again where they really point.
+function repaintRun(res) {
+  const sp = sphereNow(),
+    k = res.lens.panDegPerUnit,
+    kt = res.lens.tiltDegPerUnit;
+  sp.clear();
+  sp.calib = { ...lens, panDegPerUnit: k };
+  for (const f of runFrames)
+    sp.paint(
+      f.bmp,
+      (f.pan - res.center.pan) * k,
+      (f.tilt - res.center.tilt) * kt,
+      lens.fovH,
+      lens.fovV,
+    );
+  for (const f of runFrames) f.bmp.close();
+  runFrames = [];
+}
+async function openSphere() {
+  if (!sphereView) {
+    const m = await import('./sphereView.js');
+    sphereView = m.createView($('stage'), {
+      sphere: sphereNow(),
+      reduced,
+      pose: () => {
+        if (liveLens) return liveLens;
+        if (!lens || !limits) return null;
+        return {
+          yaw: (aim ? aim.p : pan) * degPer(),
+          pitch: (aim ? aim.t : tilt) * degPerTilt(),
+          fovH: lens.fovH,
+          fovV: lens.fovV,
+        };
+      },
+      range: () =>
+        lens && limits
+          ? {
+              yaw0: limits.panMin * degPer(),
+              yaw1: limits.panMax * degPer(),
+              pitch0: limits.tiltMin * degPerTilt(),
+              pitch1: limits.tiltMax * degPerTilt(),
+            }
+          : null,
+      goto: gotoSphere,
+      sweep,
+      stopSweep: () => aimRun++,
+      exportJpg: downloadPanorama,
+      close: closeSphere,
+    });
+  }
+  await sphereView.show();
+  $('keySphere').setAttribute('aria-pressed', 'true');
+}
+function closeSphere() {
+  if (sweeping) aimRun++;
+  sphereView?.hide();
+  $('keySphere').setAttribute('aria-pressed', 'false');
+  $('keySphere').focus();
+}
+function gotoSphere(yaw, pitch) {
+  if (!connected) return setStatus('Jack in first to send the camera there.');
+  if (finding) return;
+  if (!lens || !limits)
+    return setStatus('Run Find limits first, so the sphere knows its angles.');
+  setStatus('Sending the camera to that spot in the sphere.');
+  aimTo(Math.round(yaw / degPer()), Math.round(pitch / degPerTilt()), true);
+}
+async function downloadPanorama(full) {
+  const sp = sphereNow();
+  if (!sp.painted) return sphereView?.note('Nothing painted yet.');
+  sp.calib ??= calibNow();
+  const { blob, name } = await sph.exportPanorama(sp, limits, full);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  sphereView?.note(`Saved ${name}.`);
+}
+// Sweep: visit a grid of angles over the measured range, spaced 0.8 lens widths (and heights), serpentine,
+// from the corner nearest the camera; one fast trip and one small picture each.
+async function sweep() {
+  if (!lens || !limits)
+    return sphereView?.note('Sweep needs the lens: run Find limits first.');
+  if (!connected || finding || sweeping) return;
+  const me = ++aimRun;
+  sweeping = true;
+  sphereView?.setSweeping(true);
+  holdStop();
+  stopLive();
+  const axis = (min, max, fov, k) => {
+    const n = Math.max(1, Math.ceil((max - min) / ((0.8 * fov) / k)) + 1),
+      out = [];
+    for (let i = 0; i < n; i++)
+      out.push(n === 1 ? (min + max) / 2 : min + ((max - min) * i) / (n - 1));
+    return out;
+  };
+  const cols = axis(limits.panMin, limits.panMax, lens.fovH, degPer()),
+    rows = axis(limits.tiltMin, limits.tiltMax, lens.fovV, degPerTilt());
+  if (Math.abs(tilt - rows.at(-1)) < Math.abs(tilt - rows[0])) rows.reverse();
+  if (Math.abs(pan - cols.at(-1)) < Math.abs(pan - cols[0])) cols.reverse();
+  const total = cols.length * rows.length;
+  let n = 0,
+    at = { p: pan, t: tilt };
+  try {
+    for (const [r, t] of rows.entries()) {
+      const row = r % 2 ? [...cols].reverse() : cols;
+      for (const p of row) {
+        // anyone else moving the camera (a pad key, a drag) ends the sweep
+        if (me !== aimRun || !connected || pan !== at.p || tilt !== at.t)
+          return;
+        const dx = Math.round(p - pan),
+          dy = Math.round(t - tilt);
+        if (Math.abs(dx) >= 2 || Math.abs(dy) >= 2) {
+          await travel(dx, dy, me, true);
+          if (me !== aimRun) return;
+        }
+        at = { p: pan, t: tilt };
+        const r2 = await api('/api/snapshot.jpg?profile=p1');
+        if (!r2.ok) throw new Error((await r2.json()).error);
+        const bmp = await createImageBitmap(await r2.blob());
+        const sp = sphereNow();
+        sp.calib = calibNow();
+        sp.paint(
+          bmp,
+          pan * degPer(),
+          tilt * degPerTilt(),
+          lens.fovH,
+          lens.fovV,
+        );
+        bmp.close();
+        sphereView?.note(`Sweep: ${++n} of ${total}.`);
+        setStatus(`Sweep: ${n} of ${total}.`);
+      }
+    }
+    sphereView?.note('Sweep done: the sphere is filled.');
+    setStatus('Sweep done. The sphere is filled.');
+  } catch (e) {
+    setStatus(`Lost the angle. Sweep failed: ${e.message}`, true);
+  } finally {
+    sweeping = false;
+    sphereView?.setSweeping(false);
+    if (me !== aimRun) sphereView?.note('Sweep stopped.');
+  }
+}
+$('keySphere').onclick = () =>
+  sphereView?.isOpen
+    ? closeSphere()
+    : openSphere().catch((e) => setStatus(e.message, true));
+document.addEventListener('keydown', (e) => {
+  if (
+    e.metaKey ||
+    e.ctrlKey ||
+    e.altKey ||
+    ['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)
+  )
+    return;
+  if (e.code === 'KeyO') {
+    e.preventDefault();
+    $('keySphere').click();
+  } else if (e.key === 'Escape' && sphereView?.isOpen) closeSphere();
+});
+
 // Find limits: only on the button; steps to each end and back to the middle (limits.js).
 const limitsText = () =>
   limits
-    ? `Range measured (estimated): pan ${(limits.panMax - limits.panMin) / lim.STEP} steps of ${lim.STEP} (about ${PAN_DEGREES} degrees), tilt ${(limits.tiltMax - limits.tiltMin) / lim.STEP} steps. Find limits again if someone turned the neck by hand.`
+    ? `Range measured (estimated): pan ${(limits.panMax - limits.panMin) / lim.STEP} steps of ${lim.STEP} (about ${PAN_DEGREES} degrees), tilt ${(limits.tiltMax - limits.tiltMin) / lim.STEP} steps.${lensText()} Find limits again if someone turned the neck by hand.`
     : 'Range not measured. Find limits steps the neck to each end in small steps and looks at the picture to see where it stops.';
+const lensText = () =>
+  lens
+    ? ` Lens about ${Math.round(lens.fovH)}\u00b0 wide; tilt about ${(lens.tiltDegPerUnit * lim.STEP).toFixed(1)}\u00b0 a step.`
+    : '';
 function showLimitsInfo() {
   $('limitsInfo').textContent = limitsText();
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-async function grabSmall() {
+// keep: hold the small picture (g.bmp) and its 160 x 90 gray (g.hi) for measuring and painting the sphere.
+async function grabSmall(keep) {
   const r = await api('/api/snapshot.jpg?profile=p1');
   if (!r.ok) throw new Error((await r.json()).error);
-  const bmp = await createImageBitmap(await r.blob());
+  const bmp = await createImageBitmap(
+    await r.blob(),
+    keep ? { resizeWidth: 480, resizeHeight: 270 } : {},
+  );
   const g = lim.gray(bmp);
-  bmp.close();
   if (!g) throw new Error('the browser would not give the picture pixels');
+  if (keep) {
+    g.hi = lim.grayHi(bmp);
+    g.bmp = bmp;
+  } else bmp.close();
   return g;
 }
 async function sendStep(axis, dir) {
@@ -1975,6 +2221,9 @@ $('limitsGo').onclick = async () => {
   if (!connected || finding) return;
   finding = true;
   cancelFind = false;
+  liveLens = null;
+  sphereNow().clear();
+  openSphere().catch(() => {}); // watch the room come together
   holdStop();
   stopLive(); // the picture comes from small snapshots; the live view would only get in the way
   $('limitsGo').disabled = true;
@@ -1985,7 +2234,8 @@ $('limitsGo').onclick = async () => {
   let res = null;
   try {
     res = await lim.findLimits({
-      grab: grabSmall,
+      grab: () => grabSmall(true),
+      frame: runFrame,
       send: sendStep,
       travel: travelFind,
       cancelled: () => cancelFind,
@@ -2000,6 +2250,9 @@ $('limitsGo').onclick = async () => {
     setStatus(`Lost the angle. Mapping failed: ${e.message}`, true);
   }
   finding = false;
+  liveLens = null;
+  if (!res) for (const f of runFrames) f.bmp.close();
+  runFrames = [];
   $('limitsGo').disabled = !connected;
   $('limitsStop').hidden = true;
   $('limitsBar').hidden = true;
@@ -2012,6 +2265,14 @@ $('limitsGo').onclick = async () => {
     };
     pan = tilt = 0;
     blocked.l = blocked.r = blocked.u = blocked.d = false;
+    if (res.lens) {
+      lens = {
+        fovH: res.lens.fovH,
+        fovV: res.lens.fovV,
+        tiltDegPerUnit: res.lens.tiltDegPerUnit,
+      };
+      repaintRun(res);
+    }
     setStatus(`${glass.line('limitsDone')} Estimated range saved.`);
   } else if (cancelFind || !connected) {
     setStatus(

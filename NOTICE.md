@@ -2,8 +2,10 @@
 
 ## three.js
 
-The control page (`web/scene.js`) loads three.js 0.170.0 from cdn.jsdelivr.net
-at run time. It is not copied into this repository.
+The control page (`web/scene.js`, `web/sphereView.js`) imports three.js 0.170.0,
+copied unchanged from the npm package (`build/three.module.js`) into
+`web/vendor/three.module.js` (license in `web/vendor/three.LICENSE`), so the
+page needs no outside download and works with no internet.
 
 Copyright (c) 2010-2024 three.js authors. MIT License: permission is granted,
 free of charge, to use, copy, modify, merge, publish, distribute, sublicense and

@@ -23,6 +23,108 @@ export function gray(src) {
     return null; // a tainted canvas (a cross-origin <video src>) cannot be read
   }
 }
+
+// A 160 x 90 grayscale copy (the size used to measure how far a step moved the picture).
+const HW = 160,
+  HH = 90;
+const cvHi = document.createElement('canvas');
+cvHi.width = HW;
+cvHi.height = HH;
+const cxHi = cvHi.getContext('2d', { willReadFrequently: true });
+export function grayHi(src) {
+  try {
+    cxHi.drawImage(src, 0, 0, HW, HH);
+    const d = cxHi.getImageData(0, 0, HW, HH).data,
+      g = new Uint8Array(HW * HH);
+    for (let i = 0; i < g.length; i++)
+      g[i] = (d[i * 4] * 77 + d[i * 4 + 1] * 150 + d[i * 4 + 2] * 29) >> 8;
+    return g;
+  } catch {
+    return null;
+  }
+}
+const median = (a) => {
+  const s = [...a].sort((x, y) => x - y),
+    n = s.length;
+  return n ? (n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2) : NaN;
+};
+// How far the picture slid between two 160 x 90 grays, as fractions of the frame: { sx, sy } (signed,
+// content movement), or null when the match is not clear. Brute force over offsets, mean absolute
+// difference over the overlap (every other pixel); the main axis searches +-45 percent, the other +-8.
+export function imageShift(a, b, axis) {
+  let mean = 0;
+  for (let i = 0; i < a.length; i += 7) mean += a[i];
+  mean /= Math.ceil(a.length / 7);
+  let v = 0;
+  for (let i = 0; i < a.length; i += 7) v += (a[i] - mean) ** 2;
+  if (Math.sqrt(v / Math.ceil(a.length / 7)) < 6) return null; // a blank view: nothing to match
+  const mx = Math.round(HW * (axis === 'pan' ? 0.45 : 0.08)),
+    my = Math.round(HH * (axis === 'tilt' ? 0.45 : 0.08)),
+    scores = [];
+  let best = Infinity,
+    bx = 0,
+    by = 0;
+  const at = new Map();
+  for (let dy = -my; dy <= my; dy++)
+    for (let dx = -mx; dx <= mx; dx++) {
+      const x0 = Math.max(0, dx),
+        x1 = Math.min(HW, HW + dx),
+        y0 = Math.max(0, dy),
+        y1 = Math.min(HH, HH + dy);
+      if ((x1 - x0) * (y1 - y0) < HW * HH * 0.35) continue;
+      let sum = 0,
+        n = 0;
+      for (let y = y0; y < y1; y += 2) {
+        const ra = y * HW,
+          rb = (y - dy) * HW - dx;
+        for (let x = x0; x < x1; x += 2) {
+          sum += Math.abs(a[ra + x] - b[rb + x]);
+          n++;
+        }
+      }
+      const sc = sum / n;
+      scores.push(sc);
+      at.set(dy * 1000 + dx, sc);
+      if (sc < best) {
+        best = sc;
+        bx = dx;
+        by = dy;
+      }
+    }
+  // a picture that slid by (bx, by): a point at x in the new frame was at x + bx... in the old one
+  if (best > 0.6 * median(scores)) return null; // no clear winner
+  const edge = Math.abs(bx) >= mx || Math.abs(by) >= my;
+  if (edge) return null;
+  // parabola through the neighbors for a sub-pixel answer along each axis
+  const sub = (m, c, p) => {
+    const d = m - 2 * c + p;
+    return d > 1e-6 ? (0.5 * (m - p)) / d : 0;
+  };
+  const g = (x, y) => at.get(y * 1000 + x) ?? best;
+  const fx = bx + sub(g(bx - 1, by), best, g(bx + 1, by)),
+    fy = by + sub(g(bx, by - 1), best, g(bx, by + 1));
+  return { sx: fx / HW, sy: fy / HH };
+}
+const rad = Math.PI / 180;
+// The lens from the measured shifts. panShifts and tiltShifts are |fraction| per step of STEP units;
+// panUnits is the whole pan range in units (350 degrees across it, from the maker's specification).
+// A pinhole camera turned by t shifts the picture center by tan(t) / (2 tan(fov / 2)) of the frame
+// width, so fovH = 2 atan(tan(step) / (2 sx)); fovV follows from the 16:9 frame, and a tilt step is
+// atan(sy * 2 tan(fovV / 2)). Returns { fovH, fovV, panDegPerUnit, tiltDegPerUnit } or null.
+export function calibrate(panShifts, tiltShifts, panUnits, panDegrees = 350) {
+  const sx = median(panShifts);
+  if (!(sx > 0.005) || !(panUnits > 0)) return null;
+  const panDegPerUnit = panDegrees / panUnits,
+    fovH =
+      (2 * Math.atan(Math.tan(panDegPerUnit * STEP * rad) / (2 * sx))) / rad;
+  if (!(fovH > 20 && fovH < 140)) return null;
+  const tv = Math.tan((fovH * rad) / 2) * (9 / 16),
+    fovV = (2 * Math.atan(tv)) / rad,
+    sy = median(tiltShifts);
+  const tiltDegPerUnit =
+    sy > 0.005 ? Math.atan(sy * 2 * tv) / rad / STEP : panDegPerUnit;
+  return { fovH, fovV, panDegPerUnit, tiltDegPerUnit };
+}
 // Mean absolute difference between two grays, 0 to 255.
 export const diff = (a, b) => {
   let n = 0;
@@ -37,10 +139,14 @@ export const STEP_MS = 1300; // wait after each step (the bridge allows one a se
 export const CAP_STEPS = 220; // most steps in one walk
 export const CAP_MS = 20 * 60 * 1000; // most time for the whole search
 
-// deps: { grab(): Promise<Uint8Array>, send(axis, dir): Promise<void> (one step of STEP), travel?(axis, units):
+// deps: { grab(): Promise<Uint8Array> (32 x 18 gray; may carry .hi, the 160 x 90 gray, and .bmp, the small
+// picture), frame?(frame, lens): called with each settled picture { bmp, pan, tilt } (units from where the
+// run began) and a provisional lens { fovH, fovV, panDegPerUnit, tiltDegPerUnit } so the page can paint it
+// at once, send(axis, dir): Promise<void> (one step of STEP), travel?(axis, units):
 // Promise<void> (one fast trip that resolves once the picture settles), cancelled(): bool,
 // progress(text, fraction), line(event), wait(ms) }. Resolves { pan, tilt } ranges in units (each
-// { min, max }, centered on 0) or null if cancelled or capped. The camera ends at the center of each range.
+// { min, max }, centered on 0), center { pan, tilt } (where the middle is, in units from the run's start),
+// frames (every picture handed to frame()), lens (calibrate()'s answer or null) or null if cancelled or capped. The camera ends at the center of each range.
 export async function findLimits(deps) {
   const t0 = Date.now();
   const over = () => deps.cancelled() || Date.now() - t0 > CAP_MS;
@@ -49,11 +155,37 @@ export async function findLimits(deps) {
   await deps.wait(1200);
   const b = await deps.grab();
   const noise = diff(a, b);
+  const here = { pan: 0, tilt: 0 },
+    shifts = { pan: [], tilt: [] },
+    frames = [];
+  // The provisional lens: 60 degrees wide until pictures say how far a step turns.
+  const prov = () => {
+    const sx = median(shifts.pan),
+      sy = median(shifts.tilt),
+      fovH = 60,
+      tv = Math.tan((fovH * rad) / 2) * (9 / 16);
+    return {
+      fovH,
+      fovV: (2 * Math.atan(tv)) / rad,
+      panDegPerUnit:
+        sx > 0
+          ? Math.atan(sx * 2 * Math.tan((fovH * rad) / 2)) / rad / STEP
+          : 0.7,
+      tiltDegPerUnit: sy > 0 ? Math.atan(sy * 2 * tv) / rad / STEP : 0.6,
+    };
+  };
+  const show = (g) => {
+    if (!g?.bmp) return;
+    const f = { bmp: g.bmp, pan: here.pan, tilt: here.tilt };
+    frames.push(f);
+    deps.frame?.(f, prov());
+  };
   // Step one way until two steps in a row leave the picture the same. Returns the steps that moved.
   async function walk(axis, dir, label, from, already = 0) {
     let prev = await deps.grab(),
       still = 0,
       moved = already;
+    show(prev);
     for (let i = 0; i < CAP_STEPS && !over(); i++) {
       await deps.send(axis, dir);
       await deps.wait(STEP_MS);
@@ -63,6 +195,12 @@ export async function findLimits(deps) {
       } else {
         moved += 1 + still;
         still = 0;
+        here[axis] += dir * STEP;
+        if (prev.hi && cur.hi) {
+          const m = imageShift(prev.hi, cur.hi, axis);
+          if (m) shifts[axis].push(Math.abs(axis === 'pan' ? m.sx : m.sy));
+        }
+        show(cur);
       }
       prev = cur;
       deps.progress(
@@ -73,7 +211,8 @@ export async function findLimits(deps) {
     return null; // capped or cancelled
   }
   const out = {};
-  let base = 0;
+  let base = 0,
+    panUnits = 0;
   for (const axis of ['pan', 'tilt']) {
     const name = axis === 'pan' ? 'Pan' : 'Tilt';
     deps.progress(`${name}: finding the first wall.`, base);
@@ -87,6 +226,7 @@ export async function findLimits(deps) {
     if (deps.travel && first > 0) {
       deps.progress(`${name}: back to the start in one trip.`, base + 0.25);
       await deps.travel(axis, first * STEP);
+      here[axis] += first * STEP; // dir is -1 on the first walk: back to the start
       if (over()) return null;
       skip = first;
     }
@@ -102,11 +242,16 @@ export async function findLimits(deps) {
         await deps.send(axis, -1);
         await deps.wait(STEP_MS);
       }
+    here[axis] -= Math.floor(n / 2) * STEP;
     if (over()) return null;
     const half = (n * STEP) / 2;
     out[axis] = { min: -half, max: half };
+    if (axis === 'pan') panUnits = n * STEP;
     base += 0.5;
   }
   deps.progress('Done.', 1);
+  out.center = { ...here };
+  out.frames = frames;
+  out.lens = calibrate(shifts.pan, shifts.tilt, panUnits);
   return out;
 }

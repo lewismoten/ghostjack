@@ -69,8 +69,8 @@ the first start.
 | `GET /api/ask/:id`, `GET /api/ask/pending`                             | `{status: asking\|listening\|answered\|timeout\|failed, choice: a\|b\|c\|d\|other\|null, transcript}`; `pending` is the open ask for the page to show (`{id: null}` when none).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `POST /api/ask/:id/answer` `{choice, text?}`                           | Answer by button; the first answer, spoken or pressed, wins (409 after).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `GET /api/stream[?profile=p1]`                                         | The live stream as fragmented MP4 (H.264 and AAC copied). Low latency since 0.1.2: no input buffering, a short probe, and a fragment every 0.5 s (not only at keyframes, which come about every 4.8 s). `profile=p1` is the camera sub-stream (640x360, about 7 fps); the default is the 1080p main stream.                                                                                                                                                                                                                                                                                                                                                                                |
-| `GET /api/aim`                                                         | The shared estimated aim: `{pan, tilt, panMin, panMax, tiltMin, tiltMax, updated}` in move units (10 per step); min and max are the neck range the page measured with Find limits, centered on 0. Kept in `~/.config/ghostjack/aim.json`, outside the repo.                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `POST /api/aim`                                                        | Store it (small whole numbers; the page sends it after each change).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `GET /api/aim`                                                         | The shared estimated aim: `{pan, tilt, panMin, panMax, tiltMin, tiltMax, updated}` in move units (10 per step); min and max are the neck range the page measured with Find limits, centered on 0. After a measured Find limits it also holds the lens: `fovH` and `fovV` (degrees, picture width and height) and `tiltDegPerUnit` (degrees of tilt per move unit), with two decimals. Kept in `~/.config/ghostjack/aim.json`, outside the repo.                                                                                                                                                                                                                                            |
+| `POST /api/aim`                                                        | Store it (small whole numbers; `fovH`, `fovV` and `tiltDegPerUnit` may have two decimals and must be in a sane range; the page sends it after each change).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `GET /api/shots`                                                       | The nine saved shots (slot 1 first): `{name, pan, tilt, crop}` or `null` for an empty slot (the page treats an empty slot as the center). Kept in `~/.config/ghostjack/shots.json`, outside the repo.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `POST /api/shots`                                                      | Store all nine (names up to 24 letters, numbers and simple punctuation; positions in the same estimated units as the aim).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
@@ -148,16 +148,16 @@ other devices.
 ## The page's look and the 3D
 
 `web/` is plain HTML, CSS and JavaScript (no build). The 3D extras load last,
-from `scene.js`, which imports three.js 0.170.0 from cdn.jsdelivr.net; if that
-fails or WebGL is missing, the page keeps its CSS grid and scanline look. The
-neon floor behind the panels and the wireframe camera model render at about 30
-fps, stop when the tab is hidden (the model also when off screen), and hold
-still with `prefers-reduced-motion`. The model turns to an estimated pan/tilt
-counted from the moves sent (the camera can't report its position); "Re-center
-estimate" zeroes it. Sound (`sound.js`) is synthesized with Web Audio, off by
-default, and starts only after a click. In a headless test, CPU and dropped
-frames were the same with the 3D blocked, so the cost is software video
-decoding, not the scene.
+from `scene.js`, which imports the vendored three.js 0.170.0 (`web/vendor/`, no
+network needed); if that fails or WebGL is missing, the page keeps its CSS grid
+and scanline look. The neon floor behind the panels and the wireframe camera
+model render at about 30 fps, stop when the tab is hidden (the model also when
+off screen), and hold still with `prefers-reduced-motion`. The model turns to an
+estimated pan/tilt counted from the moves sent (the camera can't report its
+position); "Re-center estimate" zeroes it. Sound (`sound.js`) is synthesized
+with Web Audio, off by default, and starts only after a click. In a headless
+test, CPU and dropped frames were the same with the 3D blocked, so the cost is
+software video decoding, not the scene.
 
 The page speaks in Glassmouth's voice ([guide](glassmouth.md)): status lines
 like "Eye's open", "Lost the angle" and "Back in sight" always carry the plain
@@ -166,3 +166,13 @@ Nobody otherwise, with a relay click (if sound effects are on). The Eye panel
 has a working "Glassmouth says" box (text, voice, level, Speak; its status line
 says "On air.", "Done. Said it." or "Line's busy.") above the disabled
 placeholder for the [voice relay](voice-relay-plan.md).
+
+## The photo sphere and the fake room
+
+Find limits also measures the lens (pan step shifts between 160 x 90 pictures,
+pinhole math, pan anchored to 350 degrees). Every picture then paints a 2048 x
+1024 sphere kept in the browser (`web/sphere.js`); the SPH key (O) opens the
+three.js view (`web/sphereView.js`) with Sweep and panorama downloads.
+`node tools/fake-room.mjs` is a fake bridge and room (a known 62 degree lens)
+and `node tools/fake-room-test.mjs <outdir>` runs the whole thing headless,
+offline and against that fake only, never the camera.

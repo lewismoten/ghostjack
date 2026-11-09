@@ -119,6 +119,8 @@ try {
   /* none yet */
 }
 const AIM_KEYS = ['pan', 'tilt', 'panMin', 'panMax', 'tiltMin', 'tiltMax'];
+// Lens numbers from Find limits (degrees, degrees per move unit): decimals kept to 2 places.
+const AIM_LENS = { fovH: [10, 170], fovV: [5, 120], tiltDegPerUnit: [0.01, 5] };
 function setAim(b) {
   const n = { updated: Date.now() };
   for (const k of AIM_KEYS) {
@@ -129,6 +131,15 @@ function setAim(b) {
         code: 400,
       });
     n[k] = Math.round(v);
+  }
+  for (const [k, [lo, hi]] of Object.entries(AIM_LENS)) {
+    if (b[k] === null || b[k] === undefined) continue;
+    const v = Number(b[k]);
+    if (!Number.isFinite(v) || v < lo || v > hi)
+      throw Object.assign(new Error(`${k} must be between ${lo} and ${hi}`), {
+        code: 400,
+      });
+    n[k] = Math.round(v * 100) / 100;
   }
   aim = n;
   mkdirSync(dirname(AIM_FILE), { recursive: true, mode: 0o700 });
