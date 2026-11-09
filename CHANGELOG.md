@@ -3,6 +3,15 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions
 follow [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `GET /api/picture` and `POST /api/picture` (wide dynamic range and backlight
+  fix on or off, with the four sliders); Dials tab checkboxes.
+- Discovery notes: stills from the stream do not beat the snapshot; the camera
+  exposes no encoder settings.
+
 ## [0.1.2] - 2026-11-09
 
 ### Fixed

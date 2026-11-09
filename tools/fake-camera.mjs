@@ -62,3 +62,38 @@ export async function talkUrl() {
 }
 export const status = async () => ({ mode: 'auto', ir: false });
 export const shutdown = async () => {};
+
+// Picture settings kept in memory, like ccm_video_srcs_get's image conf.
+const conf = {
+  brightness: 50,
+  contrast: 60,
+  color_saturation: 70,
+  sharpness: 6,
+  wide_dynamic_range: { mode: 'On', level: 1 },
+  backlight_compensation: { mode: 'On', level: 1 },
+};
+const image = () => ({
+  resolution: { width: 704, height: 576 },
+  framerate: 25,
+  mode: 'auto',
+  brightness: conf.brightness,
+  contrast: conf.contrast,
+  saturation: conf.color_saturation,
+  sharpness: conf.sharpness,
+  wdr: conf.wide_dynamic_range.mode,
+  backlight: conf.backlight_compensation.mode,
+});
+export async function setImage(p) {
+  for (const [k, n] of [
+    ['brightness', 'brightness'],
+    ['contrast', 'contrast'],
+    ['color_saturation', 'saturation'],
+    ['sharpness', 'sharpness'],
+  ])
+    if (p[n] !== undefined) conf[k] = p[n];
+  if (p.wdr !== undefined) conf.wide_dynamic_range.mode = p.wdr ? 'On' : 'Off';
+  if (p.backlight !== undefined)
+    conf.backlight_compensation.mode = p.backlight ? 'On' : 'Off';
+  return image();
+}
+export const picture = async () => ({ ...image(), powerFreq: 1 });
