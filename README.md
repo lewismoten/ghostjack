@@ -1,15 +1,15 @@
-# Tethys 825-C camera
+# Ghost Jack
 
-A $2 thrift-store network camera (Tethys model 825-C, SKU TT000074) that I'm turning into a camera I can use locally: to watch my Pocket Player boards and the TV the Raspberry Pi drives, without the maker's cloud app.
+Ghost Jack is the port agents jack into when they need eyes in meat space. **Glassmouth** is its voice: one glass eye, a dozen voices ([the character guide](docs/glassmouth.md)). The first supported camera is a $2 thrift-store network camera, the Tethys 825-C (SKU TT000074), which I'm turning into a camera I can use locally, without the maker's cloud app: to watch my Pocket Player boards and the TV the Raspberry Pi drives.
 
-This repository holds what I learn about the camera and any code I write for it. It's kept separate from my other projects.
+This repository holds what I learn about the camera and the code I write for it. It's kept separate from my other projects.
 
 - [Finding the camera on the network](docs/discovery.md): step-by-step troubleshooting, from "is the USB cable data?" to signing in and taking a snapshot, with what each step showed.
 - `tools/snapshot.mjs`: saves one 1920 x 1080 snapshot over the local network (no cloud). `tools/web-login-probe.mjs`: records the web app's requests after sign-in.
 
 - [The local bridge and control page](docs/bridge.md): `npm start` runs a token-protected local service (snapshot, aim, night vision, live stream) and a control page in `web/`; with Tailscale it can be reached from other devices.
 
-Both read the device id and password from the macOS Keychain item `tethys-camera` and need Playwright (`PLAYWRIGHT=<path>/playwright-core/index.mjs`).
+Both read the device id and password from the macOS Keychain item `tethys-camera` (the name stays: it is this camera's credential, from before the project had its name) and need Playwright (`PLAYWRIGHT=<path>/playwright-core/index.mjs`).
 
 ## Ground rules
 

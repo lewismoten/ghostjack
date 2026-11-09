@@ -1,4 +1,4 @@
-# The local bridge and control page
+# The Ghost Jack bridge and control page
 
 `src/server.mjs` keeps one signed-in session with the camera's own web page (headless Chromium, through Playwright) and offers a small HTTP API; `web/` is a static control page for it. The camera stays on its isolated cable; only this service talks to it.
 
@@ -9,11 +9,11 @@ PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install   # once; uses Playwright's cache
 npm start                                        # http://127.0.0.1:8787
 ```
 
-It reads the device id and password from the macOS Keychain item `tethys-camera` (see the README) and needs ffmpeg at `/opt/homebrew/bin/ffmpeg` (`FFMPEG=` to change). Environment: `PORT` (8787), `HOST` (127.0.0.1), `CAMERA_IP` (192.168.187.254). Open `http://localhost:8787/` for the page.
+It reads the device id and password from the macOS Keychain item `tethys-camera` (the item keeps its old name because it is this camera's credential; see the README) and needs ffmpeg at `/opt/homebrew/bin/ffmpeg` (`FFMPEG=` to change). Environment: `PORT` (8787), `HOST` (127.0.0.1), `CAMERA_IP` (192.168.187.254). Open `http://localhost:8787/` for the page.
 
 ## The token
 
-On first run the bridge creates `~/.config/tethys-camera/token` (mode 0600) and prints it once. Every `/api` route except `/api/hello` needs it, as `Authorization: Bearer <token>`. The live stream and snapshots also accept `?token=` because a `<video>` tag can't send headers; the page uses that for the stream only. Delete the file to make a new token.
+On first run the bridge creates `~/.config/ghostjack/token` (mode 0600) and prints it once. Every `/api` route except `/api/hello` needs it, as `Authorization: Bearer <token>`. The live stream and snapshots also accept `?token=` because a `<video>` tag can't send headers; the page uses that for the stream only. Delete the file to make a new token. A token left in the old `~/.config/tethys-camera/` folder (the project's earlier name) is moved here on the first start.
 
 ## Endpoints
 

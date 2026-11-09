@@ -1,9 +1,9 @@
-// Local bridge: a small HTTP API in front of the camera session, plus the control page in web/.
+// Ghost Jack bridge: a small HTTP API in front of the camera session, plus the control page in web/.
 // Binds 127.0.0.1 by default. Every /api route except /api/hello needs the bearer token.
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync, chmodSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,8 +16,15 @@ const WEB = join(dirname(fileURLToPath(import.meta.url)), '..', 'web');
 const ALLOWED_ORIGIN = 'https://lewismoten.github.io';
 
 function loadToken() {
-  const dir = join(homedir(), '.config', 'tethys-camera');
+  const dir = join(homedir(), '.config', 'ghostjack');
   const file = join(dir, 'token');
+  // The project used to be called tethys-camera: carry its token over once.
+  const old = join(homedir(), '.config', 'tethys-camera', 'token');
+  if (!existsSync(file) && existsSync(old)) {
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    renameSync(old, file);
+    chmodSync(file, 0o600);
+  }
   if (existsSync(file)) return readFileSync(file, 'utf8').trim();
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const t = randomBytes(24).toString('base64url');
@@ -103,7 +110,7 @@ const server = createServer(async (req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
   try {
     if (!url.pathname.startsWith('/api/')) return serveStatic(req, res, url.pathname);
-    if (url.pathname === '/api/hello') return json(res, 200, { name: 'tethys-camera-bridge', ok: true });
+    if (url.pathname === '/api/hello') return json(res, 200, { name: 'ghostjack-bridge', ok: true });
     if (!authorized(req)) return json(res, 401, { error: 'token needed' });
     const route = `${req.method} ${url.pathname}`;
     if (route === 'GET /api/status') return json(res, 200, await camera.status());
@@ -161,4 +168,4 @@ function stop() {
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);
 
-server.listen(PORT, HOST, () => console.log(`Tethys camera bridge on http://${HOST}:${PORT}`));
+server.listen(PORT, HOST, () => console.log(`Ghost Jack bridge on http://${HOST}:${PORT}`));

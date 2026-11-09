@@ -210,3 +210,7 @@ sudo ifconfig en10 -alias 192.168.187.10
 ## Next
 
 Log in to the web page with the password printed on the camera, from the isolated cable, and look for a stream address and the firmware version. See the README for the steps after that.
+
+---
+
+Note (2026-11-08): this project became **Ghost Jack** (voice: Glassmouth). The log above is left as it was written; the camera's Keychain item is still named `tethys-camera`.

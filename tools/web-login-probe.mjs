@@ -1,3 +1,4 @@
+// Ghost Jack tool.
 // Signs in to the camera's own web page in a headless browser and records the requests the page
 // makes afterwards (login, snapshot, stream setup), so the local API can be learned from the
 // camera's real web app instead of reimplementing its key exchange.

@@ -1,3 +1,4 @@
+// Ghost Jack tool.
 // Saves one JPEG snapshot from the camera over the local network: no cloud, no app.
 // It signs in through the camera's own web page in a headless browser (so the page's key exchange
 // and session math are reused), then sends ccm_snapshot with profile p0 and downloads the picture.

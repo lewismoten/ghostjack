@@ -1,5 +1,5 @@
 // One long-lived signed-in session with the camera's own web page (headless Chromium).
-// Credentials come from the macOS Keychain item "tethys-camera"; nothing secret is logged.
+// Credentials come from the macOS Keychain item "tethys-camera" (this camera's credential; the name stays); nothing secret is logged.
 import { execFileSync } from 'node:child_process';
 import { chromium } from 'playwright-core';
 
@@ -159,7 +159,7 @@ async function infoNow() {
   const pad = (x) => String(x).padStart(2, '0');
   const u = d?.utc_date;
   return {
-    system: i && { type: i.type, version: i.ver, model: '825-C (internal F300)' },
+    system: i && { type: i.type, version: i.ver, model: 'Tethys 825-C (internal F300)' },
     network: nic && {
       link: nic.phy?.info?.stat, mtu: nic.phy?.conf?.mtu, mode: nic.ipv4?.conf?.mode,
       ip: nic.ipv4?.info?.ip, dns: n.info.dns?.info?.dns,
