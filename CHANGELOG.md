@@ -4,7 +4,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [0.1.0] - 2026-11-08
 
-First release.
+First release: Ghost Jack, the port agents jack into when they need eyes, ears and a mouth in meatspace.
 
 ### Added
 
@@ -13,7 +13,7 @@ First release.
 - Live video and audio stream (H.264 and AAC copied, no re-encode).
 - Say: speak through the camera's speaker (`POST /api/say`, `GET /api/say/:id`, `GET /api/voices`): queued one talker at a time, macOS voices, level and rate, an attention chime (`chime:false` skips it), a limiter, and a 1.5 s tail, rate-limited to 10 a minute.
 - Speech and chime levels are capped (speech level 0.08, default 0.035; chime cap -30 dBFS, default -36 dBFS) because the speaker is alarm-loud; the response returns the clamped values.
-- Cyberpunk control page with a three.js camera model, optional generated sound (Web Audio, off by default), the "Glassmouth says" box and a disabled voice-relay placeholder.
+- Cyberpunk control deck (Uplink, Eye, Neck, Chrome and Glassmouth panels, each with a plain-language sublabel) with a three.js camera model, optional generated sound (Web Audio, off by default), the "Glassmouth says" box and a disabled voice-relay placeholder.
 - Demo state for GitHub Pages (`docs/` copy of `web/`), Tailscale instructions, and Glassmouth, the voice of the interface.
 - Notes on how the camera was found and worked out (`docs/discovery.md`), plans for the voice relay and a room map.
 

@@ -1,4 +1,4 @@
-# The Ghost Jack bridge and control page
+# The Ghost Jack bridge (the wire) and control page (the deck)
 
 `src/server.mjs` keeps one signed-in session with the camera's own web page (headless Chromium, through Playwright) and offers a small HTTP API; `web/` is a static control page for it. The camera stays on its isolated cable; only this service talks to it.
 
@@ -11,7 +11,7 @@ npm start                                        # http://127.0.0.1:8787
 
 It reads the device id and password from the macOS Keychain item `tethys-camera` (the item keeps its old name because it is this camera's credential; see the README) and needs ffmpeg at `/opt/homebrew/bin/ffmpeg` (`FFMPEG=` to change). Environment: `PORT` (8787), `HOST` (127.0.0.1), `CAMERA_IP` (192.168.187.254). Open `http://localhost:8787/` for the page.
 
-## The token
+## The token (the ICE)
 
 On first run the bridge creates `~/.config/ghostjack/token` (mode 0600) and prints it once. Every `/api` route except `/api/hello` needs it, as `Authorization: Bearer <token>`. The live stream and snapshots also accept `?token=` because a `<video>` tag can't send headers; the page uses that for the stream only. Delete the file to make a new token. A token left in the old `~/.config/tethys-camera/` folder (the project's earlier name) is moved here on the first start.
 
@@ -35,7 +35,7 @@ On first run the bridge creates `~/.config/ghostjack/token` (mode 0600) and prin
 
 Not implemented on purpose: Wi-Fi setup, reboot, factory restore, firmware upgrade, disk format and password change. The page lists them as disabled ("not enabled in this build").
 
-## Say
+## Say (Glassmouth's mouth)
 
 Says wait in one queue in `src/say.mjs`, because the camera's speaker takes one talker at a time. For each line the bridge renders speech with macOS `say` into `captures/` (git-ignored, deleted afterward), asks the camera for a talk address (`ccm_talk`, RTMP) and immediately publishes to it with ffmpeg: 1 s of silence, the attention chime (the camera's amp wakes on sound), 0.4 s of quiet, the speech normalized to -3 dBFS, 1.5 s of silence. Filter chain: `highpass=f=300,lowpass=f=3000,acompressor=threshold=-20dB:ratio=3:attack=5:release=100,volume=<level>,alimiter=limit=0.5:level=disabled`; AAC 16 kHz mono 64k. An address that is requested but never published to jams the speaker until the camera is power-cycled, so the bridge never requests one without publishing, and if the publish fails it still sends a short silent publish to free the slot. `GJ_SAY_PACE=ahead|fast|re` picks how fast ffmpeg sends (default `ahead`, a little faster than real time; see discovery.md). Voices: the one function `synthesize()` in `say.mjs` is the boundary where local voices (Pocket TTS, Kokoro) can be added later; it only has to write an audio file ffmpeg can read.
 
@@ -43,7 +43,7 @@ Says wait in one queue in `src/say.mjs`, because the camera's speaker takes one 
 
 Fragmented MP4 over chunked HTTP: ffmpeg reads a fresh RTSP address over TCP and copies the camera's H.264 and AAC without re-encoding (`-c copy -movflags frag_keyframe+empty_moov`). A `<video src>` plays it directly in Chromium; it takes a few seconds to start because the first fragment waits for a keyframe. Each client gets its own ffmpeg and its own RTSP address (they work once); ffmpeg is killed when the client disconnects and when the bridge exits. Headless WebKit did not start playback in testing, so Safari is unchecked. The MJPEG fallback wasn't needed.
 
-## Using it from another device (Tailscale)
+## Using it from another device (Tailscale, a longer wire)
 
 ```sh
 tailscale serve --bg 8787

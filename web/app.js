@@ -41,7 +41,7 @@ function setConnected(on) {
   if (on) loadVoices();
   $('demo').hidden = on;
   $('light').classList.toggle('on', on);
-  $('hConn').textContent = on ? 'LINK OK' : 'OFFLINE';
+  $('hConn').textContent = on ? 'JACKED IN' : 'FLATLINE';
   if (!on) { stopLive(); setEye('Nobody'); }
   if (on && !was) { snd.sfx.powerUp(); if (!reduced) { const h = document.querySelector('h1'); h.style.animation = 'none'; void h.offsetWidth; h.style.animation = ''; } }
 }
@@ -52,22 +52,22 @@ async function connect(e) {
   base = $('addr').value.trim().replace(/\/+$/, '');
   token = $('token').value.trim();
   store.set('bridge', base); store.set('token', token);
-  setStatus('Jacking in...');
+  setStatus('Jacking in... listening for the wire.');
   $('radar').hidden = false;
   try {
     try {
       const hello = await fetch(base + '/api/hello').then((r) => r.json());
       if (!hello.ok) throw new Error('not a camera bridge');
-    } catch { setConnected(false); $('demo').hidden = false; return setStatus("No signal. Bridge's dark: nothing answered at that address. Showing the demo.", true); }
+    } catch { setConnected(false); $('demo').hidden = false; return setStatus("No carrier. Nothing answered on the wire at that address: the bridge is flatlined. Showing the demo.", true); }
     try {
       const r = await api('/api/status');
-      if (r.status === 401) { setConnected(false); return setStatus("Wrong token. The bridge answered but won't talk to strangers.", true); }
+      if (r.status === 401) { setConnected(false); return setStatus("Wrong token. The ICE held: the bridge answered but won't talk to strangers.", true); }
       const s = await r.json();
       if (!r.ok) throw new Error(s.error);
       setConnected(true);
       $('night').checked = s.night === 'night'; showNight(s.night);
-      setStatus(`${lost ? 'Back in sight. ' : "Eye's open. "}Connected. Night vision: ${s.night}${s.inNightVision ? ' (infrared on now)' : ''}.`); lost = false; loadDevice();
-    } catch (err) { setConnected(false); lost = true; setStatus(`Lost the angle. The bridge is up but the camera did not answer: ${err.message}`, true); }
+      setStatus(`${lost ? 'Back in sight. ' : "Eye's open. "}Jacked in. Night vision: ${s.night}${s.inNightVision ? ' (infrared on now)' : ''}.`); lost = false; loadDevice();
+    } catch (err) { setConnected(false); lost = true; setStatus(`Lost the angle. The bridge is up but the chrome did not answer: ${err.message}`, true); }
   } finally { $('radar').hidden = true; }
 }
 // Who has the eye: You while this page is watching live, Nobody otherwise (agents come with the voice relay).
@@ -81,7 +81,7 @@ function setEye(who) {
   $('eye').classList.remove('flip'); void $('eye').offsetWidth; $('eye').classList.add('flip');
 }
 async function loadDevice() {
-  try { const r = await api('/api/info'); const j = await r.json(); if (r.ok && j.system?.model) $('device').textContent = `Camera: ${j.system.model.replace(/ \(.*/, '')}`; } catch { /* leave the line as it was */ }
+  try { const r = await api('/api/info'); const j = await r.json(); if (r.ok && j.system?.model) $('device').textContent = `Chrome: ${j.system.model.replace(/ \(.*/, '')}`; } catch { /* leave the line as it was */ }
 }
 const showNight = (m) => { $('hNight').textContent = m === 'night' ? 'NV IR ON' : 'NV AUTO'; };
 
@@ -234,8 +234,8 @@ function fill(info) {
 }
 function setSlider(id, v) { if (v === undefined) return; $(id).value = v; $(id).nextElementSibling.textContent = v; }
 async function loadInfo() {
-  setStatus('Checking the camera over...');
-  try { const r = await api('/api/info'); const j = await r.json(); if (!r.ok) throw new Error(j.error); fill(j); setStatus('Camera info read. Everything on the sheet.'); }
+  setStatus('Looking the chrome over...');
+  try { const r = await api('/api/info'); const j = await r.json(); if (!r.ok) throw new Error(j.error); fill(j); setStatus('Chrome read. Everything on the sheet.'); }
   catch (e) { setStatus(`Could not read camera info: ${e.message}`, true); }
 }
 $('infoLoad').onclick = loadInfo;
@@ -284,14 +284,14 @@ $('sayForm').addEventListener('submit', async (e) => {
       else if (s.status === 'done') { sayLine('Done. Said it.'); snd.sfx.relay(); $('sayText').value = ''; return; }
       else { sayLine(`Line's busy. It did not go out (${s.error || 'failed'}).`); snd.sfx.error(); return; }
     }
-    sayLine("Line's busy. No word back; check the camera.");
+    sayLine("Line's busy. Static, no word back; check the chrome.");
   } catch (err) { sayLine(`Line's busy. ${err.message}`); snd.sfx.error(); }
   finally { saying = false; $('sayGo').disabled = !connected; }
 });
 
 $('conn').addEventListener('submit', connect);
 setConnected(false);
-if (store.get('token', '')) connect(); else { $('demo').hidden = false; setStatus('No signal yet. Enter the bridge address and token, then Connect.'); }
+if (store.get('token', '')) connect(); else { $('demo').hidden = false; setStatus('Flatlined, no carrier yet. Enter the uplink address and token, then Jack in.'); }
 
 // The 3D extras load last, so the page works without them; any failure leaves the plain CSS look.
 const loadScene = () => import('./scene.js').then((m) => m.start({ bg: $('bg'), model: $('model'), reduced })).then((s) => { scene = s; showPose(true); }).catch(() => { $('bg').hidden = true; });
