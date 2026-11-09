@@ -7,6 +7,8 @@ follow [SemVer](https://semver.org/).
 
 ### Fixed
 
+- Buttons over the picture (grid tiles, question keys) are clickable: the
+  drag-to-zoom box no longer captures their clicks.
 - Speech through the camera works again: since 0.1.1 the bridge sent each line
   in a few milliseconds instead of at playback pace (the pacing applied only to
   the opening silence), so the camera played a short blip and dropped the rest.
@@ -40,6 +42,15 @@ follow [SemVer](https://semver.org/).
 
 ### Added
 
+- An agent API (docs/agent-api.md): `POST /api/goto` (absolute pan, tilt and
+  zoom, or a saved shot, in one fast trip; returns a picture of the asked width
+  once the picture settles), `width=` on snapshots, `POST /api/clip` (a video
+  clip, 1 to 30 seconds), `POST /api/listen` (microphone audio),
+  `POST /api/play` (an agent's own audio through the same queue, wake pulse,
+  chime and level caps as speech) and `POST /api/ask` (a spoken multiple-choice
+  question, answered by voice through local Whisper or by a key on the page).
+- Questions from agents show over the bottom of the picture with a key per
+  choice and a box for another answer; spoken or pressed, the first answer wins.
 - A small picture of each saved shot is kept in this browser and refreshed
   whenever a snapshot is taken at that shot's pan, tilt and zoom. ALL shows them
   at once, dimmed in gray, and replaces each with the fresh one in color as it

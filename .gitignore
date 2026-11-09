@@ -18,3 +18,4 @@ captures/
 !docs/images/social-preview-*0x*0.png
 !web/favicon.ico
 !docs/favicon.ico
+.claude/

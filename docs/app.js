@@ -1384,6 +1384,76 @@ new ResizeObserver(() => {
   $('shotForm').style.width = w;
 }).observe($('stage'));
 
+// Questions from agents (POST /api/ask): the open one shows over the picture
+// with a key per choice and, when allowed, a box for another answer.
+var askShown = null;
+async function pollAsk() {
+  if (!connected || document.hidden) return;
+  try {
+    const r = await api('/api/ask/pending');
+    if (!r.ok) return;
+    const a = await r.json();
+    if (!a.id) {
+      if (askShown) hideAsk();
+      return;
+    }
+    if (askShown === a.id) return;
+    showAsk(a);
+  } catch {
+    /* next time */
+  }
+}
+function hideAsk() {
+  askShown = null;
+  $('askBar').hidden = true;
+}
+function showAsk(a) {
+  askShown = a.id;
+  $('askQ').textContent = a.question;
+  const box = $('askChoices');
+  box.replaceChildren();
+  (a.choices || []).forEach((c, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    const letter = 'ABCD'[i];
+    b.textContent = `${letter}: ${c}`;
+    b.onclick = () => answerAsk(a.id, letter.toLowerCase());
+    box.append(b);
+  });
+  if (a.other) {
+    const t = document.createElement('input');
+    t.type = 'text';
+    t.maxLength = 120;
+    t.placeholder = 'Something else';
+    t.setAttribute('aria-label', 'Another answer');
+    const b = document.createElement('button');
+    b.type = 'submit';
+    b.textContent = 'Send';
+    box.append(t, b);
+    $('askBar').onsubmit = (e) => {
+      e.preventDefault();
+      if (t.value.trim()) answerAsk(a.id, 'other', t.value.trim());
+    };
+  } else $('askBar').onsubmit = (e) => e.preventDefault();
+  $('askBar').hidden = false;
+  setStatus(`A question for you: ${a.question}`);
+}
+async function answerAsk(id, choice, text) {
+  try {
+    const r = await api(`/api/ask/${id}/answer`, {
+      method: 'POST',
+      body: JSON.stringify(text ? { choice, text } : { choice }),
+    });
+    setStatus(
+      r.ok ? 'Answer sent.' : 'Already answered (by voice or another screen).',
+    );
+  } catch (e) {
+    setStatus(`Answer not sent: ${e.message}`, true);
+  }
+  hideAsk();
+}
+setInterval(pollAsk, 2000);
+
 // Name the shot in a small form that takes the strip's place (no pop-up).
 var naming = 0;
 function askName(n) {
@@ -1553,6 +1623,8 @@ function frac(e) {
 }
 stage.addEventListener('pointerdown', (e) => {
   if (!connected || $('snap').hidden) return;
+  // controls over the picture (grid tiles, questions, arrows) keep their clicks
+  if (e.target.closest('button, input, form, .shotgrid')) return;
   drag = frac(e);
   stage.setPointerCapture(e.pointerId);
 });

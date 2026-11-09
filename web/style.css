@@ -1362,3 +1362,34 @@ code {
     animation: none;
   }
 }
+
+/* A question from an agent (POST /api/ask): over the bottom of the picture,
+   with a key per choice; spoken or pressed, the first answer wins. */
+.askbar {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  z-index: 6;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.82);
+  border: 1px solid var(--amber);
+  border-radius: 4px;
+}
+.askbar[hidden] {
+  display: none;
+}
+.askbar p {
+  margin: 0 0 6px;
+  color: var(--amber);
+  font: 600 0.85rem var(--mono);
+}
+.askchoices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.askchoices input {
+  flex: 1 1 8em;
+  min-width: 0;
+}
