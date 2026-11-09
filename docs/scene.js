@@ -4,7 +4,7 @@
 const THREE_URL =
   'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js';
 
-export async function start({ bg, model, reduced }) {
+export async function start({ bg, model, reduced, onPulse, canPulse }) {
   const THREE = await import(THREE_URL);
   const cyan = 0x19e3ff,
     magenta = 0xff2bd6,
@@ -55,6 +55,65 @@ export async function start({ bg, model, reduced }) {
   );
   bgS.add(dust);
 
+  // Floating cables above the grid: curved tubes that drift and twist (a vertex shader, so the geometry
+  // is built once), with pulses of light traveling along them (fragment shader). Five draw calls.
+  // Reduced motion: still wires, no pulses. Every few seconds one fast bright pulse runs along a wire
+  // and onPulse(pan, direction) lets the page play a soft whoosh (Sound effects switch).
+  const wires = [
+    [cyan, 0.045, 0.07, 3.6, -12, 0.6],
+    [magenta, 0.03, -0.11, 5.2, -18, 1.9],
+    [amber, 0.06, 0.05, 2.7, -8, 3.1],
+    [cyan, 0.025, -0.15, 6.2, -26, 4.4],
+    [magenta, 0.04, 0.09, 4.4, -22, 5.8],
+  ].map(([color, radius, speed, y, z, ph], i) => {
+    const wob = (k) => Math.sin(i * 7.7 + k * 1.3);
+    const curve = new THREE.CatmullRomCurve3(
+      [-18, -10, -3, 4, 11, 18].map(
+        (x, k) => new THREE.Vector3(x, y + wob(k) * 1.1, z + wob(k + 9) * 3),
+      ),
+    );
+    const mat = new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      uniforms: {
+        uT: { value: 0 },
+        uAmp: { value: reduced ? 0 : 1 },
+        uPh: { value: ph },
+        uSpeed: { value: speed },
+        uCol: { value: new THREE.Color(color) },
+        uBase: { value: 0.22 },
+        uPulse: { value: reduced ? 0 : 1.1 },
+        uBurst: { value: -1 },
+      },
+      vertexShader: `uniform float uT,uAmp,uPh; varying float vU;
+        void main(){ vU=uv.x; vec3 p=position;
+          p.y+=sin(p.x*0.55+uT*0.35+uPh)*0.35*uAmp+sin(p.z*0.8+uT*0.5)*0.1*uAmp;
+          p.z+=cos(p.x*0.4+uT*0.27+uPh*1.7)*0.5*uAmp;
+          gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.0); }`,
+      fragmentShader: `uniform vec3 uCol; uniform float uT,uSpeed,uPh,uBase,uPulse,uBurst; varying float vU;
+        float bump(float u,float c,float w){ float d=u-c; return exp(-d*d/(w*w)); }
+        void main(){ float c=fract(uT*uSpeed+uPh);
+          float a=uBase+uPulse*bump(vU,c,0.03);
+          if(uBurst>=0.0) a+=1.3*bump(vU,uBurst,0.022);
+          gl_FragColor=vec4(uCol*(0.5+a),clamp(a,0.0,1.0)*0.85); }`,
+    });
+    const mesh = new THREE.Mesh(
+      new THREE.TubeGeometry(curve, 90, radius, 5),
+      mat,
+    );
+    bgS.add(mesh);
+    return { mat, curve, burst: null };
+  });
+  let wireT = 0,
+    nextPulse = 6 + Math.random() * 6; // seconds; then 8 to 20 s apart
+  function launchPulse() {
+    const w = wires[Math.floor(Math.random() * wires.length)];
+    if (w.burst) return;
+    const dir = Math.random() < 0.5 ? 1 : -1;
+    w.burst = { u: dir > 0 ? 0 : 1, dir };
+  }
+
   // Camera model: sphere with a lens on a short pedestal, in wireframe.
   const mR = mk(model, model.width, model.height);
   const mS = new THREE.Scene(),
@@ -74,10 +133,12 @@ export async function start({ bg, model, reduced }) {
   mS.add(neck);
   const head = new THREE.Group();
   head.position.y = 0.95;
-  head.add(line(new THREE.SphereGeometry(0.9, 16, 12), cyan));
+  const ball = line(new THREE.SphereGeometry(0.9, 16, 12), cyan);
+  head.add(ball);
   const lens = line(new THREE.CylinderGeometry(0.34, 0.34, 0.5, 14, 1), amber);
   lens.rotation.x = Math.PI / 2;
   lens.position.z = 0.95;
+  lens.name = 'lens';
   head.add(lens);
   const eye = new THREE.Mesh(
     new THREE.CircleGeometry(0.2, 16),
@@ -94,6 +155,16 @@ export async function start({ bg, model, reduced }) {
   const DEG = Math.PI / 180;
   const api = {
     // pan, tilt in degrees of illustration; instant skips the glide (reduced motion)
+    // amber while the camera is on its way to a commanded aim ("moving"), cyan otherwise
+    setMoving(on) {
+      ball.material.color.setHex(on ? amber : cyan);
+      lens.material.color.setHex(on ? magenta : amber);
+      dirty = true;
+    },
+    // while live video plays, drop to about 15 fps so the picture never competes for the main thread
+    setLive(on) {
+      minGap = on ? 66 : 33;
+    },
     setPose(p, t, instant) {
       tp = p * DEG;
       tt = t * DEG;
@@ -107,6 +178,7 @@ export async function start({ bg, model, reduced }) {
   let dirty = true,
     modelVisible = true,
     last = 0,
+    minGap = 33,
     z = 0;
   new IntersectionObserver((e) => {
     modelVisible = e[0].isIntersecting;
@@ -120,7 +192,7 @@ export async function start({ bg, model, reduced }) {
 
   function frame(now) {
     requestAnimationFrame(frame);
-    if (document.hidden || now - last < 33) return;
+    if (document.hidden || now - last < minGap) return;
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     const moving = Math.abs(tp - pan) + Math.abs(tt - tilt) > 0.002;
@@ -131,6 +203,28 @@ export async function start({ bg, model, reduced }) {
       dirty = true;
     }
     if (!reduced) {
+      wireT += dt;
+      for (const w of wires) {
+        w.mat.uniforms.uT.value = wireT;
+        const b = w.burst;
+        if (b) {
+          b.u += b.dir * dt * 0.45;
+          w.mat.uniforms.uBurst.value = b.u;
+          if (b.u < -0.05 || b.u > 1.05) {
+            w.burst = null;
+            w.mat.uniforms.uBurst.value = -1;
+          }
+        }
+      }
+      nextPulse -= dt;
+      if (nextPulse <= 0) {
+        nextPulse = 8 + Math.random() * 12;
+        if (!canPulse || canPulse()) {
+          launchPulse();
+          const w = wires.find((x) => x.burst);
+          if (w) onPulse?.(w.burst.dir);
+        }
+      }
       z = (z + dt * 0.6) % 1;
       grid.position.z = z;
       dust.rotation.y += dt * 0.02;

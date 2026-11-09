@@ -336,6 +336,9 @@ button[aria-pressed='true'] {
   object-fit: contain;
   display: block;
 }
+.stage [hidden] {
+  display: none;
+}
 .ph-bg {
   fill: var(--ph);
 }
@@ -387,29 +390,33 @@ button[aria-pressed='true'] {
   inset: 0;
   display: grid;
   place-items: center;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(0, 0, 0, 0.6);
 }
 .radar[hidden] {
   display: none;
 }
-.radar::before {
-  content: '';
-  width: 60%;
-  aspect-ratio: 1;
-  max-height: 90%;
-  border-radius: 50%;
-  border: 1px solid var(--cyan);
-  background: conic-gradient(
-    from 0deg,
-    rgba(25, 227, 255, 0.55),
-    transparent 35%
-  );
-  animation: spin 1.4s linear infinite;
+.radar canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+.netlabel {
+  position: absolute;
+  bottom: 12%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-family: var(--mono, monospace);
+  letter-spacing: 0.3em;
+  color: var(--cyan);
+  text-shadow: 0 0 8px var(--cyan);
+}
+.netlabel.bad {
+  color: #ff2bd6;
+  text-shadow: 0 0 8px #ff2bd6;
+}
+.radar.static .netlabel {
+  position: static;
 }
 #box {
   position: absolute;
@@ -894,15 +901,17 @@ code {
   border-bottom: 1px solid var(--line);
 }
 [role='tab'] {
-  flex: 1 1 0;
+  flex: 1 1 auto;
   border: 0;
   border-bottom: 3px solid transparent;
   border-radius: 0;
   background: transparent;
   color: var(--dim);
   min-height: 40px;
-  padding: 4px 6px;
-  font-size: 0.8rem;
+  padding: 4px 4px;
+  font-size: 0.72rem;
+  letter-spacing: 0;
+  white-space: nowrap;
 }
 [role='tab'][aria-selected='true'] {
   color: var(--cyan);
@@ -1006,4 +1015,66 @@ code {
 }
 .tabs .sliders {
   gap: 4px;
+}
+
+#hRec {
+  top: 6px;
+  right: 6px;
+  color: #ff4d5e;
+  font-weight: 700;
+}
+#hRec[hidden] {
+  display: none;
+}
+#hRec i {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #ff2b3d;
+  animation: recblink 1s steps(2, start) infinite;
+}
+@keyframes recblink {
+  50% {
+    opacity: 0.1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #hRec i {
+    animation: none;
+  }
+}
+#rec[aria-pressed='true'] {
+  background: #ff2b3d;
+  color: #fff;
+}
+.tapelist {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.tapelist li {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 0.5rem;
+  align-items: center;
+  border: 1px solid var(--line, rgba(25, 227, 255, 0.3));
+  padding: 0.35rem;
+}
+.tapelist img,
+.tapelist video {
+  width: 96px;
+  height: 54px;
+  object-fit: cover;
+  background: #000;
+}
+.tapelist .row {
+  margin: 0.25rem 0 0;
+  gap: 0.35rem;
+}
+.tapelist button {
+  padding: 0.2rem 0.5rem;
+  min-height: 28px;
 }

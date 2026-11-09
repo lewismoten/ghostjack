@@ -15,7 +15,7 @@
           The port agents jack into when they need eyes, ears and a mouth in
           meatspace. Glassmouth is the voice on the wire.
         </p>
-        <p id="device" class="device mono-l">Chrome: none jacked in</p>
+        <p id="device" class="device mono-l">Rig: none jacked in</p>
       </div>
       <div class="top-tools">
         <span class="light" id="light" aria-hidden="true"></span>
@@ -104,6 +104,7 @@
                 <span id="hClock">--:--:--</span>
                 <span id="hConn">FLATLINE</span>
                 <span id="hNight">NV AUTO</span>
+                <span id="hRec" hidden><i></i> REC <b id="hRecT">0:00</b></span>
               </div>
               <div id="box" hidden></div>
               <div
@@ -156,7 +157,7 @@
                 id="model"
                 width="240"
                 height="200"
-                aria-label="Camera model, turned to the estimated aim. Drag it to nudge the camera."
+                aria-label="Camera model, turned to the estimated aim. Drag it to turn the camera; it glows amber while the camera is moving."
                 role="img"
               ></canvas>
             </div>
@@ -169,6 +170,11 @@
               Sound off
             </button>
             <button id="shot" type="button" disabled>Snapshot</button>
+            <button id="shotSave" type="button" disabled>Save</button>
+            <button id="shotDl" type="button" disabled>Download</button>
+            <button id="rec" type="button" disabled aria-pressed="false">
+              REC
+            </button>
             <label class="check"
               ><input id="night" type="checkbox" role="switch" disabled />
               <span title="Off means automatic">Night vision</span></label
@@ -216,11 +222,11 @@
                   id="sayLevel"
                   type="range"
                   min="0.01"
-                  max="0.08"
+                  max="0.05"
                   step="0.005"
-                  value="0.035"
+                  value="0.03"
                 />
-                <output id="sayLevelOut">0.035</output></label
+                <output id="sayLevelOut">0.030</output></label
               >
               <span id="sayStatus" role="status" class="mono-l"
                 >Quiet on the line.</span
@@ -243,9 +249,9 @@
                     min="0.004"
                     max="0.03"
                     step="0.001"
-                    value="0.016"
+                    value="0.008"
                   />
-                  <output id="sayChimeOut">0.016</output></label
+                  <output id="sayChimeOut">0.008</output></label
                 >
               </div>
               <p class="hint">Lines wait their turn. Arrow keys aim too.</p>
@@ -267,14 +273,25 @@
             </button>
             <button
               role="tab"
-              id="tab-chrome"
-              data-tab="chrome"
-              aria-controls="p-chrome"
+              id="tab-rig"
+              data-tab="rig"
+              aria-controls="p-rig"
               aria-selected="false"
               tabindex="-1"
-              title="Chrome: camera info and settings"
+              title="Rig: camera info"
             >
-              Chrome
+              Rig
+            </button>
+            <button
+              role="tab"
+              id="tab-dials"
+              data-tab="dials"
+              aria-controls="p-dials"
+              aria-selected="false"
+              tabindex="-1"
+              title="Dials: camera adjustments"
+            >
+              Dials
             </button>
             <button
               role="tab"
@@ -286,6 +303,17 @@
               title="Glassmouth: the voice relay"
             >
               Glassmouth
+            </button>
+            <button
+              role="tab"
+              id="tab-tape"
+              data-tab="tape"
+              aria-controls="p-tape"
+              aria-selected="false"
+              tabindex="-1"
+              title="Tape: saved snapshots and recordings"
+            >
+              Tape
             </button>
             <button
               role="tab"
@@ -309,7 +337,7 @@
             <p id="demoText" class="hint" hidden>
               <strong>Glassmouth:</strong> "Nobody home. Just static and the
               meat at the desk." Run <code>npm start</code> in the project, then
-              enter the address and token here. Chrome's line out is whatever
+              enter the address and token here. The rig's line out is whatever
               cable you give it. Mine's got none: only the bridge talks to it,
               behind its ICE. Share the bridge with your own Tailscale deck if
               you like, never with the open internet.
@@ -338,12 +366,12 @@
           </div>
           <div
             role="tabpanel"
-            id="p-chrome"
-            aria-labelledby="tab-chrome"
+            id="p-rig"
+            aria-labelledby="tab-rig"
             tabindex="0"
             hidden
           >
-            <h2 id="info-h">Chrome <small>camera info, settings</small></h2>
+            <h2 id="info-h">Rig <small>camera info, read only</small></h2>
             <div class="row">
               <button id="infoLoad" type="button" disabled>
                 Read camera info
@@ -351,7 +379,31 @@
             </div>
             <div id="info">
               <dl id="infoList" class="kv"></dl>
-              <h3>Adjust</h3>
+              <h3>Not enabled here</h3>
+              <ul class="off">
+                <li><button type="button" disabled>Wi-Fi setup</button></li>
+                <li><button type="button" disabled>Reboot</button></li>
+                <li><button type="button" disabled>Factory restore</button></li>
+                <li>
+                  <button type="button" disabled>Firmware upgrade</button>
+                </li>
+                <li><button type="button" disabled>Format disk</button></li>
+                <li><button type="button" disabled>Change password</button></li>
+              </ul>
+              <p class="hint">
+                Shown for completeness; they can lock out the camera.
+              </p>
+            </div>
+          </div>
+          <div
+            role="tabpanel"
+            id="p-dials"
+            aria-labelledby="tab-dials"
+            tabindex="0"
+            hidden
+          >
+            <h2>Dials <small>camera adjustments</small></h2>
+            <div id="adjust">
               <div class="sliders">
                 <label
                   >Brightness
@@ -405,24 +457,14 @@
               </div>
               <div class="row">
                 <button id="clock" type="button" disabled>
-                  Sync camera clock
+                  Set clock from this computer
                 </button>
               </div>
-              <h3>Not enabled here</h3>
-              <ul class="off">
-                <li><button type="button" disabled>Wi-Fi setup</button></li>
-                <li><button type="button" disabled>Reboot</button></li>
-                <li><button type="button" disabled>Factory restore</button></li>
-                <li>
-                  <button type="button" disabled>Firmware upgrade</button>
-                </li>
-                <li><button type="button" disabled>Format disk</button></li>
-                <li><button type="button" disabled>Change password</button></li>
-              </ul>
-              <p class="hint">
-                Shown for completeness; they can lock out the camera.
-              </p>
             </div>
+            <p class="hint">
+              Night vision is on the Eye controls. Read the rig first to see the
+              current values.
+            </p>
           </div>
           <div
             role="tabpanel"
@@ -468,6 +510,27 @@
           </div>
           <div
             role="tabpanel"
+            id="p-tape"
+            aria-labelledby="tab-tape"
+            tabindex="0"
+            hidden
+          >
+            <h2>Tape <small>saved snapshots and recordings</small></h2>
+            <p class="hint">
+              Pictures and recordings may show people. They are kept only in
+              this browser (IndexedDB) and leave this computer only if you
+              download them.
+            </p>
+            <div class="row">
+              <output id="tapeUsed" class="mono-l">Empty</output>
+              <button id="tapeClear" type="button" class="ghost">
+                Clear all
+              </button>
+            </div>
+            <ul id="tapeList" class="tapelist"></ul>
+          </div>
+          <div
+            role="tabpanel"
             id="p-deck"
             aria-labelledby="tab-deck"
             tabindex="0"
@@ -485,13 +548,34 @@
               </button>
             </div>
             <fieldset class="sound">
-              <legend>Sound (off by default)</legend>
+              <legend>Audio (all off by default)</legend>
               <label class="check"
                 ><input id="sfx" type="checkbox" /> Sound effects</label
               >
               <label class="check"
                 ><input id="music" type="checkbox" /> Ambient music</label
               >
+              <label class="check"
+                ><input id="voice" type="checkbox" /> Voice (Glassmouth speaks
+                in this browser)</label
+              >
+            </fieldset>
+            <fieldset class="sound">
+              <legend>Aim speed (step per nudge)</legend>
+              <label class="check"
+                ><input type="radio" name="aim" value="fine" /> Fine</label
+              >
+              <label class="check"
+                ><input type="radio" name="aim" value="normal" checked />
+                Normal</label
+              >
+              <label class="check"
+                ><input type="radio" name="aim" value="fast" /> Fast</label
+              >
+              <p class="hint">
+                Hold an arrow, or an arrow key, to keep turning: one step a
+                second.
+              </p>
             </fieldset>
             <p class="hint">
               Only the uplink address, token, theme, sound and last-tab choices
