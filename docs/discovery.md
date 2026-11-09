@@ -197,7 +197,14 @@ All from inside the signed-in page (same `acs.send_msg` pattern as the snapshot,
 - **No white light on this model:** with night vision on, writing `red_or_white: 1` was accepted but stored as 0, and only the red IR glow appeared (seen by eye 18:26:57 to 18:27:22).
 - Write back the whole `conf` you read, with only the field you're changing altered, and restore the original afterward.
 
-**Talking (not working yet):** `ccm_talk` with `proto: 'rtdp'` returns an upload address `rtdp://192.168.187.254:7030/pub/<random>`; with `rtsp` or `rtmp` it returns nothing. The web app sends microphone audio to that address through a browser plugin, so speaking needs the maker's RTDP protocol worked out (the 826-x-ip-camera project documents this camera family and may help).
+**Talking (working):** the camera's speaker plays **AAC, 16 kHz, mono, published over RTMP**.
+
+1. `ccm_talk` with `setup: { stream: 'RTP_Unicast', trans: { proto: 'rtmp' } }, token: 'p0'` returns `rtmp://192.168.187.254:7010/pub/<random>`.
+2. Publish to it: `ffmpeg -re -i speech.wav -c:a aac -ar 16000 -ac 1 -b:a 32k -f flv <url>`.
+3. Start with about 3 seconds of silence: the camera begins playing late and cuts off the first second or two.
+4. **One talker at a time, one address per stream.** A finished publish frees the slot, and the next `ccm_talk` works right away. An address that's requested but never published to holds the slot until the camera restarts (`ccm.system.err` until then). So always publish to every address you request.
+
+How it was found: `rtdp` (the web app's default) refused TCP on 7030 and ignored plain RTP over UDP, and there's no ONVIF backchannel on the RTSP stream. The vendor's site still hosts the 2013 Flash version of its media engine (`http://www.mipcm.com/mme/mme.swf`; the camera's own copy and the native plugins are gone). Its strings (`getMicrophone`, `publish_start`, `connectRTMP`) showed the Flash player sends the microphone by publishing RTMP. Of five formats tried with the same RTMP address flow (AAC 16 kHz, G.711 A-law and mu-law 8 kHz, ADPCM SWF 22 kHz, Nellymoser 8 and 16 kHz), **only AAC 16 kHz played**: two recordings made beside the camera and the camera's own microphone all caught "Number one, AAC…" and nothing from the others. The speaker is loud: send at about half level. The speaker volume can't be read or set (`ccm_speakers_get` doesn't answer).
 
 ## Cleaning up
 
