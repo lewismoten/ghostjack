@@ -7,6 +7,10 @@ follow [SemVer](https://semver.org/).
 
 ### Fixed
 
+- The aim pad no longer greys out an arrow because the estimated range says the
+  camera is at a wall: estimated walls only show an amber hint, the range slides
+  to fit when the camera keeps moving past it, and a wall is confirmed only
+  after two moves in a row leave a detailed picture unchanged.
 - Live video was 5 to 10 seconds late. The camera sends a keyframe about every
   4.8 s and the bridge only cut a fragment at each one, so the player always
   held at least a whole group of pictures. The bridge now cuts a fragment every

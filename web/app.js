@@ -556,12 +556,9 @@ const degPer = () =>
 function room(dx, dy) {
   let rx = dx,
     ry = dy;
-  if (limits) {
-    if (dx > 0) rx = Math.min(dx, limits.panMax - pan);
-    if (dx < 0) rx = Math.max(dx, limits.panMin - pan);
-    if (dy > 0) ry = Math.min(dy, limits.tiltMax - tilt);
-    if (dy < 0) ry = Math.max(dy, limits.tiltMin - tilt);
-  }
+  // The measured range is only an estimate (the camera never reports where it
+  // points, and it may be turned by hand or re-home after a power cycle), so
+  // it doesn't clamp moves; only a wall confirmed by the picture does.
   if ((dx > 0 && blocked.r) || (dx < 0 && blocked.l)) rx = 0;
   if ((dy > 0 && blocked.u) || (dy < 0 && blocked.d)) ry = 0;
   // under 2 units is not worth a move
@@ -577,8 +574,23 @@ function updateArrows() {
       Math.sign(+b.dataset.dy) * 2,
     );
     const wall = !connected ? false : !rx && !ry;
+    const sx = Math.sign(+b.dataset.dx),
+      sy = Math.sign(+b.dataset.dy);
+    const near =
+      connected &&
+      !wall &&
+      limits &&
+      ((sx > 0 && pan >= limits.panMax) ||
+        (sx < 0 && pan <= limits.panMin) ||
+        (sy > 0 && tilt >= limits.tiltMax) ||
+        (sy < 0 && tilt <= limits.tiltMin));
     b.disabled = !connected || wall;
-    b.title = wall ? 'At the wall (estimated)' : '';
+    b.classList.toggle('near-wall', !!near);
+    b.title = wall
+      ? 'At the wall (the picture stopped changing twice)'
+      : near
+        ? 'Near the estimated wall: press to try anyway'
+        : '';
   }
 }
 // Range indicator in the Eye header: where the estimate sits between the walls.
@@ -718,6 +730,7 @@ async function move(dx, dy, quiet) {
       blocked.d = blocked.d && dy > 0 ? false : blocked.d;
       blocked.u = blocked.u && dy < 0 ? false : blocked.u;
     }
+    shiftRangeToFit();
     showPose();
     wallCheck(dx, dy, before);
     if (!liveOn) autoSnapSoon(TRAVEL_MS + 300);
@@ -733,26 +746,81 @@ const liveFrame = () =>
   liveOn && $('video').readyState >= 2 ? lim.gray($('video')) : null;
 let liveNoise = 1;
 // Edge detection in normal use: a real step that leaves the live picture unchanged hit the wall.
+// Edge detection in normal use. A wall counts only when two moves in a row in
+// the same direction leave the live picture unchanged (one can just be the
+// video lagging), and never on a plain view (a blank wall looks the same
+// moving or not).
+const strikes = { l: 0, r: 0, u: 0, d: 0 };
+const dirOf = (dx, dy) =>
+  dx > 0 ? 'r' : dx < 0 ? 'l' : dy > 0 ? 'u' : dy < 0 ? 'd' : '';
+function plain(frame) {
+  let sum = 0,
+    sq = 0;
+  for (const v of frame) {
+    sum += v;
+    sq += v * v;
+  }
+  const mean = sum / frame.length;
+  return Math.sqrt(sq / frame.length - mean * mean) < 12;
+}
 function wallCheck(dx, dy, before) {
-  if (!before || Math.max(Math.abs(dx), Math.abs(dy)) < 4) return;
+  const k = dirOf(dx, dy);
+  if (!k || !before || Math.max(Math.abs(dx), Math.abs(dy)) < 4) return;
+  if (plain(before)) return;
   setTimeout(() => {
     const after = liveFrame();
-    if (!after || !lim.same(lim.diff(before, after), liveNoise)) return;
-    if (dx > 0) blocked.r = true;
-    if (dx < 0) blocked.l = true;
-    if (dy > 0) blocked.u = true;
-    if (dy < 0) blocked.d = true;
+    if (!after) return;
+    if (!lim.same(lim.diff(before, after), liveNoise)) {
+      strikes[k] = 0; // it moved: no wall here
+      return;
+    }
+    if (++strikes[k] < 2) return;
+    strikes[k] = 0;
+    blocked[k] = true;
     if (limits) {
-      if (dx > 0) pan = limits.panMax;
-      if (dx < 0) pan = limits.panMin;
-      if (dy > 0) tilt = limits.tiltMax;
-      if (dy < 0) tilt = limits.tiltMin;
+      // a confirmed wall pins that end of the range where the estimate is now
+      const shift = {
+        r: pan - limits.panMax,
+        l: pan - limits.panMin,
+        u: tilt - limits.tiltMax,
+        d: tilt - limits.tiltMin,
+      }[k];
+      if (k === 'r' || k === 'l') {
+        limits.panMin += shift;
+        limits.panMax += shift;
+      } else {
+        limits.tiltMin += shift;
+        limits.tiltMax += shift;
+      }
     }
     showPose();
     setStatus(
-      `${glass.line('wall')} The picture stopped changing (estimated).`,
+      `${glass.line('wall')} Two moves and the picture didn't change (estimated).`,
     );
-  }, TRAVEL_MS + 800);
+  }, TRAVEL_MS + 1500);
+}
+// The measured range keeps its width; if the estimate goes past an end and the
+// camera still moved, the range was off, so slide it to fit.
+function shiftRangeToFit() {
+  if (!limits) return;
+  if (pan > limits.panMax) {
+    const d = pan - limits.panMax;
+    limits.panMin += d;
+    limits.panMax += d;
+  } else if (pan < limits.panMin) {
+    const d = pan - limits.panMin;
+    limits.panMin += d;
+    limits.panMax += d;
+  }
+  if (tilt > limits.tiltMax) {
+    const d = tilt - limits.tiltMax;
+    limits.tiltMin += d;
+    limits.tiltMax += d;
+  } else if (tilt < limits.tiltMin) {
+    const d = tilt - limits.tiltMin;
+    limits.tiltMin += d;
+    limits.tiltMax += d;
+  }
 }
 
 // Hold a control: one step now, then one more every STEP_MS until released. Moves queue in the camera

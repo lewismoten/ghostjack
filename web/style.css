@@ -1159,3 +1159,9 @@ code {
 .stills select:disabled {
   opacity: 0.5;
 }
+
+/* An arrow at the estimated wall: still pressable, just flagged. */
+.pad button.near-wall {
+  border-color: var(--amber, #ffb000);
+  color: var(--amber, #ffb000);
+}
