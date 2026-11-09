@@ -470,3 +470,26 @@ log above is left as it was written; the camera's Keychain item is still named
   pacing options in front of it: 3.3 s offline for the 5.5 s line (2 s burst,
   then 1.05x). The earlier level and wake-pulse conclusions were drawn while
   this bug was present, so they may need another listen.
+
+## 17. How far a step really moves (2026-11-09, 00:10)
+
+Measured on the real camera through the bridge: small (640x360) pictures scaled
+to 320x180, the shift between consecutive pictures found by brute-force search.
+
+- **Pan steps of 10 are small and uneven:** 7, 13, 12 and 5 px of 320 (about
+  2.9% of the picture width on average). The earlier figure of about 7.3 degrees
+  a step assumed the maker's 350 degrees over the 48 steps Find limits found;
+  with steps this small, Find limits' "the picture stopped changing" test (on a
+  32x18 gray) probably called walls too early, so the real pan travel is likely
+  much larger than 48 steps (not yet measured).
+- **Backlash:** after a change of direction, tilt steps of 10 moved 0, 0, then
+  16 px of 180.
+- **Long moves are proportional:** one fast trip of -40 after four steps of +10
+  came back within 1 px of the start; -30 tilt within 2 px.
+- **Pictures are not pure shifts:** the best match still differed by a mean of 7
+  to 8 (of 255) against 0.6 between two still pictures, which fits a lens that
+  bends lines toward the edges (and exposure changes).
+- Consequence: placing pictures by the step count misplaces them (the repeated
+  ceiling lights in the first photo sphere). Placement has to come from the
+  pictures themselves; a strip scan (thin slices from the middle of each
+  picture, placed by measured shift) is being built.
