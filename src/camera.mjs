@@ -162,13 +162,16 @@ async function readConf() {
   return conf;
 }
 
-// mode 'night' = forced infrared; 'auto' = automatic (the factory value, mode "").
+// mode 'night' = forced infrared; 'day' = forced color; 'auto' = automatic (the factory value, mode "").
 export function setNight(mode) {
   return run(async () => {
     const conf = await readConf();
-    conf.mode = mode === 'night' ? 'night' : '';
+    // 'day' asks the camera to stay in color with the infrared light off,
+    // even in the dark (useful when the screens it watches give their own light).
+    conf.mode = mode === 'night' ? 'night' : mode === 'day' ? 'day' : '';
     await call('ccm_img_set', { token: 'vs0', conf });
-    return (await readConf()).mode === 'night' ? 'night' : 'auto';
+    const back = (await readConf()).mode;
+    return back === 'night' ? 'night' : back === 'day' ? 'day' : 'auto';
   });
 }
 
@@ -178,7 +181,11 @@ export function status() {
     return {
       connected: true,
       night:
-        conf.mode === 'night' ? 'night' : conf.mode === '' ? 'auto' : conf.mode,
+        conf.mode === 'night' || conf.mode === 'day'
+          ? conf.mode
+          : conf.mode === ''
+            ? 'auto'
+            : conf.mode,
       inNightVision: conf.day_or_night === 2,
       signedInSeconds: Math.round((Date.now() - signedInAt) / 1000),
     };

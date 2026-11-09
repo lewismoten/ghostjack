@@ -350,9 +350,17 @@
             <button id="rec" type="button" disabled aria-pressed="false">
               REC
             </button>
-            <label class="check"
-              ><input id="night" type="checkbox" role="switch" disabled />
-              <span title="Off means automatic">Night vision</span></label
+            <label class="vision"
+              >Vision
+              <select
+                id="night"
+                disabled
+                title="Auto switches to infrared in the dark; Color keeps the infrared off"
+              >
+                <option value="auto">Auto</option>
+                <option value="night">Night (infrared)</option>
+                <option value="day">Color</option>
+              </select></label
             >
             <label class="zoom"
               >Zoom

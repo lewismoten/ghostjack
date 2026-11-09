@@ -587,8 +587,8 @@ const server = createServer(async (req, res) => {
     }
     if (route === 'POST /api/night') {
       const b = await readBody(req);
-      if (!['night', 'auto'].includes(b.mode))
-        return json(res, 400, { error: "mode is 'night' or 'auto'" });
+      if (!['night', 'day', 'auto'].includes(b.mode))
+        return json(res, 400, { error: "mode is 'night', 'day' or 'auto'" });
       return json(res, 200, { mode: await camera.setNight(b.mode) });
     }
     if (route === 'GET /api/info') return json(res, 200, await camera.info());

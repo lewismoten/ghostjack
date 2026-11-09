@@ -22,6 +22,10 @@ export const LINES = {
   liveOpen: ["Eye's open.", "There's the eye.", "Eye's open. Nobody blink."],
   liveStop: ["Eye's shut.", 'Closing the eye.'],
   nightOn: ['Lights out. Going infrared.', 'Lights out. Infrared it is.'],
+  nightOff: [
+    'Infrared off. Color only.',
+    'No infrared. I will take what light there is.',
+  ],
   nightAuto: [
     'Lights back on. Auto mode.',
     'Back to auto. The lights are my own again.',

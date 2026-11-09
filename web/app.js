@@ -196,7 +196,7 @@ async function connect(e) {
       ok = true;
       setConnected(true);
       if (first && tabNow() === 'uplink') selectTab('rig');
-      $('night').checked = s.night === 'night';
+      $('night').value = ['night', 'day'].includes(s.night) ? s.night : 'auto';
       showNight(s.night);
       setIR(s.inNightVision);
       setStatus(
@@ -243,8 +243,11 @@ async function loadDevice() {
     /* leave the line as it was */
   }
 }
+var lastNight = 'auto';
 const showNight = (m) => {
-  $('hNight').textContent = m === 'night' ? 'NV IR ON' : 'NV AUTO';
+  lastNight = ['night', 'day'].includes(m) ? m : 'auto';
+  $('hNight').textContent =
+    m === 'night' ? 'NV IR ON' : m === 'day' ? 'NV OFF' : 'NV AUTO';
   if (m === 'night') setIR(true);
   else setTimeout(pollIR, 3000); // automatic: ask the camera what it chose
 };
@@ -1599,7 +1602,7 @@ document.addEventListener('keydown', (e) => {
 }
 
 $('night').onchange = async () => {
-  const mode = $('night').checked ? 'night' : 'auto';
+  const mode = $('night').value;
   try {
     const r = await api('/api/night', {
       method: 'POST',
@@ -1610,10 +1613,10 @@ $('night').onchange = async () => {
     showNight(j.mode);
     foley.softClick();
     setStatus(
-      `${glass.line(j.mode === 'night' ? 'nightOn' : 'nightAuto')} Night vision: ${j.mode}.`,
+      `${glass.line(j.mode === 'night' ? 'nightOn' : j.mode === 'day' ? 'nightOff' : 'nightAuto')} Vision: ${j.mode === 'day' ? 'color' : j.mode}.`,
     );
   } catch (e) {
-    $('night').checked = !$('night').checked;
+    $('night').value = lastNight;
     setStatus(`Night vision change failed: ${e.message}`, true);
   }
 };
