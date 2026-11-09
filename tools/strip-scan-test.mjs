@@ -290,7 +290,7 @@ try {
     );
   }
   const dl = page.waitForEvent('download');
-  await clickBtn(page, '.stripbar button', 'Download panorama');
+  await clickBtn(page, '.stripbar button', 'Save strips');
   const d = await dl;
   await d.saveAs(join(out, d.suggestedFilename()));
   check(

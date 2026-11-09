@@ -117,7 +117,9 @@ try {
   // download the panorama
   const dl = page.waitForEvent('download');
   await page.evaluate(() =>
-    [...document.querySelectorAll('.spherebar button')][1].click(),
+    [...document.querySelectorAll('.spherebar button')]
+      .find((b) => b.textContent.trim() === 'Save sphere')
+      .click(),
   );
   const d = await dl;
   await d.saveAs(join(out, d.suggestedFilename()));
@@ -127,7 +129,9 @@ try {
   );
   const dl2 = page.waitForEvent('download');
   await page.evaluate(() =>
-    [...document.querySelectorAll('.spherebar button')][2].click(),
+    [...document.querySelectorAll('.spherebar button')]
+      .find((b) => b.textContent.trim() === 'Save 360°')
+      .click(),
   );
   await (await dl2).saveAs(join(out, 'full-360.jpg'));
   // look around: pitch the view a little toward the middle of the range, then shoot four themes/sizes

@@ -53,8 +53,8 @@ export function createStripView(host, ctl) {
     () => (running ? ctl.stop() : ctl.start(options())),
   );
   const dl = btn(
-    'Download panorama',
-    'Download the strip panorama as a JPEG',
+    'Save strips',
+    'Save the strip panorama (what has been scanned so far) as a JPEG',
     () => ctl.download(),
   );
   dl.disabled = true;

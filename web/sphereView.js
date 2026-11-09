@@ -45,12 +45,12 @@ export function createView(host, ctl) {
   btn('Strip scan', 'Strip scan: a panorama from thin slices', () =>
     ctl.stripScan(),
   );
-  btn('Panorama', 'Download panorama: the painted part as a picture', () =>
+  btn('Save sphere', 'Save the painted part of the sphere as a picture', () =>
     ctl.exportJpg(false),
   );
   btn(
-    '360°',
-    'Download the whole sphere as a 2 to 1 picture that opens as a 360 degree photo in viewers',
+    'Save 360°',
+    'Save the whole sphere as a 2 to 1 picture that opens as a 360 degree photo in viewers',
     () => ctl.exportJpg(true),
   );
   btn('×', 'Close the sphere view', () => ctl.close());

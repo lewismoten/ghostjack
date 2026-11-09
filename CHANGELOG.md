@@ -125,6 +125,11 @@ follow [SemVer](https://semver.org/).
 
 ### Changed
 
+- Strip scan rows and Find limits use only what the pictures show: walls are
+  steps whose measured shift is about zero (after two steps for gear slack),
+  rows start at the bottom and at the left wall and climb by measured height,
+  and the sphere stays put during a scan. The save buttons say what they save:
+  Save strips, Save sphere, Save 360°.
 - The shot strip is exactly as wide as the picture, and the page's clock moved
   to the bottom left, beside the night vision label, so it no longer covers the
   camera's own timestamp.
