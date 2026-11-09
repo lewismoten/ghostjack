@@ -118,6 +118,62 @@ function setAim(b) {
   return aim;
 }
 
+// Saved shots: nine numbered slots of pan, tilt and zoom, like the preset
+// keypad on a camera controller (null = an empty slot). Positions are in the same estimated units as the aim.
+const SHOTS_FILE = join(homedir(), '.config', 'ghostjack', 'shots.json');
+let shots = [];
+try {
+  shots = JSON.parse(readFileSync(SHOTS_FILE, 'utf8'));
+} catch {
+  /* none yet */
+}
+const MAX_SHOTS = 9;
+function setShots(list) {
+  if (!Array.isArray(list) || list.length > MAX_SHOTS)
+    throw Object.assign(new Error(`up to ${MAX_SHOTS} shots`), { code: 400 });
+  const num = (v, lim) => {
+    const n = Number(v);
+    if (!Number.isFinite(n) || Math.abs(n) > lim)
+      throw Object.assign(new Error('positions must be small numbers'), {
+        code: 400,
+      });
+    return n;
+  };
+  shots = list.map((s) => {
+    if (s === null) return null; // an empty slot
+    const name = String(s?.name ?? '')
+      .replace(/[^\p{L}\p{N} .,'&()-]/gu, '')
+      .trim()
+      .slice(0, 24);
+    if (!name)
+      throw Object.assign(new Error('each shot needs a name'), { code: 400 });
+    const crop =
+      Array.isArray(s.crop) && s.crop.length === 4
+        ? s.crop.map((v) => Math.round(num(v, 1) * 1000) / 1000)
+        : null;
+    return {
+      name,
+      pan: Math.round(num(s.pan, 10000)),
+      tilt: Math.round(num(s.tilt, 10000)),
+      crop,
+    };
+  });
+  mkdirSync(dirname(SHOTS_FILE), { recursive: true, mode: 0o700 });
+  writeFileSync(SHOTS_FILE, JSON.stringify(shots), { mode: 0o600 });
+  return shots;
+}
+// A travel move (going to a saved shot or re-centering) is one long step at
+// full speed instead of many small ones. The camera can't cancel it, so the
+// bridge refuses other moves until it should have arrived.
+const MS_PER_UNIT = 70; // a guess: a step of 10 at speed 100 takes about 0.7 s
+const travelMs = (dx, dy) =>
+  Math.round(
+    (Math.max(Math.abs(dx), Math.abs(dy)) +
+      Math.min(Math.abs(dx), Math.abs(dy)) / 2) *
+      MS_PER_UNIT +
+      500,
+  );
+
 const clamp = (n, lim) =>
   Math.max(-lim, Math.min(lim, Math.round(Number(n) || 0)));
 let lastMove = 0;
@@ -274,6 +330,28 @@ const server = createServer(async (req, res) => {
       lastMove = now;
       await camera.move(dx, dy, speed);
       return json(res, 200, { ok: true, dx, dy, speed });
+    }
+    if (route === 'POST /api/travel') {
+      const b = await readBody(req);
+      const dx = clamp(b.dx, 480),
+        dy = clamp(b.dy, 190);
+      if (!dx && !dy) return json(res, 400, { error: 'dx or dy needed' });
+      const now = Date.now();
+      if (now - lastMove < 1000)
+        return json(res, 429, { error: 'still moving' });
+      const ms = travelMs(dx, dy);
+      lastMove = now + ms - 1000; // other moves wait until it arrives
+      await camera.move(dx, dy, 100);
+      return json(res, 200, { ok: true, dx, dy, ms });
+    }
+    if (route === 'GET /api/shots') return json(res, 200, shots);
+    if (route === 'POST /api/shots') {
+      try {
+        return json(res, 200, setShots(await readBody(req)));
+      } catch (e) {
+        if (e.code === 400) return json(res, 400, { error: e.message });
+        throw e;
+      }
     }
     if (route === 'POST /api/night') {
       const b = await readBody(req);

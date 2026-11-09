@@ -101,6 +101,7 @@ function setConnected(on) {
   updateArrowsSoon();
   $('sayGo').disabled = !on;
   $('jackOut').disabled = !on;
+  renderKeys();
   if (on && Number($('stills').value)) setTimeout(stillsTick, 1500);
   if (!on) clearTimeout(stillsTimer);
   // Flatlined: whatever was last on screen stays, drained to grayscale.
@@ -202,6 +203,7 @@ async function connect(e) {
       lost = false;
       loadDevice();
       loadAim().then(showLimitsInfo);
+      loadShots();
       if (first && !liveOn) autoSnapSoon(300);
     } catch (err) {
       setConnected(false);
@@ -671,7 +673,7 @@ function showPose(instant) {
 }
 // Re-center: with a known range, move to the middle of it; otherwise just zero the estimate.
 $('recenter').onclick = () => {
-  if (limits && connected) return aimTo(0, 0);
+  if (limits && connected) return aimTo(0, 0, true);
   pan = tilt = 0;
   showPose();
 };
@@ -729,6 +731,10 @@ async function move(dx, dy, quiet) {
     if (dy) {
       blocked.d = blocked.d && dy > 0 ? false : blocked.d;
       blocked.u = blocked.u && dy < 0 ? false : blocked.u;
+    }
+    if (atSlot) {
+      atSlot = 0; // moved off the saved shot
+      renderKeys();
     }
     shiftRangeToFit();
     showPose();
@@ -892,7 +898,7 @@ addEventListener('blur', () => {
 // camera is sent toward that orientation as small queued steps, one a second; the model is amber from
 // then until the estimated arrival (the last step sent, plus a guess at its travel time).
 let aimRun = 0; // a new drag cancels the steps still waiting to be sent
-async function aimTo(tp, tt) {
+async function aimTo(tp, tt, fast) {
   const me = ++aimRun;
   if (limits) {
     tp = Math.max(limits.panMin, Math.min(limits.panMax, tp));
@@ -901,6 +907,8 @@ async function aimTo(tp, tt) {
   let rx = tp - pan,
     ry = tt - tilt;
   const st = stepSize();
+  if (fast && Math.max(Math.abs(rx), Math.abs(ry)) > st)
+    return travel(Math.round(rx), Math.round(ry), me);
   const cl = (n) => Math.max(-st, Math.min(st, n));
   if (Math.abs(rx) < st / 2 && Math.abs(ry) < st / 2) {
     aim = null;
@@ -931,6 +939,174 @@ async function aimTo(tp, tt) {
   showPose();
   setStatus(glass.line('moveDone'));
 }
+// A travel move: one long step at full speed (re-center, saved shots). The
+// camera can't stop it once sent, so nothing else moves until it should have
+// arrived (the bridge's estimate of the trip).
+async function travel(dx, dy, me) {
+  if (!connected || finding) return;
+  while (Date.now() - lastMove < 1100)
+    await new Promise((r) => setTimeout(r, 100));
+  if (me !== aimRun) return;
+  aim = { p: pan + dx, t: tilt + dy };
+  scene?.setMoving(true);
+  showPose();
+  setStatus(glass.line('moveStart'));
+  try {
+    const r = await api('/api/travel', {
+      method: 'POST',
+      body: JSON.stringify({ dx, dy }),
+    });
+    if (!r.ok) throw new Error((await r.json()).error);
+    const { ms } = await r.json();
+    lastMove = Date.now() + ms - 1100;
+    foley.servo(Math.min(4, ms / 1000));
+    pan += dx;
+    tilt += dy;
+    blocked.l = blocked.r = blocked.u = blocked.d = false;
+    showPose();
+    await new Promise((res) => setTimeout(res, ms));
+    if (!liveOn) autoSnapSoon(300);
+    setStatus(glass.line('moveDone'));
+  } catch (e) {
+    setStatus(`Lost the angle. Move failed: ${e.message}`, true);
+  } finally {
+    if (me === aimRun) {
+      aim = null;
+      scene?.setMoving(false);
+    }
+    showPose();
+  }
+}
+
+// Saved shots: nine numbered slots like a camera controller's preset keypad.
+// A number goes to that shot (pan, tilt and zoom); SET, then a number, saves
+// the current view there. Keys: 1 to 9 (number row or numpad), S for SET.
+// Kept on the bridge so agents and other browsers share them.
+var shots = Array(9).fill(null);
+var setting = false;
+var atSlot = 0;
+function renderKeys() {
+  const box = $('keys');
+  if (!box) return;
+  box.classList.toggle('setting', setting);
+  $('keySet').setAttribute('aria-pressed', String(setting));
+  $('keySet').disabled = !connected;
+  for (const b of box.querySelectorAll('[data-slot]')) {
+    const n = +b.dataset.slot,
+      s = shots?.[n - 1];
+    b.disabled = !connected;
+    b.classList.toggle('has', !!s);
+    b.classList.toggle('at', n === atSlot);
+    const what = s ? s.name : 'center (empty)';
+    b.querySelector('span').textContent = setting
+      ? 'save here'
+      : s
+        ? s.name
+        : 'center';
+    b.title = `${n}: ${what}`;
+    b.setAttribute(
+      'aria-label',
+      setting
+        ? `Save this view as shot ${n} (${what})`
+        : `Go to shot ${n}: ${what}`,
+    );
+  }
+}
+async function loadShots() {
+  try {
+    const r = await api('/api/shots');
+    if (!r.ok) return;
+    const list = await r.json();
+    shots = Array.from({ length: 9 }, (_, i) => list[i] ?? null);
+  } catch {
+    /* keep what we have */
+  }
+  renderKeys();
+}
+async function saveShots() {
+  const r = await api('/api/shots', {
+    method: 'POST',
+    body: JSON.stringify(shots),
+  });
+  if (!r.ok) throw new Error((await r.json()).error);
+}
+function setMode(on) {
+  setting = on;
+  renderKeys();
+  if (on) setStatus('SET: press a number to save this view there.');
+}
+async function pressSlot(n) {
+  if (!connected) return;
+  if (setting) {
+    const s = shots[n - 1];
+    setMode(false);
+    const name = prompt(
+      `Name for shot ${n} (leave empty to clear it):`,
+      s?.name ?? `Shot ${n}`,
+    );
+    if (name === null) return setStatus('Nothing saved.');
+    const old = shots[n - 1];
+    shots[n - 1] = name.trim()
+      ? { name: name.trim().slice(0, 24), pan, tilt, crop }
+      : null;
+    try {
+      await saveShots();
+      atSlot = shots[n - 1] ? n : 0;
+      setStatus(
+        shots[n - 1]
+          ? `Shot ${n} saved: ${shots[n - 1].name}.`
+          : `Shot ${n} cleared.`,
+      );
+    } catch (e) {
+      shots[n - 1] = old;
+      setStatus(`Shot not saved: ${e.message}`, true);
+    }
+    return renderKeys();
+  }
+  // an empty slot is the center: pan 0, tilt 0, no zoom
+  const s = shots[n - 1] ?? { name: 'center', pan: 0, tilt: 0, crop: null };
+  atSlot = n;
+  renderKeys();
+  // zoom first, so the snapshot after the move is already framed
+  if (s.crop) {
+    crop = s.crop;
+    $('zoom').value = Math.min(
+      4,
+      Math.max(1, Math.round((1 / s.crop[2]) * 4) / 4),
+    );
+    $('zoomOut').textContent = `${(1 / s.crop[2]).toFixed(1)}x`;
+  } else {
+    $('zoom').value = 1;
+    setZoom(1);
+  }
+  setStatus(`Shot ${n}: ${s.name}.`);
+  if (Math.abs(s.pan - pan) < 2 && Math.abs(s.tilt - tilt) < 2) {
+    if (!liveOn) snapshot(true);
+    return;
+  }
+  await aimTo(s.pan, s.tilt, true);
+}
+for (const b of document.querySelectorAll('#keys [data-slot]'))
+  b.onclick = () => pressSlot(+b.dataset.slot);
+$('keySet').onclick = () => setMode(!setting);
+document.addEventListener('keydown', (e) => {
+  if (
+    !connected ||
+    e.metaKey ||
+    e.ctrlKey ||
+    e.altKey ||
+    ['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)
+  )
+    return;
+  const m = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
+  if (m) {
+    e.preventDefault();
+    pressSlot(+m[1]);
+  } else if (e.code === 'KeyS') {
+    e.preventDefault();
+    setMode(!setting);
+  } else if (e.key === 'Escape' && setting) setMode(false);
+});
 {
   let from = null;
   const m = $('model'),

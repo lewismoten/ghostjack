@@ -36,6 +36,13 @@ follow [SemVer](https://semver.org/).
 
 ### Added
 
+- Saved shots: nine numbered buttons under the picture, like the preset keypad
+  on a camera controller. A number goes to that shot's pan, tilt and zoom (an
+  empty slot goes to the center); SET, then a number, saves the current view
+  with a name. Keys 1 to 9 (number row or numpad) and S for SET. The bridge
+  keeps them for agents and other browsers (`GET`/`POST /api/shots`).
+- Going to a saved shot or re-centering moves in one fast trip instead of small
+  steps a second apart (`POST /api/travel`).
 - Jack out (disconnect) and Forget the ICE (remove the saved token from this
   browser) in the Uplink tab.
 - When not live, the Eye refreshes itself: a quiet snapshot after jacking in and

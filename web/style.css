@@ -1165,3 +1165,51 @@ code {
   border-color: var(--amber, #ffb000);
   color: var(--amber, #ffb000);
 }
+
+/* Saved shots: a strip of numbered, named buttons right under the picture,
+   like a camera controller's preset keys, with SET at the end. */
+.keys {
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, 1fr)) auto;
+  gap: 4px;
+  margin-top: 6px;
+}
+.keys button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  min-height: 40px;
+  padding: 3px 4px;
+  line-height: 1.1;
+}
+.keys b {
+  font: 700 0.9rem var(--mono);
+}
+.keys span {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.85;
+}
+.keys button:not(.has):not(.set) span {
+  color: var(--dim);
+  font-style: italic;
+}
+.keys button.at {
+  box-shadow: var(--glow);
+  border-color: var(--cyan);
+  background: rgba(25, 227, 255, 0.18);
+}
+.keys .set[aria-pressed='true'],
+.keys.setting button {
+  color: var(--amber);
+  border-color: var(--amber);
+}
+@media (max-width: 640px) {
+  .keys {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
