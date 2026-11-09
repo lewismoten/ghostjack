@@ -418,8 +418,8 @@ README for the steps after that.
   normalized after them (peak about -33.6 dBFS at the default), and the chime is
   held 9 dB under it (-42.6 dBFS).
 - **Recording** copies a fresh RTSP address's H.264 and AAC into an MP4
-  (checked: h264 and aac, a 4-second take). The camera accepted a recording and
-  the live stream in the same session.
+  (checked: h264 and aac, a 4-second take). Recording while the live view is
+  playing was not tested.
 
 ---
 
