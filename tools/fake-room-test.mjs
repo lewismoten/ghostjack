@@ -57,6 +57,10 @@ try {
   );
   await page.evaluate(() => document.getElementById('tab-rig')?.click());
   // Find limits, watching the sphere assemble
+  // the test runs Sweep itself later
+  await page.evaluate(() => {
+    document.getElementById('limitsSweep').checked = false;
+  });
   await page.evaluate(() => document.getElementById('limitsGo').click());
   await page.waitForTimeout(25000);
   await page.screenshot({ path: join(out, 'find-limits-midway.png') });
@@ -87,6 +91,12 @@ try {
   check(
     within(aim.tiltDegPerUnit, TRUE.tiltDegPerUnit, 0.15),
     `tiltDegPerUnit ${aim.tiltDegPerUnit} vs true ${TRUE.tiltDegPerUnit} (15%)`,
+  );
+  // the run's pictures must still be on the sphere after the final repaint
+  const painted = await page.evaluate(() => globalThis.gjSpherePainted?.());
+  check(
+    painted > 40,
+    `sphere repainted after Find limits (${painted} pictures)`,
   );
   await page.screenshot({ path: join(out, 'find-limits-done-1440-dark.png') });
   // Sweep

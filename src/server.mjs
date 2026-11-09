@@ -203,6 +203,53 @@ const travelMs = (dx, dy) =>
       500,
   );
 
+// Getters only: nothing here changes the camera.
+const PROBE_NAMES = new Set([
+  'ccm_info_get',
+  'ccm_misc_get',
+  'ccm_osd_get',
+  'ccm_speaker_get',
+  'ccm_speakers_get',
+  'ccm_mic_get',
+  'ccm_mics_get',
+  'ccm_video_srcs_get',
+  'ccm_date_get',
+  'ccm_ntp_get',
+  'ccm_disk_get',
+  'ccm_record_task_get',
+  'ccm_alert_action_get',
+  'ccm_alert_dev_get',
+  'ccm_upgrade_get',
+  'ccm_net_get',
+  'ccm_dev_info_get',
+  'ccm_devs_get',
+  'ccm_msg_get',
+  'ccm_hardware_test_get',
+]);
+const SECRET =
+  /(^|_)(sn|mac|id|nid|sid|uid|guid|serial|pwd|pass|password|key|token|sess|session|ip|gw|gateway|dns|ssid|bssid|mask|addr|address|user|name|nick|email|phone|qr)($|_)/i;
+function redact(v, k = '') {
+  if (Array.isArray(v)) return v.map((x) => redact(x, k));
+  if (v && typeof v === 'object')
+    return Object.fromEntries(
+      Object.entries(v).map(([kk, x]) => [kk, redact(x, kk)]),
+    );
+  if (typeof v === 'string' && v && SECRET.test(k)) return '(masked)';
+  // long letter-and-digit runs look like serials or cloud IDs
+  if (
+    typeof v === 'string' &&
+    /[a-z]/i.test(v) &&
+    /\d/.test(v) &&
+    /^[0-9a-z]{10,}$/i.test(v)
+  )
+    return '(masked)';
+  if (typeof v === 'string' && /([0-9a-f]{2}[:-]){5}[0-9a-f]{2}/i.test(v))
+    return '(masked)';
+  if (typeof v === 'string' && /\b\d{1,3}(\.\d{1,3}){3}\b/.test(v))
+    return '(masked)';
+  return v;
+}
+
 const clamp = (n, lim) =>
   Math.max(-lim, Math.min(lim, Math.round(Number(n) || 0)));
 let lastMove = 0;
@@ -545,6 +592,18 @@ const server = createServer(async (req, res) => {
       return json(res, 200, { mode: await camera.setNight(b.mode) });
     }
     if (route === 'GET /api/info') return json(res, 200, await camera.info());
+    // Read-only probe of the camera's own "get" messages (names from its web
+    // page's script), for finding out what it can do. Identifiers, addresses
+    // and secrets are masked before anything leaves the bridge.
+    if (route === 'GET /api/probe') {
+      const name = url.searchParams.get('name') || '';
+      if (!PROBE_NAMES.has(name))
+        return json(res, 400, {
+          error: `name is one of: ${[...PROBE_NAMES].join(', ')}`,
+        });
+      const msg = await camera.raw(name);
+      return json(res, 200, { name, data: redact(msg) });
+    }
     if (route === 'POST /api/image') {
       const b = await readBody(req);
       const p = {};

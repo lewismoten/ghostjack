@@ -1981,6 +1981,8 @@ function runFrame(f, prov) {
   sphereNow().paint(f.bmp, liveLens.yaw, liveLens.pitch, prov.fovH, prov.fovV);
 }
 // The final lens is known: paint the run's pictures again where they really point.
+// for tools/fake-room-test.mjs: how many pictures the sphere holds
+globalThis.gjSpherePainted = () => sphereObj?.painted ?? 0;
 function repaintRun(res) {
   const sp = sphereNow(),
     k = res.lens.panDegPerUnit,
@@ -2214,6 +2216,9 @@ async function travelFind(axis, units) {
   api('/api/travel/done', { method: 'POST' }).catch(() => {});
 }
 let cancelFind = false;
+$('limitsSweep').checked = store.get('gm-limits-sweep', '1') === '1';
+$('limitsSweep').onchange = () =>
+  store.set('gm-limits-sweep', $('limitsSweep').checked ? '1' : '0');
 $('limitsStop').onclick = () => {
   cancelFind = true;
 };
@@ -2251,8 +2256,11 @@ $('limitsGo').onclick = async () => {
   }
   finding = false;
   liveLens = null;
-  if (!res) for (const f of runFrames) f.bmp.close();
-  runFrames = [];
+  // the run's pictures stay until repaintRun has painted them with the final lens
+  if (!res || !res.lens) {
+    for (const f of runFrames) f.bmp.close();
+    runFrames = [];
+  }
   $('limitsGo').disabled = !connected;
   $('limitsStop').hidden = true;
   $('limitsBar').hidden = true;
@@ -2274,6 +2282,12 @@ $('limitsGo').onclick = async () => {
       repaintRun(res);
     }
     setStatus(`${glass.line('limitsDone')} Estimated range saved.`);
+    // Find limits only looks along a cross (one row, one column); fill the
+    // rest of the sphere with a sweep unless switched off.
+    if (res.lens && $('limitsSweep').checked) {
+      await sleep(1500);
+      if (connected && !finding) sweep();
+    }
   } else if (cancelFind || !connected) {
     setStatus(
       `${glass.line('limitsStop')} The neck could be anywhere; the estimate is unchanged.`,
