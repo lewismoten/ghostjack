@@ -2272,7 +2272,17 @@ function paintStrips(res, step, done = new Map()) {
       const t = document.createElement('canvas');
       t.width = s.w;
       t.height = row.h;
-      t.getContext('2d').drawImage(row.c, s.x, 0, s.w, row.h, 0, 0, s.w, row.h);
+      t.getContext('2d').drawImage(
+        row.c,
+        s.x,
+        row.pad ?? 0,
+        s.w,
+        row.h,
+        0,
+        0,
+        s.w,
+        row.h,
+      );
       const cx = s.srcX + s.w / 2, // where in its picture the strip's middle was
         yaw = (row.firstPanUnits + s.step * step) * degPer(),
         off = Math.atan(((cx - row.picW / 2) / (row.picW / 2)) * th) / rad;

@@ -7,7 +7,9 @@
 // room that is in the row appears once (no repeats), no page errors and no outside requests. Screenshots of
 // the live view and the finished one at 1440 and 390 wide go into the folder given as the first argument
 // (default captures/strip-test, git-ignored; delete it after looking). Needs ffmpeg with v360.
-// Run: node tools/strip-scan-test.mjs <outdir> [--rows [--quick]]   (--quick skips the Find limits part)
+// --jitter (one row only) adds the seam checks: the equator's grid line stays straight across the panorama
+// (at most 2 px off its median) and adjacent columns' mean brightness steps stay small (median under 2 of 255).
+// Run: node tools/strip-scan-test.mjs <outdir> [--rows [--quick]] [--jitter]   (--quick skips the Find limits part)
 // --rows first runs Find limits and checks its range and lens against the fake's truth (3 still steps = a wall),
 // then scans with Rows on (a bottom wall, rows stepped up by measured shifts, a top wall) and checks that the rows
 // line up: height and width near the expected, each landmark once, and the landmarks in the right vertical order.
@@ -17,11 +19,18 @@ import { join } from 'node:path';
 import { startFakeRoom, TRUE } from './fake-room.mjs';
 
 const rows = process.argv.includes('--rows');
+const jitter = process.argv.includes('--jitter');
 const out =
   process.argv.find((a, i) => i > 1 && !a.startsWith('--')) ||
   'captures/strip-test';
 mkdirSync(out, { recursive: true });
-const room = await startFakeRoom({ fast: true });
+// with --jitter the fake wobbles each picture up to 2 px and drifts its exposure up to 8 percent, and starts
+// level (tilt 95) so the equator's grid line crosses every picture
+const room = await startFakeRoom({
+  fast: true,
+  jitter,
+  ...(jitter ? { startTilt: 95 } : {}),
+});
 const url = `http://127.0.0.1:${room.port}/`;
 const browser = await chromium.launch({
   args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader'],
@@ -118,6 +127,49 @@ const countLandmarks = () => {
     cy[name] = sn ? (sy / sn) * CELL : null;
   }
   return { w: c.width, h: c.height, found, cy };
+};
+// the straightness of the equator's grid line (dark, about 5 px thick) and the brightness steps between
+// neighboring columns, measured on the panorama canvas in the page
+const seamStats = () => {
+  const c = globalThis.gjStrip(),
+    d = c
+      .getContext('2d', { willReadFrequently: true })
+      .getImageData(0, 0, c.width, c.height).data,
+    lum = (x, y) => {
+      const i = (y * c.width + x) * 4;
+      return (d[i] * 77 + d[i + 1] * 150 + d[i + 2] * 29) / 256;
+    },
+    mid = c.height >> 1,
+    ys = [],
+    means = [];
+  for (let x = 0; x < c.width; x++) {
+    let sum = 0;
+    for (let y = 0; y < c.height; y++) sum += lum(x, y);
+    means.push(sum / c.height);
+    if (lum(x, mid - 40) < 60 || lum(x, mid + 40) < 60) continue; // a vertical line
+    let best = 1e9,
+      by = -1;
+    for (let y = mid - 30; y < mid + 30; y++) {
+      let m = 0;
+      for (let k = -2; k <= 2; k++) m += lum(x, y + k);
+      if (m / 5 < best) {
+        best = m / 5;
+        by = y;
+      }
+    }
+    if (best < 45) ys.push(by);
+  }
+  ys.sort((a, b) => a - b);
+  const med = ys[ys.length >> 1],
+    dev = Math.max(...ys.map((y) => Math.abs(y - med))),
+    steps = means.slice(1).map((m, i) => Math.abs(m - means[i])),
+    sorted = [...steps].sort((a, b) => a - b);
+  return {
+    n: ys.length,
+    dev,
+    step: sorted[sorted.length >> 1],
+    p98: sorted[Math.floor(sorted.length * 0.98)],
+  };
 };
 try {
   const ctx = await browser.newContext({
@@ -251,9 +303,11 @@ try {
       `panorama ${stats.w} x ${stats.h}; expected ${Math.round(expect)} (flat-picture center scale), plain travel/fov*width ${Math.round(plain)}; landmarks`,
       JSON.stringify(stats.found),
     );
+    // level (--jitter, tilt 95) the picture is not squeezed by the look-down, so the plain figure fits better
+    const ew = jitter ? plain : expect;
     check(
-      Math.abs(stats.w - expect) / expect < 0.1,
-      `width ${stats.w} within 10% of ${Math.round(expect)}`,
+      Math.abs(stats.w - ew) / ew < 0.1,
+      `width ${stats.w} within 10% of ${Math.round(ew)}`,
     );
     if (rows) {
       // rows: height from the tilt travel (the bottom wall to the top wall plus one picture), landmarks in order
@@ -280,6 +334,18 @@ try {
       check(
         byY.join() === byLat.join(),
         `landmarks top to bottom ${byY.join(' ')} (expected ${byLat.join(' ')})`,
+      );
+    }
+    if (jitter) {
+      const q = await page.evaluate(seamStats);
+      console.log(
+        `seams: grid line seen in ${q.n} columns, max deviation ${q.dev} px, median column brightness step ${q.step.toFixed(2)}, 98th percentile ${q.p98.toFixed(2)}`,
+      );
+      check(q.n > stats.w / 4, `the grid line is found across the panorama`);
+      check(q.dev <= 2, `grid line straight: max deviation ${q.dev} px (<= 2)`);
+      check(
+        q.step <= 2,
+        `brightness steps small: median ${q.step.toFixed(2)} of 255 (<= 2)`,
       );
     }
     const total = Object.values(stats.found).reduce((a, b) => a + b, 0);
