@@ -10,7 +10,15 @@ import * as lim from './limits.js';
 
 export const STRIP_WAIT_MS = 1100; // after each small step (the bridge allows one move a second)
 export const MAX_UNITS = 1500; // most pan units in one row
-const FEATHER = 3; // px blended at each strip's left edge (rows: at a row's top edge)
+export const FEATHER = 6; // px blended at each strip's left edge (rows: at a row's top edge)
+const VRANGE = 4; // px (at 640 x 360) searched up or down when a picture's shift is measured
+const VDRIFT = 12; // most px a row's slices may drift up or down from the first picture
+// each step lets the drift fade a little (5 percent) so small measuring biases cannot add up to a slope
+const VLEAK = 0.95;
+const PAD = VDRIFT + 2; // spare px above and below a row's canvas for that drift
+const GAIN_MIN = 0.85; // brightness matching stays gentle: the most a slice is changed
+const GAIN_MAX = 1.15;
+const GAIN_W = [0.5, 0.3, 0.2]; // weights of the latest, previous and one before for smoothing
 const STILL_PX_PER_640 = 1; // under this many px (at 640 wide) a measured shift counts as still
 const WALL_STILLS = 3; // consecutive still measurements that mean a wall
 const CLIMB = 0.65; // of the picture height from one row to the next (about a third overlaps)
@@ -102,6 +110,39 @@ export function refine(a, b, w, h, ex, ey, rx, ry, band) {
   };
 }
 
+// Brightness of `cur` against `prev` over their overlap (the central band, shifted by dx, dy): the factor that
+// makes cur's mean match prev's, 1 when there is too little to compare.
+export function overlapGain(prev, cur, dx, dy) {
+  const { w, h } = prev,
+    a = prev.full,
+    b = cur.full,
+    sx = Math.round(dx),
+    sy = Math.round(dy),
+    x0 = Math.max(0, sx),
+    x1 = Math.min(w, w + sx),
+    y0 = Math.max(Math.round(h * 0.2), sy),
+    y1 = Math.min(Math.round(h * 0.8), h + sy);
+  if (x1 - x0 < 8 || y1 - y0 < 8) return 1;
+  let sa = 0,
+    sb = 0;
+  for (let y = y0; y < y1; y += 2)
+    for (let x = x0; x < x1; x += 2) {
+      sa += a[y * w + x];
+      sb += b[(y - sy) * w + x - sx];
+    }
+  return sb > 0 && sa > 0 ? sa / sb : 1;
+}
+// Weighted mean of the latest gains (newest first), so one odd picture does not show as a stripe.
+function smooth(gains) {
+  let s = 0,
+    t = 0;
+  gains.forEach((g, i) => {
+    s += g * GAIN_W[i];
+    t += GAIN_W[i];
+  });
+  return s / t;
+}
+
 const mk = (w, h) => {
   const c = document.createElement('canvas');
   c.width = w;
@@ -110,7 +151,7 @@ const mk = (w, h) => {
 };
 // A row: one long image that strips are appended to; its canvas doubles when it runs out.
 function newRow(h) {
-  const c = mk(2048, h);
+  const c = mk(2048, h + 2 * PAD);
   return {
     c,
     g: c.getContext('2d'),
@@ -118,20 +159,22 @@ function newRow(h) {
     width: 0,
     origin: null, // where canvas x = 0 sits, relative to the first picture's center
     ox: 0, // canvas x = 0 in the panorama
-    oy: 0, // canvas y = 0 in the panorama
+    oy: 0, // the picture's top in the panorama (canvas y = PAD is the picture's top)
+    pad: PAD,
     strips: [], // { x, w, step, srcX }
     firstGray: null,
   };
 }
 function room(row, width) {
   if (width <= row.c.width) return;
-  const n = mk(Math.max(width, row.c.width * 2), row.h);
+  const n = mk(Math.max(width, row.c.width * 2), row.h + 2 * PAD);
   n.getContext('2d').drawImage(row.c, 0, 0);
   row.c = n;
   row.g = n.getContext('2d');
 }
 // Cut the strip of `pic` (center at Xc) covering row positions B0 to B1 (relative to the first center).
-function cut(row, pic, Xc, B0, B1, step) {
+// vy: px the slice sits lower than the first picture's (drift); gain: brightness factor for it.
+function cut(row, pic, Xc, B0, B1, step, vy = 0, gain = 1) {
   const d0 = Math.round(B0 - row.origin),
     d1 = Math.round(B1 - row.origin),
     w = d1 - d0;
@@ -143,15 +186,19 @@ function cut(row, pic, Xc, B0, B1, step) {
   const t = mk(sw, pic.h),
     tg = t.getContext('2d', { willReadFrequently: true });
   tg.drawImage(pic.bmp, s0 - f, 0, sw, pic.h, 0, 0, sw, pic.h);
-  if (f) {
-    const e = tg.getImageData(0, 0, f, pic.h);
+  if (f || gain !== 1) {
+    const e = tg.getImageData(0, 0, sw, pic.h);
+    if (gain !== 1)
+      for (let i = 0; i < e.data.length; i += 4)
+        for (let k = 0; k < 3; k++)
+          e.data[i + k] = Math.min(255, e.data[i + k] * gain);
     for (let y = 0; y < pic.h; y++)
       for (let x = 0; x < f; x++)
-        e.data[(y * f + x) * 4 + 3] = ((x + 0.5) / (f + 1)) * 255;
+        e.data[(y * sw + x) * 4 + 3] = ((x + 0.5) / (f + 1)) * 255;
     tg.putImageData(e, 0, 0);
   }
   room(row, d1);
-  row.g.drawImage(t, d0 - f, 0);
+  row.g.drawImage(t, d0 - f, PAD + Math.round(vy));
   row.width = Math.max(row.width, d1);
   row.strips.push({ x: d0, w, step, srcX: s0 });
 }
@@ -175,11 +222,12 @@ export function compose(rows) {
       dx = Math.round(r.ox - minX),
       dy = Math.round(r.oy - minY);
     if (s1 <= s0) return;
-    const f = i && s0 >= FEATHER ? FEATHER : 0;
+    const f = i && s0 >= FEATHER ? FEATHER : 0,
+      P = r.pad ?? 0; // the canvas has P spare rows above the picture's top: trimmed here
     if (f) {
       const t = mk(r.width, f),
         tg = t.getContext('2d', { willReadFrequently: true });
-      tg.drawImage(r.c, 0, s0 - f, r.width, f, 0, 0, r.width, f);
+      tg.drawImage(r.c, 0, P + s0 - f, r.width, f, 0, 0, r.width, f);
       const e = tg.getImageData(0, 0, r.width, f);
       for (let y = 0; y < f; y++)
         for (let x = 0; x < r.width; x++)
@@ -187,7 +235,17 @@ export function compose(rows) {
       tg.putImageData(e, 0, 0);
       g.drawImage(t, dx, dy + s0 - f);
     }
-    g.drawImage(r.c, 0, s0, r.width, s1 - s0, dx, dy + s0, r.width, s1 - s0);
+    g.drawImage(
+      r.c,
+      0,
+      P + s0,
+      r.width,
+      s1 - s0,
+      dx,
+      dy + s0,
+      r.width,
+      s1 - s0,
+    );
   });
   return out;
 }
@@ -232,7 +290,9 @@ export async function stripScan(d, plan) {
   const stillPx = (pic) => (STILL_PX_PER_640 * pic.w) / 640;
   const expectPx = (w) => 0.043 * w * (plan.step / 4);
   // the sideways shift of `cur` against `prev`: px, positive when the camera turned toward +pan
+  let mvy = 0; // the vertical offset of the latest measure() (px, positive: cur's content sits higher)
   function measure(prev, cur, recent) {
+    mvy = 0;
     const c = lim.imageShift(prev.hi, cur.hi, 'pan'),
       est = c
         ? c.sx * prev.w
@@ -241,11 +301,13 @@ export async function stripScan(d, plan) {
           : expectPx(prev.w);
     // no coarse answer (smooth or stretched picture, or a different pitch than the last steps): search wide
     const rx = c ? 6 : Math.round(est * 0.9) + 2,
-      r = refine(prev.full, cur.full, prev.w, prev.h, est, 0, rx, 1, 'x'),
+      ry = Math.round((VRANGE * prev.h) / 360),
+      r = refine(prev.full, cur.full, prev.w, prev.h, est, 0, rx, ry, 'x'),
       z = refine(prev.full, cur.full, prev.w, prev.h, 0, 0, 2, 1, 'x');
     // no movement fits at least as well as the movement found: a wall (or a swallowed step)
     if (z.score <= r.score) return z.sx;
     let s = r.sx;
+    mvy = r.sy;
     if (recent.length >= 3) {
       const m = median(recent);
       if (m > stillPx(prev) && Math.abs(s - m) > 0.6 * m + 3) s = m; // a bad match
@@ -284,9 +346,12 @@ export async function stripScan(d, plan) {
     let prev = await settle(),
       Xc = 0,
       still = 0,
-      pend = { pic: prev, Xc: 0, B: null, step: 0 },
+      pend = { pic: prev, Xc: 0, B: null, step: 0, vy: 0, gain: 1 },
       s = expectPx(prev.w);
-    const recent = [];
+    const recent = [],
+      gains = [];
+    let vy = 0, // this row's vertical drift, px
+      gain = 1; // the smoothed brightness factor of the latest picture
     row.picW = prev.w;
     row.firstPanUnits = d.pose().pan;
     row.firstGray = { full: prev.full, hi: prev.hi, w: prev.w, h: prev.h };
@@ -301,6 +366,13 @@ export async function stripScan(d, plan) {
       }
       still = 0;
       s = m;
+      // the slice goes where the picture really sits: drift up or down, within limits
+      vy = Math.max(-VDRIFT, Math.min(VDRIFT, vy * VLEAK + mvy));
+      // brightness: the new picture against the (already matched) previous one over their overlap
+      const raw = gain * overlapGain(prev, cur, m, mvy);
+      gains.unshift(Math.max(GAIN_MIN, Math.min(GAIN_MAX, raw)));
+      gains.length = Math.min(gains.length, GAIN_W.length);
+      gain = smooth(gains);
       row.moves = (row.moves || 0) + 1;
       recent.push(s);
       d.moved(plan.step, 0);
@@ -309,16 +381,25 @@ export async function stripScan(d, plan) {
         pend.B = Xc - s / 2;
         row.origin = pend.B;
       }
-      cut(row, pend.pic, pend.Xc, pend.B, mid, pend.step);
+      cut(row, pend.pic, pend.Xc, pend.B, mid, pend.step, pend.vy, pend.gain);
       pend.pic.bmp.close();
-      pend = { pic: cur, Xc: Xc + s, B: mid, step: i };
+      pend = { pic: cur, Xc: Xc + s, B: mid, step: i, vy, gain };
       prev = cur;
       Xc += s;
       state.steps++;
       say(`Row ${r + 1}: ${row.strips.length} strips.`);
     }
     if (pend.B !== null)
-      cut(row, pend.pic, pend.Xc, pend.B, Xc + s / 2, pend.step);
+      cut(
+        row,
+        pend.pic,
+        pend.Xc,
+        pend.B,
+        Xc + s / 2,
+        pend.step,
+        pend.vy,
+        pend.gain,
+      );
     pend.pic.bmp.close();
     row.tilt = d.pose().tilt;
     d.update(state);
