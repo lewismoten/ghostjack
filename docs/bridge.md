@@ -2,8 +2,8 @@
 
 `src/server.mjs` keeps one signed-in session with the camera's own web page
 (headless Chromium, through Playwright) and offers a small HTTP API; `web/` is a
-static control page for it. The camera stays on its isolated cable; only this
-service talks to it.
+static control page for it. In the recommended setup the camera sits on its own
+isolated cable; only this service talks to it.
 
 ## Run it
 
@@ -101,12 +101,15 @@ that address and the token into the Bridge box. The bridge allows cross-origin
 requests only from `https://lewismoten.github.io` and answers Private Network
 Access preflights. Stop sharing with `tailscale serve reset`.
 
-Who can reach it: the camera has no internet connection of its own (private
-cable, no cloud account, no route out); only the bridge talks to it, behind its
-access token (the ICE), and by default the bridge listens only on this computer
-(127.0.0.1). With `tailscale serve`, your own Tailscale devices can reach the
-bridge, and so the camera, over the internet through Tailscale's encrypted
-network. It is only as private as your tailnet and the token.
+Who can reach it. Recommended: give the camera its own cable or an isolated
+network with no route to the internet (that is how it is tested). If it sits on
+your normal network or Wi-Fi it can talk to the maker's cloud, and anything on
+that network can reach its web page. Ghost Jack itself doesn't connect the
+camera to the internet. Only the bridge talks to it, behind its access token
+(the ICE), and the bridge listens on 127.0.0.1 unless you share it. With
+`tailscale serve`, your own Tailscale devices can reach it over the internet
+through Tailscale's encrypted network, so it is only as private as your tailnet
+and the token.
 
 **Warning: never use `tailscale funnel` (or port forwarding) for the bridge.**
 That would put the camera's eye, ears and mouth on the public internet.

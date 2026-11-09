@@ -20,10 +20,11 @@ camera, the room or the person in it.
 
 ## The camera
 
-- It stays on an isolated cable (straight into the computer, built-in address
-  192.168.187.254) unless the owner decides otherwise. No cloud account, no
-  internet connection of its own, no Wi-Fi setup. Only the bridge talks to it,
-  behind its access token, and by default the bridge listens only on 127.0.0.1.
+- The camera stays on an isolated cable in the owner's setup (straight into the
+  computer, built-in address 192.168.187.254); don't change that or add Wi-Fi
+  setup. That is a recommendation, not a limit of the code: on a normal network
+  the camera could reach the maker's cloud. Only the bridge talks to it, behind
+  its access token, and by default the bridge listens only on 127.0.0.1.
   `tailscale serve` shares it with the owner's own tailnet devices (reachable
   over the internet through Tailscale, so only as private as the tailnet and the
   token).

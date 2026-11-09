@@ -15,17 +15,17 @@ Tethys 825-C (SKU TT000074), a $2 thrift-store camera.
 **For strangers, in plain words:** this is a local program (the bridge) plus a
 web page (the deck) that controls a compatible network camera: see, listen, aim,
 turn on night vision and speak through its speaker. You need a compatible camera
-(so far only that model) on a private cable or network, a Mac (the bridge reads
-the camera's password from the macOS Keychain and uses macOS speech), Node and
-ffmpeg (the regular build is enough: tested with Homebrew `ffmpeg` 9.0.1;
-`ffmpeg-full` isn't needed). The bridge runs on your machine behind its own ICE
-(an access token); the hosted page is only its remote control and shows a demo
-when no bridge answers. The deck has a neon cyberpunk look: a live Eye panel
-with an on-screen display, aim arrows over the video, a wireframe 3D camera
-model inset that turns to the estimated aim, night vision, zoom, camera
-settings, a "Glassmouth says" box, optional generated sound and a light theme.
-The whole deck fits one screen, with Uplink, Chrome, Glassmouth and Deck as
-tabs. Every cryptic label has a plain-language sublabel.
+(so far only that model) on a private cable or isolated network, a Mac (the
+bridge reads the camera's password from the macOS Keychain and uses macOS
+speech), Node and ffmpeg (the regular build is enough: tested with Homebrew
+`ffmpeg` 9.0.1; `ffmpeg-full` isn't needed). The bridge runs on your machine
+behind its own ICE (an access token); the hosted page is only its remote control
+and shows a demo when no bridge answers. The deck has a neon cyberpunk look: a
+live Eye panel with an on-screen display, aim arrows over the video, a wireframe
+3D camera model inset that turns to the estimated aim, night vision, zoom,
+camera settings, a "Glassmouth says" box, optional generated sound and a light
+theme. The whole deck fits one screen, with Uplink, Chrome, Glassmouth and Deck
+as tabs. Every cryptic label has a plain-language sublabel.
 
 ## Quick start
 
@@ -58,16 +58,18 @@ and Tailscale: [docs/bridge.md](docs/bridge.md). Changes:
 
 ## Privacy
 
-The camera has no internet connection of its own: it sits on a private cable
-with no cloud account and no route out. Only the bridge talks to it, behind its
-access token (the ICE). By default the bridge listens only on this computer
-(127.0.0.1). If you share it with `tailscale serve`, your own Tailscale devices
-can reach it over the internet through Tailscale's encrypted network, so it is
-only as private as your tailnet and the token. Never use `tailscale funnel` or
-port forwarding for the bridge: that would put the camera's eye, ears and mouth
-on the public internet. No pictures, video, audio or camera credentials from the
-camera are ever committed here. Rules for anyone (or any agent) working on the
-code are in [AGENTS.md](AGENTS.md).
+Recommended: give the camera its own cable or an isolated network with no route
+to the internet (that is how it is tested). If it sits on your normal network or
+Wi-Fi it can talk to the maker's cloud, and anything on that network can reach
+its web page. Ghost Jack itself doesn't connect the camera to the internet. Only
+the bridge talks to it, behind its access token (the ICE), and the bridge
+listens on 127.0.0.1 unless you share it. With `tailscale serve`, your own
+Tailscale devices can reach it over the internet through Tailscale's encrypted
+network, so it is only as private as your tailnet and the token. Never use
+`tailscale funnel` or port forwarding for the bridge: that would put the
+camera's eye, ears and mouth on the public internet. No pictures, video, audio
+or camera credentials from the camera are ever committed here. Rules for anyone
+(or any agent) working on the code are in [AGENTS.md](AGENTS.md).
 
 ## Supported cameras
 

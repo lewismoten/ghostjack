@@ -5,9 +5,12 @@ the Tethys 825-C (SKU TT000074), bought for $2 at a thrift store. It's a
 MIPC-family camera (Shenzhen Mining's platform), so other MIPC cameras may
 behave the same; this page describes only what was tested on this unit.
 
-The camera has no internet connection of its own: keep it on a private cable.
-Only the bridge talks to it (see [the bridge](../bridge.md) for who can reach
-the bridge, and why never to use `tailscale funnel`).
+The camera has Ethernet and Wi-Fi and could sit on any network, but the
+recommended setup is its own cable or an isolated network with no route to the
+internet: on a normal network it can reach the maker's cloud, and anything there
+can reach its web page. Only the bridge talks to it (see
+[the bridge](../bridge.md) for who can reach the bridge, and why never to use
+`tailscale funnel`).
 
 ## At a glance
 
