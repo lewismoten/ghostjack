@@ -182,7 +182,7 @@ async function connect(e) {
       const first = !connected;
       ok = true;
       setConnected(true);
-      if (first && tabNow() === 'uplink') selectTab('chrome');
+      if (first && tabNow() === 'uplink') selectTab('rig');
       $('night').checked = s.night === 'night';
       showNight(s.night);
       setStatus(
@@ -193,7 +193,7 @@ async function connect(e) {
     } catch (err) {
       setConnected(false);
       lost = true;
-      setStatus(`Lost the angle. Chrome did not answer: ${err.message}`, true);
+      setStatus(`Lost the angle. The rig did not answer: ${err.message}`, true);
     }
   } finally {
     foley.clack();
@@ -220,8 +220,7 @@ async function loadDevice() {
     const r = await api('/api/info');
     const j = await r.json();
     if (r.ok && j.system?.model)
-      $('device').textContent =
-        `Chrome: ${j.system.model.replace(/ \(.*/, '')}`;
+      $('device').textContent = `Rig: ${j.system.model.replace(/ \(.*/, '')}`;
   } catch {
     /* leave the line as it was */
   }
@@ -872,13 +871,13 @@ function setSlider(id, v) {
   $(id).nextElementSibling.textContent = v;
 }
 async function loadInfo() {
-  setStatus('Looking the chrome over...');
+  setStatus('Looking the rig over...');
   try {
     const r = await api('/api/info');
     const j = await r.json();
     if (!r.ok) throw new Error(j.error);
     fill(j);
-    setStatus('Chrome read. Everything on the sheet.');
+    setStatus('Rig read. Everything on the sheet.');
   } catch (e) {
     setStatus(`Could not read camera info: ${e.message}`, true);
   }
@@ -1018,7 +1017,7 @@ $('sayForm').addEventListener('submit', async (e) => {
         return;
       }
     }
-    sayLine("Line's busy. Static, no word back; check the chrome.");
+    sayLine("Line's busy. Static, no word back; check the rig.");
   } catch (err) {
     sayLine(`Line's busy. ${err.message}`);
     snd.sfx.error();

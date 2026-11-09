@@ -15,7 +15,7 @@
           The port agents jack into when they need eyes, ears and a mouth in
           meatspace. Glassmouth is the voice on the wire.
         </p>
-        <p id="device" class="device mono-l">Chrome: none jacked in</p>
+        <p id="device" class="device mono-l">Rig: none jacked in</p>
       </div>
       <div class="top-tools">
         <span class="light" id="light" aria-hidden="true"></span>
@@ -273,14 +273,25 @@
             </button>
             <button
               role="tab"
-              id="tab-chrome"
-              data-tab="chrome"
-              aria-controls="p-chrome"
+              id="tab-rig"
+              data-tab="rig"
+              aria-controls="p-rig"
               aria-selected="false"
               tabindex="-1"
-              title="Chrome: camera info and settings"
+              title="Rig: camera info"
             >
-              Chrome
+              Rig
+            </button>
+            <button
+              role="tab"
+              id="tab-dials"
+              data-tab="dials"
+              aria-controls="p-dials"
+              aria-selected="false"
+              tabindex="-1"
+              title="Dials: camera adjustments"
+            >
+              Dials
             </button>
             <button
               role="tab"
@@ -295,17 +306,6 @@
             </button>
             <button
               role="tab"
-              id="tab-deck"
-              data-tab="deck"
-              aria-controls="p-deck"
-              aria-selected="false"
-              tabindex="-1"
-              title="Deck: sound, theme and about"
-            >
-              Deck
-            </button>
-            <button
-              role="tab"
               id="tab-tape"
               data-tab="tape"
               aria-controls="p-tape"
@@ -314,6 +314,17 @@
               title="Tape: saved snapshots and recordings"
             >
               Tape
+            </button>
+            <button
+              role="tab"
+              id="tab-deck"
+              data-tab="deck"
+              aria-controls="p-deck"
+              aria-selected="false"
+              tabindex="-1"
+              title="Deck: sound, theme and about"
+            >
+              Deck
             </button>
           </div>
           <div
@@ -326,7 +337,7 @@
             <p id="demoText" class="hint" hidden>
               <strong>Glassmouth:</strong> "Nobody home. Just static and the
               meat at the desk." Run <code>npm start</code> in the project, then
-              enter the address and token here. Chrome's line out is whatever
+              enter the address and token here. The rig's line out is whatever
               cable you give it. Mine's got none: only the bridge talks to it,
               behind its ICE. Share the bridge with your own Tailscale deck if
               you like, never with the open internet.
@@ -355,12 +366,12 @@
           </div>
           <div
             role="tabpanel"
-            id="p-chrome"
-            aria-labelledby="tab-chrome"
+            id="p-rig"
+            aria-labelledby="tab-rig"
             tabindex="0"
             hidden
           >
-            <h2 id="info-h">Chrome <small>camera info, settings</small></h2>
+            <h2 id="info-h">Rig <small>camera info, read only</small></h2>
             <div class="row">
               <button id="infoLoad" type="button" disabled>
                 Read camera info
@@ -368,7 +379,31 @@
             </div>
             <div id="info">
               <dl id="infoList" class="kv"></dl>
-              <h3>Adjust</h3>
+              <h3>Not enabled here</h3>
+              <ul class="off">
+                <li><button type="button" disabled>Wi-Fi setup</button></li>
+                <li><button type="button" disabled>Reboot</button></li>
+                <li><button type="button" disabled>Factory restore</button></li>
+                <li>
+                  <button type="button" disabled>Firmware upgrade</button>
+                </li>
+                <li><button type="button" disabled>Format disk</button></li>
+                <li><button type="button" disabled>Change password</button></li>
+              </ul>
+              <p class="hint">
+                Shown for completeness; they can lock out the camera.
+              </p>
+            </div>
+          </div>
+          <div
+            role="tabpanel"
+            id="p-dials"
+            aria-labelledby="tab-dials"
+            tabindex="0"
+            hidden
+          >
+            <h2>Dials <small>camera adjustments</small></h2>
+            <div id="adjust">
               <div class="sliders">
                 <label
                   >Brightness
@@ -422,24 +457,14 @@
               </div>
               <div class="row">
                 <button id="clock" type="button" disabled>
-                  Sync camera clock
+                  Set clock from this computer
                 </button>
               </div>
-              <h3>Not enabled here</h3>
-              <ul class="off">
-                <li><button type="button" disabled>Wi-Fi setup</button></li>
-                <li><button type="button" disabled>Reboot</button></li>
-                <li><button type="button" disabled>Factory restore</button></li>
-                <li>
-                  <button type="button" disabled>Firmware upgrade</button>
-                </li>
-                <li><button type="button" disabled>Format disk</button></li>
-                <li><button type="button" disabled>Change password</button></li>
-              </ul>
-              <p class="hint">
-                Shown for completeness; they can lock out the camera.
-              </p>
             </div>
+            <p class="hint">
+              Night vision is on the Eye controls. Read the rig first to see the
+              current values.
+            </p>
           </div>
           <div
             role="tabpanel"

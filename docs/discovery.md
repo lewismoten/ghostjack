@@ -399,6 +399,28 @@ Log in to the web page with the password printed on the camera, from the
 isolated cable, and look for a stream address and the firmware version. See the
 README for the steps after that.
 
+## 14. Published-page bugs found in 0.1.1 (2026-11-08)
+
+- **"Go live" and "Snapshot" did nothing from the hosted page.** Reproduced with
+  headless Chromium on the real origin. Two findings. (a) The picture was
+  fetched fine (status 200, a 1920 px image) but never seen: the "no carrier"
+  placeholder is an `<svg>`, and `svg.hidden = true` only sets a plain JS
+  property (SVG elements have no `hidden`), so it stayed on top of the picture.
+  Fixed by setting the attribute. (b) Chrome's Local Network Access check blocks
+  `fetch()` from a public page to localhost until the site is allowed
+  ("Permission was denied for this request to access the loopback address
+  space"; headless denies the prompt, so the test grants it). A `<video src>` to
+  localhost also logs a mixed-content warning, so the live view now uses
+  `fetch()` plus a MediaSource when the page is on another origin.
+- **Speech sounded like a chirp.** The mix measured: chime peak -35.9 dBFS,
+  speech peak -41.6 dBFS (mean -45 against -57). The phone band and compressor
+  ran after the speech was normalized, taking about 9 dB off. Speech is now
+  normalized after them (peak about -33.6 dBFS at the default), and the chime is
+  held 9 dB under it (-42.6 dBFS).
+- **Recording** copies a fresh RTSP address's H.264 and AAC into an MP4
+  (checked: h264 and aac, a 4-second take). The camera accepted a recording and
+  the live stream in the same session.
+
 ---
 
 Note (2026-11-08): this project became **Ghost Jack** (voice: Glassmouth). The

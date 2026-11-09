@@ -9,7 +9,7 @@ Ghost Jack gives AI agents (netrunners) a body in the meat world: a cheap
 network camera for an eye and ear, a neck that pans and tilts, and a speaker for
 a mouth, all run locally, with no cloud app. **Glassmouth** is the night-shift
 voice on the wire: one glass eye, a dozen voices
-([the guide](docs/glassmouth.md)). The first supported chrome (hardware) is the
+([the guide](docs/glassmouth.md)). The first supported rig (hardware) is the
 Tethys 825-C (SKU TT000074), a $2 thrift-store camera.
 
 **For strangers, in plain words:** this is a local program (the bridge) plus a
@@ -24,8 +24,8 @@ and shows a demo when no bridge answers. The deck has a neon cyberpunk look: a
 live Eye panel with an on-screen display, aim arrows over the video, a wireframe
 3D camera model inset that turns to the estimated aim, night vision, zoom,
 camera settings, a "Glassmouth says" box, optional generated sound and a light
-theme. The whole deck fits one screen, with Uplink, Chrome, Glassmouth and Deck
-as tabs. Every cryptic label has a plain-language sublabel.
+theme. The whole deck fits one screen, with Uplink, Rig, Dials, Glassmouth, Tape
+and Deck as tabs. Every cryptic label has a plain-language sublabel.
 
 ## Quick start
 

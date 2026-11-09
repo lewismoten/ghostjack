@@ -60,3 +60,29 @@ its own.
   now, with a relay click when it changes hands.
 - Messages always labeled by source: the agent's words, then any aside marked as
   Glassmouth's.
+
+## Lines
+
+In the browser, with the **Voice** switch on (Deck tab, off by default), the
+page speaks these with the browser's own local voices: a lower, older-sounding
+English voice if one exists, a little slow, one line at a time, ambient music
+ducked meanwhile. Each event has a few variants picked at random, and every line
+also appears in the status line, so nothing depends on sound. (The camera's
+speaker still does the real talking through `POST /api/say`.)
+
+| Event                                 | Lines                                                                                         |
+| ------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Jack in                               | "Line's live." / "Jacked in. Line is live." / "Shift starts now. Line is live."               |
+| No answer                             | "No carrier." / "Nothing on the line." / "No carrier. Check the cable."                       |
+| Line lost                             | "Lost the line." / "Line went flat. Lost it."                                                 |
+| Snapshot                              | "Hold on..." / "Hold still..." / "Easy now..." (then a shutter click)                         |
+| Go live                               | "Warming up the eye." / "Shuffling the reels." / "Give it a second." (projector or CRT sound) |
+| The picture is playing                | "Eye's open." / "There's the eye." / "Eye's open. Nobody blink."                              |
+| Stop live                             | "Eye's shut." / "Closing the eye."                                                            |
+| Night vision on / auto                | "Lights out. Going infrared." / "Lights back on the auto."                                    |
+| Camera starts / reaches a dragged aim | "On my way." / "There."                                                                       |
+| Say through the camera                | "Patching you through." / "Opening the speaker line."                                         |
+| Recording starts / ends / cap         | "Tape's rolling." / "Tape's in the can." / "Out of tape."                                     |
+
+The sounds are original Web Audio foley (noise, oscillators, filters), no
+samples, under the Sound effects switch with their own small levels.
