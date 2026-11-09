@@ -95,6 +95,11 @@ async function peakDb(file) {
 // is also held at least 9 dB under the speech peak (CHIME_BELOW), whatever the chime slider says.
 export const MAX_LEVEL = 0.05,
   MAX_CHIME = 0.0316; // speech volume; chime peak (-30 dBFS)
+// Wake pulse (see speechArgs): length, pitch (inside the 300 to 3000 Hz phone band) and the quiet gap after.
+export const WAKE_SEC = 0.13,
+  WAKE_HZ = 1000,
+  WAKE_GAP = 0.5,
+  CUE_GAP = 0.3;
 export const CHIME_BELOW = 0.35; // chime peak <= speech peak x this (-9 dB)
 export const capLevel = (v) =>
   Math.max(0.01, Math.min(MAX_LEVEL, Number(v) || 0.03));
@@ -116,30 +121,44 @@ export async function speechArgs(
   await run(['-loglevel', 'error', '-i', file, '-af', BAND, '-y', banded]);
   const gain = (-3 - (await peakDb(banded))).toFixed(2);
   rmSync(banded, { force: true });
-  const sil = (t) => `anullsrc=r=16000:cl=mono:d=${t}`;
-  const tone = (f, d) => `sine=f=${f}:r=16000:d=${d}`;
-  const inputs = [sil(1)];
+  // Segments, in order. Each is [lavfi source, filter after it, or null for silence].
+  const sil = (t) => [`anullsrc=r=16000:cl=mono:d=${t}`, ''];
+  const pulse = (f, d, peak, fade) => [
+    `sine=f=${f}:r=16000:d=${d}`,
+    `,volume=${(peak / 0.125).toFixed(4)},afade=t=in:st=0:d=${fade},afade=t=out:st=${(d - fade).toFixed(3)}:d=${fade}`,
+  ];
+  const speechPeak = 0.7079 * level; // speech is normalized to -3 dBFS, then scaled by level
+  const seg = [
+    sil(1), // lead-in: the link settles
+    // The wake pulse (0.1.2): the camera's amp wakes on sound, and until it has, the first words are
+    // lost ("Words to wonder" played as "...onder"). A short pulse as loud as the speech peak (never
+    // louder; the limiter and level cap still apply) with soft edges so it is not a click, then half a
+    // second of silence while the amp stays awake. The quiet chime alone (9 dB under speech) did not wake it.
+    pulse(WAKE_HZ, WAKE_SEC, speechPeak, 0.02),
+    sil(WAKE_GAP),
+  ];
   if (chime)
-    inputs.push(tone(2200, 0.03), tone(880, 0.1), tone(1320, 0.1), sil(0.4));
-  const cueIdx = chime ? [1, 2, 3, 4] : [];
-  const speechIdx = inputs.length;
-  inputs.push(sil(1.5));
-  const args = ['-loglevel', 'error', ...out.pre];
-  for (const i of inputs) args.push('-f', 'lavfi', '-i', i);
-  args.push('-i', file);
-  const tailIdx = speechIdx; // the tail was pushed at speechIdx; the speech file comes after it
-  const fileIdx = inputs.length;
-  const parts = [`[0:a]aresample=16000[s0]`];
-  const order = ['[s0]'];
-  for (const i of cueIdx) {
-    parts.push(
-      `[${i}:a]aresample=16000,volume=${(chimeLevel / 0.125).toFixed(3)},afade=t=out:st=0.02:d=0.01[c${i}]`,
+    seg.push(
+      pulse(880, 0.1, chimeLevel, 0.01),
+      pulse(1320, 0.1, chimeLevel, 0.01),
+      sil(CUE_GAP),
     );
-    order.push(`[c${i}]`);
-  }
+  const speechIdx = seg.length;
+  seg.push(sil(1.5)); // the tail: the camera finishes its buffer before the publish closes
+  const args = ['-loglevel', 'error', ...out.pre];
+  for (const [src] of seg) args.push('-f', 'lavfi', '-i', src);
+  args.push('-i', file);
+  const fileIdx = seg.length;
+  const parts = [],
+    order = [];
+  seg.forEach(([, f], i) => {
+    if (i === speechIdx) return;
+    parts.push(`[${i}:a]aresample=16000${f}[g${i}]`);
+    order.push(`[g${i}]`);
+  });
   parts.push(
     `[${fileIdx}:a]aresample=16000,${BAND},volume=${gain}dB,${LIMIT(level)}[sp]`,
-    `[${tailIdx}:a]aresample=16000[tl]`,
+    `[${speechIdx}:a]aresample=16000[tl]`,
   );
   order.push('[sp]', '[tl]');
   parts.push(`${order.join('')}concat=n=${order.length}:v=0:a=1[o]`);
