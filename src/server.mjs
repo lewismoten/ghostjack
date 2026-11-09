@@ -91,6 +91,33 @@ async function readBody(req) {
   return s ? JSON.parse(s) : {};
 }
 
+// Shared aim state (estimated pan and tilt in move units, plus the neck's measured range), so agents and
+// other browsers see what the page learned. Kept in the owner's config folder, never in the repo.
+const AIM_FILE = join(homedir(), '.config', 'ghostjack', 'aim.json');
+let aim = { updated: 0 };
+try {
+  aim = JSON.parse(readFileSync(AIM_FILE, 'utf8'));
+} catch {
+  /* none yet */
+}
+const AIM_KEYS = ['pan', 'tilt', 'panMin', 'panMax', 'tiltMin', 'tiltMax'];
+function setAim(b) {
+  const n = { updated: Date.now() };
+  for (const k of AIM_KEYS) {
+    if (b[k] === null || b[k] === undefined) continue;
+    const v = Number(b[k]);
+    if (!Number.isFinite(v) || Math.abs(v) > 100000)
+      throw Object.assign(new Error(`${k} must be a small number`), {
+        code: 400,
+      });
+    n[k] = Math.round(v);
+  }
+  aim = n;
+  mkdirSync(dirname(AIM_FILE), { recursive: true, mode: 0o700 });
+  writeFileSync(AIM_FILE, JSON.stringify(aim), { mode: 0o600 });
+  return aim;
+}
+
 const clamp = (n, lim) =>
   Math.max(-lim, Math.min(lim, Math.round(Number(n) || 0)));
 let lastMove = 0;
@@ -323,6 +350,15 @@ const server = createServer(async (req, res) => {
         res,
         url.searchParams.get('profile') === 'p1' ? 'p1' : 'p0',
       );
+    if (route === 'GET /api/aim') return json(res, 200, aim);
+    if (route === 'POST /api/aim') {
+      try {
+        return json(res, 200, setAim(await readBody(req)));
+      } catch (e) {
+        if (e.code === 400) return json(res, 400, { error: e.message });
+        throw e;
+      }
+    }
     if (route === 'GET /api/record') return json(res, 200, rec.state());
     if (route === 'POST /api/record/start') {
       try {
