@@ -7,7 +7,7 @@ import { mkdirSync, readdirSync, rmSync, statSync, existsSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import * as camera from './camera.mjs';
+import { camera } from './camera-select.mjs';
 
 const FFMPEG = process.env.FFMPEG || '/opt/homebrew/bin/ffmpeg';
 const DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'captures');
@@ -35,7 +35,12 @@ export function sweep() {
 export const active = () =>
   [...recs.values()].find((r) => r.status === 'recording');
 
+// Set by media.mjs while an agent's clip or listen runs: one capture at a time.
+export const gate = { busy: false };
+
 export async function start() {
+  if (gate.busy)
+    throw Object.assign(new Error('a clip is being recorded'), { code: 409 });
   if (active())
     throw Object.assign(new Error('already recording'), { code: 409 });
   mkdirSync(DIR, { recursive: true });
