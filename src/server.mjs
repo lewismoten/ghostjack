@@ -10,14 +10,17 @@ import {
   renameSync,
   writeFileSync,
   chmodSync,
+  createReadStream,
+  rmSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import * as camera from './camera.mjs';
+import { camera } from './camera-select.mjs';
 import * as speech from './say.mjs';
 import * as rec from './record.mjs';
-import { createReadStream } from 'node:fs';
+import * as media from './media.mjs';
+import * as asker from './ask.mjs';
 
 const PORT = Number(process.env.PORT) || 8787;
 const HOST = process.env.HOST || '127.0.0.1';
@@ -89,6 +92,21 @@ async function readBody(req) {
     if (s.length > 4096) throw new Error('body too large');
   }
   return s ? JSON.parse(s) : {};
+}
+
+// A raw request body (uploaded audio), at most `max` bytes.
+async function readRaw(req, max) {
+  const parts = [];
+  let n = 0;
+  for await (const c of req) {
+    n += c.length;
+    if (n > max)
+      throw Object.assign(new Error(`body is ${max} bytes at most`), {
+        code: 413,
+      });
+    parts.push(c);
+  }
+  return Buffer.concat(parts);
 }
 
 // Shared aim state (estimated pan and tilt in move units, plus the neck's measured range), so agents and
@@ -177,46 +195,16 @@ const travelMs = (dx, dy) =>
 const clamp = (n, lim) =>
   Math.max(-lim, Math.min(lim, Math.round(Number(n) || 0)));
 let lastMove = 0;
-const sayTimes = []; // timestamps of recent say requests (10 per minute)
-const children = new Set();
-
-// Crop a JPEG (fractions of the picture) and scale it back up to 1280 wide.
-async function cropJpeg(jpg, w, h, x, y) {
-  return new Promise((resolve, reject) => {
-    const p = spawn(
-      FFMPEG,
-      [
-        '-hide_banner',
-        '-loglevel',
-        'error',
-        '-f',
-        'image2pipe',
-        '-i',
-        'pipe:0',
-        '-vf',
-        `crop=iw*${w}:ih*${h}:iw*${x}:ih*${y},scale=1280:-2`,
-        '-frames:v',
-        '1',
-        '-f',
-        'mjpeg',
-        '-q:v',
-        '3',
-        'pipe:1',
-      ],
-      { stdio: ['pipe', 'pipe', 'ignore'] },
-    );
-    children.add(p);
-    const out = [];
-    p.stdout.on('data', (d) => out.push(d));
-    p.on('error', reject);
-    p.on('close', () => {
-      children.delete(p);
-      resolve(Buffer.concat(out));
-    });
-    p.stdin.on('error', () => {});
-    p.stdin.end(jpg);
-  });
+const sayTimes = []; // timestamps of recent say, play and ask requests (10 per minute, shared)
+// Counts one use of the speaker; false when ten were used in the last minute.
+function sayAllowed() {
+  const now = Date.now();
+  while (sayTimes.length && now - sayTimes[0] > 60000) sayTimes.shift();
+  if (sayTimes.length >= 10) return false;
+  sayTimes.push(now);
+  return true;
 }
+const children = media.children;
 
 async function stream(req, res, profile) {
   const url = await camera.streamUrl(profile); // never logged or sent to the client
@@ -268,6 +256,164 @@ async function stream(req, res, profile) {
   res.on('close', () => p.kill('SIGKILL'));
 }
 
+// Go to an absolute pan/tilt (or a saved shot) in one travel move, wait for the picture to settle and
+// answer with a snapshot. Headers: X-GJ-Pan, X-GJ-Tilt, X-GJ-Settled.
+async function goto(req, res) {
+  const b = await readBody(req);
+  let tp, tt, crop;
+  if (b.shot !== undefined) {
+    const n = Number(b.shot);
+    if (!Number.isInteger(n) || n < 1 || n > MAX_SHOTS)
+      return json(res, 400, { error: `shot is 1 to ${MAX_SHOTS}` });
+    const s = shots[n - 1];
+    if (!s) return json(res, 404, { error: `shot ${n} is empty` });
+    [tp, tt, crop] = [s.pan, s.tilt, media.parseCrop(s.crop)];
+  } else {
+    [tp, tt] = [Number(b.pan), Number(b.tilt)];
+    if (!Number.isFinite(tp) || !Number.isFinite(tt))
+      return json(res, 400, { error: 'pan and tilt (or shot) needed' });
+  }
+  if (b.crop !== undefined) {
+    crop = media.parseCrop(b.crop);
+    if (!crop)
+      return json(res, 400, { error: 'crop is [x, y, w, h] as fractions' });
+  }
+  const width = media.clampWidth(b.width, 1280);
+  const lim = (v, lo, hi) =>
+    Math.max(lo ?? -Infinity, Math.min(hi ?? Infinity, v));
+  tp = lim(tp, aim.panMin, aim.panMax);
+  tt = lim(tt, aim.tiltMin, aim.tiltMax);
+  const cur = { pan: aim.pan ?? 0, tilt: aim.tilt ?? 0 };
+  const dx = clamp(tp - cur.pan, 480),
+    dy = clamp(tt - cur.tilt, 190);
+  const now = Date.now();
+  if (now - lastMove < 1000) return json(res, 429, { error: 'still moving' });
+  const ms = travelMs(dx, dy);
+  if (dx || dy) {
+    lastMove = now + ms - 1000;
+    await camera.move(dx, dy, 100);
+    setAim({ ...aim, pan: cur.pan + dx, tilt: cur.tilt + dy });
+  }
+  const settled = dx || dy ? await media.waitSettled(ms) : true; // nothing moved: the picture is as settled as it will be
+  lastMove = Math.min(lastMove, Date.now());
+  const jpg = await media.reshapeJpeg(await camera.snapshot('p0'), {
+    crop,
+    width,
+  });
+  res.writeHead(200, {
+    'Content-Type': 'image/jpeg',
+    'Cache-Control': 'no-store',
+    'X-GJ-Pan': String(cur.pan + dx),
+    'X-GJ-Tilt': String(cur.tilt + dy),
+    'X-GJ-Settled': settled ? '1' : '0',
+    'Access-Control-Expose-Headers':
+      'X-GJ-Pan, X-GJ-Tilt, X-GJ-Settled, Content-Length',
+  });
+  res.end(jpg);
+}
+
+// POST /api/clip (MP4) and POST /api/listen (WAV or M4A): record from the camera and send the file.
+async function capture(req, res, isClip) {
+  const b = await readBody(req);
+  const seconds = Number(b.seconds);
+  if (!Number.isFinite(seconds) || seconds < 1 || seconds > 30)
+    return json(res, 400, { error: 'seconds is 1 to 30' });
+  const secs = Math.round(seconds * 10) / 10;
+  let job, type, ext;
+  if (isClip) {
+    job = media.clip(secs, media.clampWidth(b.width, 640), b.audio === true);
+    [type, ext] = ['video/mp4', 'mp4'];
+  } else {
+    const m4a = b.format === 'm4a';
+    if (b.format !== undefined && !['wav', 'm4a'].includes(b.format))
+      return json(res, 400, { error: "format is 'wav' or 'm4a'" });
+    job = media.listen(secs, m4a ? 'm4a' : 'wav');
+    [type, ext] = [m4a ? 'audio/mp4' : 'audio/wav', m4a ? 'm4a' : 'wav'];
+  }
+  res.on('close', () => job.cancel());
+  const file = await job.done;
+  try {
+    const body = readFileSync(file);
+    res.writeHead(200, {
+      'Content-Type': type,
+      'Content-Length': body.length,
+      'Content-Disposition': `attachment; filename="ghostjack-${isClip ? 'clip' : 'audio'}.${ext}"`,
+      'Cache-Control': 'no-store',
+    });
+    res.end(body);
+  } finally {
+    rmSync(file, { force: true });
+  }
+}
+
+// POST /api/play: a raw audio body through the same queue, chime, normalizer and limiter as say.
+async function play(req, res) {
+  if (!/^audio\//i.test(req.headers['content-type'] || ''))
+    return json(res, 415, { error: 'Content-Type audio/* needed' });
+  const url = new URL(req.url, 'http://x');
+  const flag = (k, d) => {
+    const v = url.searchParams.get(k);
+    return v === null ? d : !['0', 'false', 'no'].includes(v);
+  };
+  const body = await readRaw(req, 2 * 1024 * 1024);
+  if (!body.length) return json(res, 400, { error: 'audio body needed' });
+  if (!sayAllowed()) return json(res, 429, { error: 'ten says a minute' });
+  let dec;
+  try {
+    dec = await speech.decodeUpload(body);
+  } catch (e) {
+    sayTimes.pop();
+    throw e;
+  }
+  const level = speech.capLevel(url.searchParams.get('level')),
+    chime = flag('chime', true),
+    chimeLevel = speech.chimeFor(level);
+  return json(res, 202, {
+    level,
+    chimeLevel: chime ? chimeLevel : null,
+    seconds: dec.seconds,
+    ...speech.say({
+      file: dec.file,
+      level,
+      chime,
+      chimeLevel,
+      band: flag('band', true),
+    }),
+  });
+}
+
+// POST /api/ask: say a question with choices, listen, transcribe, answer. See src/ask.mjs.
+async function ask(req, res) {
+  const b = await readBody(req);
+  const clean = (t) =>
+    String(t ?? '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  const question = clean(b.question);
+  const choices = Array.isArray(b.choices) ? b.choices.map(clean) : [];
+  if (!question) return json(res, 400, { error: 'question needed' });
+  if (choices.length < 2 || choices.length > 4 || choices.some((c) => !c))
+    return json(res, 400, { error: 'choices: 2 to 4 short texts' });
+  if (question.length + choices.join('').length > 280)
+    return json(res, 400, { error: 'question and choices are too long' });
+  const voice = b.voice ? String(b.voice) : '';
+  if (voice && !(await speech.voices()).includes(voice))
+    return json(res, 400, { error: 'unknown voice' });
+  if (asker.pending()) return json(res, 409, { error: 'another ask is open' });
+  if (!sayAllowed()) return json(res, 429, { error: 'ten says a minute' });
+  const listen = Math.max(1, Math.min(15, Number(b.listen) || 6));
+  const a = asker.ask({
+    question,
+    choices,
+    other: b.other === true,
+    listen,
+    voice,
+    level: speech.capLevel(b.level),
+    rate: 140,
+  });
+  return json(res, 202, { id: a.id, status: a.status });
+}
+
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript',
@@ -305,18 +451,41 @@ const server = createServer(async (req, res) => {
     if (route === 'GET /api/status')
       return json(res, 200, await camera.status());
     if (route === 'GET /api/snapshot.jpg') {
-      let jpg = await camera.snapshot(url.searchParams.get('profile') || 'p0');
-      const c = (url.searchParams.get('crop') || '').split(',').map(Number);
-      if (c.length === 4 && c.every(Number.isFinite)) {
-        const [x, y, w, h] = c.map((n) => Math.max(0, Math.min(1, n)));
-        if (w >= 0.02 && h >= 0.02 && x + w <= 1.001 && y + h <= 1.001)
-          jpg = (await cropJpeg(jpg, w, h, x, y)) || jpg;
-      }
+      const q = url.searchParams;
+      const jpg = await camera.snapshot(q.get('profile') || 'p0');
+      const crop = media.parseCrop(
+        (q.get('crop') || '').split(',').map(Number),
+      );
+      // The old behavior stays: a crop alone is scaled to 1280 wide; no crop and no width is untouched.
+      const width = q.has('width')
+        ? media.clampWidth(q.get('width'), 1280)
+        : crop
+          ? 1280
+          : 0;
       res.writeHead(200, {
         'Content-Type': 'image/jpeg',
         'Cache-Control': 'no-store',
       });
-      return res.end(jpg);
+      return res.end(await media.reshapeJpeg(jpg, { crop, width }));
+    }
+    if (route === 'POST /api/goto') return await goto(req, res);
+    if (route === 'POST /api/clip' || route === 'POST /api/listen')
+      return await capture(req, res, route.endsWith('clip'));
+    if (route === 'POST /api/play') return await play(req, res);
+    if (route === 'POST /api/ask') return await ask(req, res);
+    if (route === 'GET /api/ask/pending') {
+      const a = asker.pending();
+      return json(res, 200, a ? asker.view(a) : { id: null });
+    }
+    const km = /^(GET|POST) \/api\/ask\/([0-9a-f]{12})(\/answer)?$/.exec(route);
+    if (km) {
+      const a = asker.get(km[2]);
+      if (!a) return json(res, 404, { error: 'no such ask' });
+      if (km[1] === 'GET' && !km[3]) return json(res, 200, asker.view(a));
+      if (km[1] === 'POST' && km[3]) {
+        const b = await readBody(req);
+        return json(res, 200, asker.answer(km[2], b.choice, b.text));
+      }
     }
     if (route === 'POST /api/move') {
       const b = await readBody(req);
@@ -395,10 +564,7 @@ const server = createServer(async (req, res) => {
       if (!text) return json(res, 400, { error: 'text needed' });
       if (text.length > 300)
         return json(res, 400, { error: 'text is 300 characters at most' });
-      const now = Date.now();
-      while (sayTimes.length && now - sayTimes[0] > 60000) sayTimes.shift();
-      if (sayTimes.length >= 10)
-        return json(res, 429, { error: 'ten says a minute' });
+      if (!sayAllowed()) return json(res, 429, { error: 'ten says a minute' });
       const voice = b.voice ? String(b.voice) : '';
       if (voice && !(await speech.voices()).includes(voice))
         return json(res, 400, { error: 'unknown voice' });
@@ -408,7 +574,6 @@ const server = createServer(async (req, res) => {
         90,
         Math.min(220, Math.round(Number(b.rate ?? 140) || 140)),
       );
-      sayTimes.push(now);
       return json(res, 202, {
         level,
         chimeLevel: b.chime === false ? null : chimeLevel,
@@ -484,7 +649,9 @@ const server = createServer(async (req, res) => {
     json(res, 404, { error: 'no such route' });
   } catch (e) {
     if (!res.headersSent)
-      json(res, 502, { error: String(e.message || e).slice(0, 200) });
+      json(res, [400, 404, 409, 413, 415].includes(e.code) ? e.code : 502, {
+        error: String(e.message || e).slice(0, 200),
+      });
     else res.end();
   }
 });

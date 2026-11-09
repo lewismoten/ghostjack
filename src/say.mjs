@@ -2,11 +2,17 @@
 // Speech comes from synthesize() (macOS `say` today; swap in Pocket TTS or Kokoro by replacing that one function:
 // it must write an audio file ffmpeg can read and return its path). See docs/bridge.md.
 import { spawn, execFile } from 'node:child_process';
-import { mkdirSync, rmSync, existsSync } from 'node:fs';
+import {
+  mkdirSync,
+  rmSync,
+  existsSync,
+  writeFileSync,
+  statSync,
+} from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import * as camera from './camera.mjs';
+import { camera } from './camera-select.mjs';
 
 const FFMPEG = process.env.FFMPEG || '/opt/homebrew/bin/ffmpeg';
 const TMP = join(dirname(fileURLToPath(import.meta.url)), '..', 'captures');
@@ -114,11 +120,13 @@ export async function speechArgs(
   out,
   chime = true,
   rawChime = 0.008,
+  band = true,
 ) {
   const level = capLevel(rawLevel),
     chimeLevel = chimeFor(level, rawChime);
+  const filter = band ? BAND : 'anull';
   const banded = file + '.band.wav';
-  await run(['-loglevel', 'error', '-i', file, '-af', BAND, '-y', banded]);
+  await run(['-loglevel', 'error', '-i', file, '-af', filter, '-y', banded]);
   const gain = (-3 - (await peakDb(banded))).toFixed(2);
   rmSync(banded, { force: true });
   // Segments, in order. Each is [lavfi source, filter after it, or null for silence].
@@ -157,7 +165,7 @@ export async function speechArgs(
     order.push(`[g${i}]`);
   });
   parts.push(
-    `[${fileIdx}:a]aresample=16000,${BAND},volume=${gain}dB,${LIMIT(level)}[sp]`,
+    `[${fileIdx}:a]aresample=16000,${filter},volume=${gain}dB,${LIMIT(level)}[sp]`,
     `[${speechIdx}:a]aresample=16000[tl]`,
   );
   order.push('[sp]', '[tl]');
@@ -218,7 +226,8 @@ async function speak(job) {
   let file = null,
     mixed = null;
   try {
-    file = await synthesize(job.text, job);
+    // Both sources end up as one audio file; the mixer below is the same for speech and uploads.
+    file = job.file || (await synthesize(job.text, job));
     job.status = 'speaking';
     // Mix first, then send the one finished file at the pace. (0.1.2 fix: the
     // pacing options only govern the input right after them, so sending the
@@ -232,6 +241,7 @@ async function speak(job) {
         toFile(mixed),
         job.chime,
         job.chimeLevel,
+        job.band,
       ),
     );
     const url = await camera.talkUrl();
@@ -266,17 +276,21 @@ export function say({
   rate,
   chime = true,
   chimeLevel = 0.008,
+  file = null, // an audio file to play instead of synthesizing text (deleted afterward)
+  band = true,
 }) {
   const id = randomBytes(6).toString('hex');
   const job = {
     id,
     status: 'queued',
-    text,
+    text: text || '',
     voice: voice || '',
     level,
     rate,
     chime,
     chimeLevel,
+    file,
+    band,
   };
   jobs.set(id, job);
   if (jobs.size > 50) jobs.delete(jobs.keys().next().value);
@@ -296,3 +310,53 @@ export const sayStatus = (id) => {
     }
   );
 };
+
+// Longest uploaded clip, after decoding.
+export const MAX_PLAY_SECONDS = 30;
+
+// Decode an uploaded audio body (any format ffmpeg reads) to a 16 kHz mono WAV in captures/.
+// Returns { file, seconds }; throws an error with code 400 when it is not audio or too long.
+export async function decodeUpload(buf) {
+  mkdirSync(TMP, { recursive: true });
+  const id = randomBytes(6).toString('hex');
+  const input = join(TMP, `play-${id}.in`),
+    wav = join(TMP, `play-${id}.wav`);
+  try {
+    writeFileSync(input, buf);
+    try {
+      await run([
+        '-loglevel',
+        'error',
+        '-i',
+        input,
+        '-vn',
+        '-t',
+        String(MAX_PLAY_SECONDS + 1),
+        '-ar',
+        '16000',
+        '-ac',
+        '1',
+        '-c:a',
+        'pcm_s16le',
+        '-y',
+        wav,
+      ]);
+    } catch {
+      throw Object.assign(new Error('that body is not audio'), { code: 400 });
+    }
+    const seconds = Math.max(0, (statSync(wav).size - 44) / 32000);
+    if (seconds < 0.05)
+      throw Object.assign(new Error('the audio is empty'), { code: 400 });
+    if (seconds > MAX_PLAY_SECONDS)
+      throw Object.assign(
+        new Error(`audio is ${MAX_PLAY_SECONDS} seconds at most`),
+        { code: 400 },
+      );
+    return { file: wav, seconds: Math.round(seconds * 10) / 10 };
+  } catch (e) {
+    rmSync(wav, { force: true });
+    throw e;
+  } finally {
+    rmSync(input, { force: true });
+  }
+}
