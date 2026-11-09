@@ -71,8 +71,8 @@ export function createStripView(host, ctl) {
   );
   const paint = check(
     'Paint the sphere',
-    'When done, also paint the strips onto the photo sphere (needs Find limits)',
-    true,
+    'Also paint the strips onto the photo sphere (needs Find limits; off until the lens measurement is trustworthy)',
+    false,
   );
   const stepSel = document.createElement('select');
   stepSel.title = stepSel.ariaLabel =
