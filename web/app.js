@@ -115,6 +115,8 @@ function setConnected(on) {
     's-contrast',
     's-saturation',
     's-sharpness',
+    'c-wdr',
+    'c-backlight',
     's-mic',
     'clock',
   ])
@@ -1744,6 +1746,10 @@ function fill(info) {
     }),
   );
   if (i) for (const [k, id] of Object.entries(sliders)) setSlider(id, i[k]);
+  if (i) {
+    $('c-wdr').checked = i.wdr === 'On';
+    $('c-backlight').checked = i.backlight === 'On';
+  }
   if (info.mic) setSlider('s-mic', info.mic.level);
 }
 const blank = () =>
@@ -1806,6 +1812,16 @@ for (const [k, id] of Object.entries(sliders)) {
   $(id).onchange = () =>
     write('/api/image', { [k]: +$(id).value }, `${k} set to ${$(id).value}.`);
 }
+for (const [k, id, label] of [
+  ['wdr', 'c-wdr', 'Wide dynamic range'],
+  ['backlight', 'c-backlight', 'Backlight fix'],
+])
+  $(id).onchange = () =>
+    write(
+      '/api/picture',
+      { [k]: $(id).checked },
+      `${label} ${$(id).checked ? 'on' : 'off'}.`,
+    );
 $('s-mic').oninput = () => {
   $('s-mic').nextElementSibling.textContent = $('s-mic').value;
 };

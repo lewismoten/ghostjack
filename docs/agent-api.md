@@ -35,6 +35,20 @@ curl -s -H "$H" "$B/api/snapshot.jpg?width=640" -o look.jpg
 curl -s -H "$H" "$B/api/snapshot.jpg?crop=0.5,0.25,0.4,0.4&width=800" -o zoom.jpg
 ```
 
+## Picture settings
+
+```sh
+curl -s -H "$H" $B/api/picture                       # read everything
+curl -s -H "$H" -X POST $B/api/picture -d '{"sharpness":6,"wdr":true}'
+```
+
+Brightness, contrast, saturation 0 to 100, sharpness 0 to 10, and `wdr` and
+`backlight` on or off. The reply is the camera's own read-back. Note the old
+values first and put them back. The camera's snapshot (about 220 KB, 1080p)
+holds more detail than a frame of its stream (about 840 kbit/s), so use
+snapshots for stills. Bitrate, GOP and snapshot quality are not exposed by this
+camera.
+
 ## Aim: `POST /api/goto`
 
 One fast move to an absolute pan and tilt in the shared estimated units, then a

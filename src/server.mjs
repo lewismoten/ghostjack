@@ -226,6 +226,14 @@ const PROBE_NAMES = new Set([
   'ccm_msg_get',
   'ccm_hardware_test_get',
 ]);
+// true or false from true, 1, 'on' ... false, 0, 'off'; undefined for anything else.
+function onOff(v) {
+  if (v === true || v === 1 || /^(on|1|true)$/i.test(String(v))) return true;
+  if (v === false || v === 0 || /^(off|0|false)$/i.test(String(v)))
+    return false;
+  return undefined;
+}
+
 const SECRET =
   /(^|_)(sn|mac|id|nid|sid|uid|guid|serial|pwd|pass|password|key|token|sess|session|ip|gw|gateway|dns|ssid|bssid|mask|addr|address|user|name|nick|email|phone|qr)($|_)/i;
 function redact(v, k = '') {
@@ -604,15 +612,25 @@ const server = createServer(async (req, res) => {
       const msg = await camera.raw(name);
       return json(res, 200, { name, data: redact(msg) });
     }
-    if (route === 'POST /api/image') {
+    if (route === 'GET /api/picture')
+      return json(res, 200, await camera.picture());
+    if (route === 'POST /api/image' || route === 'POST /api/picture') {
       const b = await readBody(req);
       const p = {};
       for (const k of ['brightness', 'contrast', 'saturation', 'sharpness'])
         if (b[k] !== undefined && Number.isFinite(Number(b[k])))
           p[k] = Number(b[k]);
+      for (const k of ['wdr', 'backlight']) {
+        if (b[k] === undefined) continue;
+        const on = onOff(b[k]);
+        if (on === undefined)
+          return json(res, 400, { error: `${k} is on or off` });
+        p[k] = on;
+      }
       if (!Object.keys(p).length)
         return json(res, 400, {
-          error: 'brightness, contrast, saturation or sharpness needed',
+          error:
+            'brightness, contrast, saturation, sharpness, wdr or backlight needed',
         });
       return json(res, 200, await camera.setImage(p));
     }

@@ -279,6 +279,33 @@ async function infoNow() {
 
 const clampN = (n, lo, hi) => Math.max(lo, Math.min(hi, Math.round(Number(n))));
 
+// The full picture settings, read only: the image conf, the day and night sets, exposure, white balance and the power-line frequency.
+export function picture() {
+  return run(async () => {
+    const [v, misc] = await Promise.all([
+      call('ccm_video_srcs_get', {}),
+      safe(() => call('ccm_misc_get', {})),
+    ]);
+    const vs = v.vss?.[0],
+      c = vs?.extension?.conf;
+    if (!c) throw new Error('image settings not found');
+    return {
+      resolution: vs.resolution,
+      framerate: vs.framerate,
+      mode: c.mode || 'auto',
+      dayOrNight: c.day_or_night,
+      now: pick(c, ['brightness', 'contrast', 'color_saturation', 'sharpness']),
+      day: c.day,
+      night: c.night,
+      wdr: c.wide_dynamic_range,
+      backlight: c.backlight_compensation,
+      whiteBalance: c.white_balance,
+      exposure: c.exposure,
+      powerFreq: misc?.info?.power_freq,
+    };
+  });
+}
+
 // Image settings: brightness, contrast, saturation 0-100, sharpness 0-10. Applies to the current
 // settings and to the day or night set in use. The whole conf is written back, as the web app does.
 export function setImage(p) {
@@ -298,6 +325,15 @@ export function setImage(p) {
     set('contrast', 'contrast', 0, 100);
     set('color_saturation', 'saturation', 0, 100);
     set('sharpness', 'sharpness', 0, 10);
+    // Wide dynamic range and backlight compensation: On or Off, the level stays as it was.
+    for (const [key, name] of [
+      ['wide_dynamic_range', 'wdr'],
+      ['backlight_compensation', 'backlight'],
+    ]) {
+      const on = p[name];
+      if (on === undefined || !conf[key]) continue;
+      conf[key].mode = on ? 'On' : 'Off';
+    }
     await call('ccm_img_set', { token: 'vs0', conf });
     return (await infoNow()).image;
   });

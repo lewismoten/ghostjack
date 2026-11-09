@@ -493,3 +493,56 @@ to 320x180, the shift between consecutive pictures found by brute-force search.
   ceiling lights in the first photo sphere). Placement has to come from the
   pictures themselves; a strip scan (thin slices from the middle of each
   picture, placed by measured shift) is being built.
+
+## Picture detail and quality settings (2026-11-09)
+
+**Stills from the stream do not beat the snapshot.** Same aim (a saved shot of a
+monitor with text), same 660x360 crop of the screen, 1080p each:
+
+| Source                                   | Laplacian variance | Edge contrast (p99 gradient) |
+| ---------------------------------------- | ------------------ | ---------------------------- |
+| Camera snapshot (`ccm_snapshot`, p0), 2x | 12,250 to 12,270   | 938 to 939                   |
+| RTSP main stream, one frame (I or P)     | 10,700 to 10,990   | 926 to 929                   |
+| Stream, 2 to 16 frames aligned and mixed | 10,800 (no change) | 927                          |
+
+- The main stream runs at only about 840 kbit/s, 1920x1080, about 12.5 fps (not
+  25), a keyframe about every 40 frames, so a frame is about 9 KB beside the
+  snapshot's 200 to 260 KB. Still scenes repeat as skipped macroblocks, so
+  averaging frames averages copies: no gain. The snapshot wins by about 12% on
+  detail; the "source: stream" idea was dropped.
+- Averaging 2 to 8 snapshots did not cut the noise either: a flat wall patch
+  went from a std of 3.58 to 3.51 (the grain is fixed JPEG blocking, not random
+  between shots), while a moving scene smeared. Not added.
+- Snapshot sizes are 215 to 260 KB by scene (about quality 50). No message found
+  sets the snapshot quality.
+- **Sharpness** (0 to 10, now 6): 10 gave no more edge contrast than 6 (853 vs
+  864, within shot-to-shot spread); 0 was clearly softer (773). Written through
+  `POST /api/image` and read back each time; restored to 6.
+- The camera burns its date and time into the picture (top-left, `ccm_osd_get`:
+  date and time on, no name text). It covers a corner of every snapshot and
+  frame. `ccm_osd_set` exists in the page's script; not written (not needed
+  yet).
+
+**Read-only findings** (`ccm_video_srcs_get`, `ccm_misc_get`,
+`ccm_dev_info_get`; no identifiers here):
+
+- Sensor gc2053 on an fh8626 chip, model f300, software v5.3.3.2101181516.
+  `ccm_dev_info_get` lists profile names `p0` HD1080p and `p1` D1 (the
+  sub-stream is really 640x360), `video_encode_type` 1.
+- `vss[0]`: resolution 704x576 and 25 fps (the sensor's old settings; the
+  streams ignore them), `backlight_compensation` On (level 1),
+  `wide_dynamic_range` On (level 1), `white_balance` Auto, `exposure` Auto with
+  priority Framerate (ranges 0 to 1, 1 to 2, gain and iris placeholders),
+  `focus` Auto (no lens motor), `ir_cut_filter_modes` 1. Day set: brightness 50,
+  saturation 70, contrast 60, sharpness 6; the night set is the same with
+  saturation 0.
+- `ccm_misc_get`: `flip` 0, `power_freq` 1 (writable with `ccm_misc_set`; the
+  mains flicker setting, left alone); `resolute` "16:9".
+- **No encoder messages.** The page's script has 111 `ccm_*` messages and none
+  for bitrate, GOP, frame rate or snapshot quality (those words appear only as
+  unused labels). Bitrate, GOP and snapshot quality are not exposed through the
+  shared protocol on this firmware.
+- Writes not tried: the bridge was running and a second camera session is not
+  known to be safe. WDR and backlight `Off`, level ranges, white balance and
+  exposure modes are untested; the page and `POST /api/picture` only switch WDR
+  and backlight On or Off (the level is left as read).

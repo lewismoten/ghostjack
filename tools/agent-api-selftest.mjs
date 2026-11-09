@@ -165,8 +165,25 @@ try {
   );
   ok(jpegSize(b)?.[0] === 1280, 'crop alone still scales to 1280');
 
+  // picture settings
+  let r = await api('POST', '/api/picture', { wdr: 'off', sharpness: 4 });
+  const pic = await jsonOf(r);
+  ok(
+    r.status === 200 && pic.wdr === 'Off' && pic.sharpness === 4,
+    'picture sets wdr and sharpness',
+    JSON.stringify(pic),
+  );
+  r = await api('POST', '/api/picture', { backlight: 'maybe' });
+  ok(r.status === 400, 'picture rejects a bad on/off');
+  r = await api('POST', '/api/picture', {});
+  ok(r.status === 400, 'picture needs a field');
+  r = await api('POST', '/api/image', { wdr: true, sharpness: 6 });
+  ok((await jsonOf(r)).wdr === 'On', 'image still works and restores');
+  r = await api('GET', '/api/picture');
+  ok(r.status === 200 && (await jsonOf(r)).powerFreq === 1, 'picture reads');
+
   // goto
-  let r = await api('POST', '/api/goto', { pan: 50, tilt: -30, width: 400 });
+  r = await api('POST', '/api/goto', { pan: 50, tilt: -30, width: 400 });
   b = Buffer.from(await r.arrayBuffer());
   ok(
     r.status === 200 && r.headers.get('x-gj-pan') === '50',
