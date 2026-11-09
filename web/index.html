@@ -204,6 +204,23 @@
               Sound off
             </button>
             <button id="shot" type="button" disabled>Snapshot</button>
+            <label
+              class="stills"
+              title="Bank-camera mode: a fresh still on a timer"
+              >Stills
+              <select
+                id="stills"
+                disabled
+                aria-label="Stills: take a snapshot every few seconds"
+              >
+                <option value="0">Off</option>
+                <option value="1">1 s</option>
+                <option value="5">5 s</option>
+                <option value="10">10 s</option>
+                <option value="30">30 s</option>
+                <option value="60">1 min</option>
+              </select></label
+            >
             <button id="shotSave" type="button" disabled>Save</button>
             <button id="shotDl" type="button" disabled>Download</button>
             <button id="rec" type="button" disabled aria-pressed="false">

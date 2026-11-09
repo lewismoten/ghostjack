@@ -41,6 +41,9 @@ follow [SemVer](https://semver.org/).
 - Coming back flatlined shows the last known frame (a small copy kept only in
   this browser) in grayscale under a SIGNAL LOST bar with its age; Forget the
   ICE removes it.
+- Stills (bank-camera mode) next to Snapshot: a quiet still every 1 s, 5 s, 10
+  s, 30 s or 1 min while not live; each waits for the previous one; going live
+  pauses it and jacking out stops it.
 
 - Find limits (Dials tab, only when you press it): the page steps the neck to
   each end in steps of 10, comparing small pictures, and records the range

@@ -80,6 +80,7 @@ const controls = [
   'live',
   'sound',
   'shot',
+  'stills',
   'rec',
   'zoom',
   'zoomReset',
@@ -100,6 +101,8 @@ function setConnected(on) {
   updateArrowsSoon();
   $('sayGo').disabled = !on;
   $('jackOut').disabled = !on;
+  if (on && Number($('stills').value)) setTimeout(stillsTick, 1500);
+  if (!on) clearTimeout(stillsTimer);
   // Flatlined: whatever was last on screen stays, drained to grayscale.
   $('stage').classList.toggle('flat', !on);
   $('lastBar').hidden = on || $('snap').hidden;
@@ -1433,3 +1436,38 @@ function showLastFrame() {
   $('lastBar').hidden = false;
 }
 showLastFrame();
+
+// Stills (bank-camera mode): one quiet snapshot every N seconds while not live.
+// Each still waits for the previous one, so slow cameras never pile up
+// requests. Going live pauses it; jacking out stops it.
+var stillsTimer = 0; // var: setConnected touches it during start-up
+var stillsCount = 0;
+function stillsTick() {
+  clearTimeout(stillsTimer);
+  const every = Number($('stills').value) * 1000;
+  if (!every || !connected) return;
+  if (liveOn) {
+    stillsTimer = setTimeout(stillsTick, 1000);
+    return;
+  }
+  const started = Date.now();
+  snapshot(true).then(() => {
+    stillsCount++;
+    setStatus(
+      `Stills every ${$('stills').selectedOptions[0].text}. Frame ${stillsCount}.`,
+    );
+    stillsTimer = setTimeout(
+      stillsTick,
+      Math.max(250, every - (Date.now() - started)),
+    );
+  });
+}
+$('stills').onchange = () => {
+  stillsCount = 0;
+  store.set('stills', $('stills').value);
+  if ($('stills').value === '0') {
+    clearTimeout(stillsTimer);
+    setStatus('Stills off.');
+  } else stillsTick();
+};
+$('stills').value = store.get('stills', '0');

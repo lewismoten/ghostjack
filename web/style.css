@@ -1140,3 +1140,22 @@ code {
 .lastbar strong {
   color: var(--magenta, #ff2bd6);
 }
+
+.stills {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 600 0.9rem var(--mono);
+}
+.stills select {
+  font: 600 0.9rem var(--mono);
+  min-height: 36px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--cyan);
+  background: var(--btn);
+  color: var(--cyan);
+}
+.stills select:disabled {
+  opacity: 0.5;
+}
