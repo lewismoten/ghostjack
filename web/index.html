@@ -156,7 +156,7 @@
                 id="model"
                 width="240"
                 height="200"
-                aria-label="Camera model, turned to the estimated aim. Drag it to nudge the camera."
+                aria-label="Camera model, turned to the estimated aim. Drag it to turn the camera; it glows amber while the camera is moving."
                 role="img"
               ></canvas>
             </div>
@@ -485,13 +485,34 @@
               </button>
             </div>
             <fieldset class="sound">
-              <legend>Sound (off by default)</legend>
+              <legend>Audio (all off by default)</legend>
               <label class="check"
                 ><input id="sfx" type="checkbox" /> Sound effects</label
               >
               <label class="check"
                 ><input id="music" type="checkbox" /> Ambient music</label
               >
+              <label class="check"
+                ><input id="voice" type="checkbox" /> Voice (Glassmouth speaks
+                in this browser)</label
+              >
+            </fieldset>
+            <fieldset class="sound">
+              <legend>Aim speed (step per nudge)</legend>
+              <label class="check"
+                ><input type="radio" name="aim" value="fine" /> Fine</label
+              >
+              <label class="check"
+                ><input type="radio" name="aim" value="normal" checked />
+                Normal</label
+              >
+              <label class="check"
+                ><input type="radio" name="aim" value="fast" /> Fast</label
+              >
+              <p class="hint">
+                Hold an arrow, or an arrow key, to keep turning: one step a
+                second.
+              </p>
             </fieldset>
             <p class="hint">
               Only the uplink address, token, theme, sound and last-tab choices

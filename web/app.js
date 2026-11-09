@@ -1,5 +1,9 @@
 // Ghost Jack control page (Glassmouth's voice in the status text): talks to the local bridge (docs/bridge.md). No camera images are bundled.
 import * as snd from './sound.js';
+import { foley } from './foley.js';
+import * as glass from './glass.js';
+import * as live from './live.js';
+import { netpath } from './netpath.js';
 
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -46,6 +50,11 @@ $('sfx').checked = snd.state.sfx;
 $('music').checked = snd.state.music;
 $('sfx').onchange = () => snd.setSfx($('sfx').checked);
 $('music').onchange = () => snd.setMusic($('music').checked);
+$('voice').checked = snd.state.voice;
+$('voice').onchange = () => {
+  snd.setVoice($('voice').checked);
+  if ($('voice').checked) setStatus(glass.line('jackIn'));
+};
 document.addEventListener(
   'click',
   (e) => {
@@ -119,15 +128,24 @@ function setConnected(on) {
     }
   }
 }
-const api = (path, opts = {}) =>
-  fetch(base + path, {
-    ...opts,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      ...opts.headers,
-    },
-  });
+// A fetch that fails outright (TypeError) means the browser blocked it or nothing answered: say so.
+const BLOCKED =
+  'the browser could not reach the bridge (is it running? from a public page, allow "local network access" for this site)';
+const api = async (path, opts = {}) => {
+  try {
+    return await fetch(base + path, {
+      ...opts,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        ...opts.headers,
+      },
+    });
+  } catch (e) {
+    throw e instanceof TypeError ? new Error(BLOCKED) : e;
+  }
+};
+const net = netpath($('radar'), reduced);
 
 async function connect(e) {
   e?.preventDefault();
@@ -136,7 +154,8 @@ async function connect(e) {
   store.set('bridge', base);
   store.set('token', token);
   setStatus('Jacking in...');
-  $('radar').hidden = false;
+  net.start();
+  let ok = false;
   try {
     try {
       const hello = await fetch(base + '/api/hello').then((r) => r.json());
@@ -145,7 +164,7 @@ async function connect(e) {
       setConnected(false);
       $('demo').hidden = false;
       return setStatus(
-        'No carrier: nothing answered at that address. Demo shown.',
+        `${glass.line('jackFail')} Nothing answered at that address, or the browser blocked it (public pages need "local network access" allowed). Demo shown.`,
         true,
       );
     }
@@ -158,12 +177,13 @@ async function connect(e) {
       const s = await r.json();
       if (!r.ok) throw new Error(s.error);
       const first = !connected;
+      ok = true;
       setConnected(true);
       if (first && tabNow() === 'uplink') selectTab('chrome');
       $('night').checked = s.night === 'night';
       showNight(s.night);
       setStatus(
-        `${lost ? 'Back in sight. ' : "Eye's open. "}Jacked in. Night vision: ${s.night}${s.inNightVision ? ' (infrared on now)' : ''}.`,
+        `${lost ? 'Back in sight. ' : ''}${first ? glass.line('jackIn') : 'Jacked in.'} Night vision: ${s.night}${s.inNightVision ? ' (infrared on now)' : ''}.`,
       );
       lost = false;
       loadDevice();
@@ -173,7 +193,8 @@ async function connect(e) {
       setStatus(`Lost the angle. Chrome did not answer: ${err.message}`, true);
     }
   } finally {
-    $('radar').hidden = true;
+    foley.clack();
+    await net.end(ok);
   }
 }
 // Who has the eye: You while this page is watching live, Nobody otherwise (agents come with the voice relay).
@@ -224,7 +245,8 @@ function showImage(src) {
 }
 async function snapshot() {
   stopLive();
-  setStatus('Framing it...');
+  setStatus(glass.line('snapshot'));
+  setTimeout(foley.shutter, 450);
   const q = crop ? `?crop=${crop.map((n) => n.toFixed(4)).join(',')}` : '';
   try {
     const r = await api('/api/snapshot.jpg' + q);
@@ -237,12 +259,25 @@ async function snapshot() {
     );
   } catch (e) {
     setStatus(`Lost the angle. Snapshot failed: ${e.message}`, true);
+    foley.staticBurst();
   }
 }
 
+let liveOn = false,
+  liveHandle = null,
+  liveLoop = null,
+  liveToken = 0; // a new Go live or a stop cancels a start that is still waiting
+let projectorNext = false;
 function stopLive() {
+  if (!liveOn) return;
+  liveOn = false;
+  scene?.setLive(false);
+  liveToken++;
+  liveHandle?.stop();
+  liveHandle = null;
+  liveLoop?.stop(0.3);
+  liveLoop = null;
   const v = $('video');
-  if (!v.getAttribute('src')) return;
   v.removeAttribute('src');
   v.load();
   v.hidden = true;
@@ -250,30 +285,69 @@ function stopLive() {
   $('live').setAttribute('aria-pressed', 'false');
   setEye('Nobody');
 }
-function startLive() {
-  const v = $('video');
-  v.src = `${base}/api/stream?token=${encodeURIComponent(token)}`;
+// The picture is really playing: settle the loop sound, then Glassmouth says so.
+function liveStarted() {
+  if (!liveOn) return;
+  setTimeout(() => liveLoop?.stop(1.5), 1200);
+  setStatus(
+    `${glass.line('liveOpen')} Sound is ${$('video').muted ? 'off' : 'on'}.`,
+  );
+}
+async function startLive() {
+  const v = $('video'),
+    me = ++liveToken;
+  liveOn = true;
+  scene?.setLive(true);
   v.muted = $('sound').getAttribute('aria-pressed') !== 'true';
   v.hidden = false;
   $('snap').hidden = true;
   $('placeholder').hidden = true;
-  v.play().catch(() =>
-    setStatus(
-      'Lost the angle. The browser could not play the live view.',
-      true,
-    ),
-  );
-  v.onerror = () => {
-    setStatus('Lost the angle. Live view stopped.', true);
-    stopLive();
-  };
   $('live').textContent = 'Stop live';
   $('live').setAttribute('aria-pressed', 'true');
   setEye('You');
-  setStatus("Eye's open. Starting in a few seconds; sound is off.");
+  setStatus(`${glass.line('live')} Starting in a few seconds.`);
+  foley.shuffle();
+  projectorNext = !projectorNext;
+  setTimeout(() => {
+    if (liveOn && me === liveToken)
+      liveLoop = projectorNext ? foley.projector() : foley.crt();
+  }, 700);
+  v.onerror = () => {
+    if (me !== liveToken) return;
+    setStatus('Lost the angle. Live view stopped.', true);
+    stopLive();
+  };
+  v.onplaying = liveStarted;
+  const fail = (m) => {
+    if (me !== liveToken) return;
+    setStatus(`Lost the angle. Live view stopped: ${m}.`, true);
+    foley.staticBurst();
+    stopLive();
+  };
+  const url = `${base}/api/stream`;
+  // Cross-origin (the public page talking to localhost): fetch + MediaSource, because the browser can
+  // block a <video src> to a private address that fetch() is allowed to reach (see live.js).
+  if (live.canUse(base)) {
+    try {
+      const h = await live.start(v, url, token, fail);
+      if (me !== liveToken) return h.stop();
+      liveHandle = h;
+      v.play().catch(() => fail('the browser would not start playback'));
+      return;
+    } catch (e) {
+      if (me !== liveToken) return;
+      if (!e.unsupported) {
+        if (e instanceof TypeError) return fail(BLOCKED);
+        return fail(e.message);
+      }
+      // No MSE for this stream: fall through to the plain <video src>.
+    }
+  }
+  v.src = `${url}?token=${encodeURIComponent(token)}`;
+  v.play().catch(() => fail('the browser could not play the live view'));
 }
 $('live').onclick = () =>
-  $('video').getAttribute('src') ? stopLive() : startLive();
+  liveOn ? (stopLive(), setStatus(glass.line('liveStop'))) : startLive();
 $('sound').onclick = () => {
   const on = $('sound').getAttribute('aria-pressed') !== 'true';
   $('sound').setAttribute('aria-pressed', String(on));
@@ -292,14 +366,17 @@ let pan = +store.get('gm-pan', 0) || 0,
   scene = null;
 const sgn = (n) => (n > 0 ? '+' : '') + n;
 const DEG_PER_STEP = 1.5; // illustration only
+let aim = null; // while the camera is being sent to a dragged target: { p, t } in steps
 function showPose(instant) {
-  const t = `Pan ${sgn(pan)} \u00b7 Tilt ${sgn(tilt)} (estimated)`;
+  const t = `Pan ${sgn(pan)} \u00b7 Tilt ${sgn(tilt)} (estimated${aim ? ', moving' : ''})`;
   $('pose').textContent = t;
   store.set('gm-pan', pan);
   store.set('gm-tilt', tilt);
+  const mp = aim ? aim.p : pan,
+    mt = aim ? aim.t : tilt;
   scene?.setPose(
-    Math.max(-90, Math.min(90, pan * DEG_PER_STEP)),
-    Math.max(-60, Math.min(60, tilt * DEG_PER_STEP)),
+    Math.max(-90, Math.min(90, mp * DEG_PER_STEP)),
+    Math.max(-60, Math.min(60, mt * DEG_PER_STEP)),
     instant,
   );
 }
@@ -309,34 +386,82 @@ $('recenter').onclick = () => {
 };
 showPose(true);
 
-async function move(dx, dy) {
-  if (!connected || Date.now() - lastMove < 1100) return;
+// Aim speed: the step size of one nudge (and of each repeat while a control is held). Remembered.
+const STEPS = { fine: 4, normal: 10, fast: 15 }; // the bridge accepts up to 20; one step a second
+let aimSens = store.get('gm-aim', 'normal');
+if (!STEPS[aimSens]) aimSens = 'normal';
+const stepSize = () => STEPS[aimSens];
+for (const r of document.querySelectorAll('input[name="aim"]')) {
+  r.checked = r.value === aimSens;
+  r.onchange = () => {
+    aimSens = r.value;
+    store.set('gm-aim', aimSens);
+    setStatus(`Aim speed: ${aimSens} (${stepSize()} a step).`);
+  };
+}
+const STEP_MS = 1150; // the bridge allows one move a second
+const TRAVEL_MS = 700; // a guess at how long one queued step takes to run
+
+async function move(dx, dy, quiet) {
+  if (!connected || Date.now() - lastMove < 1100) return false;
   lastMove = Date.now();
-  setStatus('Nudging...');
+  if (!quiet) setStatus('Nudging...');
   try {
     const r = await api('/api/move', {
       method: 'POST',
       body: JSON.stringify({ dx, dy, speed: 100 }),
     });
     if (!r.ok) throw new Error((await r.json()).error);
+    foley.servo(TRAVEL_MS / 1000);
     pan += dx;
     tilt += dy;
     showPose();
-    setStatus('Nudged one small step.');
+    if (!quiet) setStatus('Nudged one small step.');
+    return true;
   } catch (e) {
     setStatus(`Lost the angle. Move failed: ${e.message}`, true);
+    return false;
   }
+}
+// Hold a control: one step now, then one more every STEP_MS until released. Moves queue in the camera
+// and a stop does not cancel them, so steps stay small and nothing is sent after the release.
+let holdTimer = 0;
+function holdStart(dx, dy) {
+  holdStop();
+  move(dx, dy);
+  holdTimer = setInterval(() => move(dx, dy, true), STEP_MS);
+}
+function holdStop() {
+  clearInterval(holdTimer);
+  holdTimer = 0;
 }
 $('stage')
   .querySelector('.pad')
   .addEventListener('pointerdown', (e) => e.stopPropagation());
-for (const b of pads) b.onclick = () => move(+b.dataset.dx, +b.dataset.dy);
+for (const b of pads) {
+  const vec = () => [
+    Math.sign(+b.dataset.dx) * stepSize(),
+    Math.sign(+b.dataset.dy) * stepSize(),
+  ];
+  b.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || b.disabled) return;
+    b.setPointerCapture(e.pointerId);
+    holdStart(...vec());
+  });
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture'])
+    b.addEventListener(ev, holdStop);
+  // Keyboard activation (Enter or Space on a focused arrow) has no pointer: one step.
+  b.addEventListener('click', (e) => {
+    if (e.detail === 0) move(...vec());
+  });
+}
 const keys = {
-  ArrowUp: [0, 10],
-  ArrowDown: [0, -10],
-  ArrowLeft: [-10, 0],
-  ArrowRight: [10, 0],
+  ArrowUp: [0, 1],
+  ArrowDown: [0, -1],
+  ArrowLeft: [-1, 0],
+  ArrowRight: [1, 0],
 };
+let heldKey = null;
 document.addEventListener('keydown', (e) => {
   if (
     !connected ||
@@ -345,25 +470,95 @@ document.addEventListener('keydown', (e) => {
   )
     return;
   e.preventDefault();
-  move(...keys[e.key]);
+  if (e.repeat || heldKey) return; // the page repeats on its own timer
+  heldKey = e.key;
+  holdStart(keys[e.key][0] * stepSize(), keys[e.key][1] * stepSize());
 });
-// Dragging the camera model sends one small step in the dragged direction.
+document.addEventListener('keyup', (e) => {
+  if (e.key !== heldKey) return;
+  heldKey = null;
+  holdStop();
+});
+addEventListener('blur', () => {
+  heldKey = null;
+  holdStop();
+});
+
+// Dragging the camera model turns it in real time (the model follows the pointer). On release the
+// camera is sent toward that orientation as small queued steps, one a second; the model is amber from
+// then until the estimated arrival (the last step sent, plus a guess at its travel time).
+let aimRun = 0; // a new drag cancels the steps still waiting to be sent
+async function aimTo(tp, tt) {
+  const me = ++aimRun;
+  let rx = tp - pan,
+    ry = tt - tilt;
+  const st = stepSize();
+  const cl = (n) => Math.max(-st, Math.min(st, n));
+  if (Math.abs(rx) < st / 2 && Math.abs(ry) < st / 2) {
+    aim = null;
+    scene?.setMoving(false);
+    return showPose();
+  }
+  aim = { p: pan + rx, t: tilt + ry };
+  scene?.setMoving(true);
+  showPose();
+  setStatus(glass.line('moveStart'));
+  while ((Math.abs(rx) >= st / 2 || Math.abs(ry) >= st / 2) && me === aimRun) {
+    const sx = Math.abs(rx) >= st / 2 ? cl(rx) : 0,
+      sy = Math.abs(ry) >= st / 2 ? cl(ry) : 0;
+    while (Date.now() - lastMove < 1100)
+      await new Promise((r) => setTimeout(r, 100));
+    if (me !== aimRun) return;
+    if (!(await move(sx, sy, true))) break;
+    rx -= sx;
+    ry -= sy;
+    if (Math.abs(rx) >= st / 2 || Math.abs(ry) >= st / 2)
+      await new Promise((r) => setTimeout(r, 50));
+  }
+  if (me !== aimRun) return;
+  await new Promise((r) => setTimeout(r, TRAVEL_MS)); // the last queued step arrives
+  if (me !== aimRun) return;
+  aim = null;
+  scene?.setMoving(false);
+  showPose();
+  setStatus(glass.line('moveDone'));
+}
 {
   let from = null;
-  const m = $('model');
+  const m = $('model'),
+    PX_PER_STEP = 3; // pixels of drag for one step of aim
+  const lim = (n, l) => Math.max(-l, Math.min(l, n));
   m.addEventListener('pointerdown', (e) => {
     e.stopPropagation();
-    from = [e.clientX, e.clientY];
+    if (!connected) return;
+    aimRun++; // stop sending the steps of an earlier drag
+    from = {
+      x: e.clientX,
+      y: e.clientY,
+      p: aim ? aim.p : pan,
+      t: aim ? aim.t : tilt,
+    };
     m.setPointerCapture(e.pointerId);
+  });
+  const target = (e) => ({
+    p: lim(Math.round(from.p + (e.clientX - from.x) / PX_PER_STEP), 60),
+    t: lim(Math.round(from.t - (e.clientY - from.y) / PX_PER_STEP), 40),
+  });
+  m.addEventListener('pointermove', (e) => {
+    if (!from) return;
+    const t = target(e);
+    scene?.setPose(t.p * DEG_PER_STEP, t.t * DEG_PER_STEP, true);
   });
   m.addEventListener('pointerup', (e) => {
     if (!from) return;
-    const dx = e.clientX - from[0],
-      dy = e.clientY - from[1];
+    const t = target(e);
     from = null;
-    if (Math.hypot(dx, dy) < 20) return;
-    if (Math.abs(dx) > Math.abs(dy)) move(dx > 0 ? 10 : -10, 0);
-    else move(0, dy > 0 ? -10 : 10);
+    aimTo(t.p, t.t);
+  });
+  m.addEventListener('pointercancel', () => {
+    from = null;
+    aim = null;
+    showPose(true);
   });
 }
 
@@ -377,7 +572,10 @@ $('night').onchange = async () => {
     const j = await r.json();
     if (!r.ok) throw new Error(j.error);
     showNight(j.mode);
-    setStatus(`Night vision: ${j.mode}.`);
+    foley.softClick();
+    setStatus(
+      `${glass.line(j.mode === 'night' ? 'nightOn' : 'nightAuto')} Night vision: ${j.mode}.`,
+    );
   } catch (e) {
     $('night').checked = !$('night').checked;
     setStatus(`Night vision change failed: ${e.message}`, true);
@@ -650,6 +848,7 @@ $('sayForm').addEventListener('submit', async (e) => {
   if (!text || saying) return;
   saying = true;
   $('sayGo').disabled = true;
+  sayLine(glass.line('say'));
   try {
     const r = await api('/api/say', {
       method: 'POST',
@@ -701,7 +900,16 @@ else {
 // The 3D extras load last, so the page works without them; any failure leaves the plain CSS look.
 const loadScene = () =>
   import('./scene.js')
-    .then((m) => m.start({ bg: $('bg'), model: $('model'), reduced }))
+    .then((m) =>
+      m.start({
+        bg: $('bg'),
+        model: $('model'),
+        reduced,
+        onPulse: (dir) => foley.whoosh(dir),
+        // never over Glassmouth's voice, never under the live picture's first seconds
+        canPulse: () => !(window.speechSynthesis && speechSynthesis.speaking),
+      }),
+    )
     .then((s) => {
       scene = s;
       showPose(true);

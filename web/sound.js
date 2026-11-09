@@ -1,5 +1,5 @@
-// Optional sound, all made with the Web Audio API (no samples). Both switches are off until the user
-// turns them on, and nothing starts before a click. Settings are remembered in localStorage.
+// Optional sound, all made with the Web Audio API (no samples). Three independent switches (music, sound
+// effects, Glassmouth's voice) are off until the user turns them on, and nothing starts before a click. Settings are remembered in localStorage.
 let ctx = null,
   master = null,
   musicNodes = null;
@@ -17,9 +17,14 @@ const put = (k, v) => {
     /* private window */
   }
 };
-export const state = { sfx: get('gm-sfx'), music: get('gm-music') };
+export const state = {
+  sfx: get('gm-sfx'),
+  music: get('gm-music'),
+  voice: get('gm-voice'),
+};
+const MUSIC_LEVEL = 0.03; // 0.1.1: half of 0.06
 
-function audio() {
+export function audio() {
   if (!ctx) {
     ctx = new (window.AudioContext || window.webkitAudioContext)();
     master = ctx.createGain();
@@ -29,7 +34,8 @@ function audio() {
   if (ctx.state === 'suspended') ctx.resume();
   return ctx;
 }
-function tone(
+export const masterNode = () => master;
+export function tone(
   freq,
   start,
   dur,
@@ -73,6 +79,22 @@ export const sfx = {
     }
   },
 };
+// Ambient music ducks (to about a third) while Glassmouth speaks, then comes back.
+export function duck(on) {
+  if (!musicNodes || !ctx) return;
+  const t = ctx.currentTime;
+  musicNodes.g.gain.cancelScheduledValues(t);
+  musicNodes.g.gain.setTargetAtTime(
+    on ? MUSIC_LEVEL * 0.35 : MUSIC_LEVEL,
+    t,
+    0.25,
+  );
+}
+export function setVoice(on) {
+  state.voice = on;
+  put('gm-voice', on);
+  if (on) audio(); // the click that turned it on unlocks audio; speechSynthesis needs no context
+}
 export function setSfx(on) {
   state.sfx = on;
   put('gm-sfx', on);
@@ -91,7 +113,7 @@ export function setMusic(on) {
       lfo = c.createOscillator(),
       lg = c.createGain();
     g.gain.value = 0.0001;
-    g.gain.exponentialRampToValueAtTime(0.06, c.currentTime + 2);
+    g.gain.exponentialRampToValueAtTime(MUSIC_LEVEL, c.currentTime + 2);
     f.type = 'lowpass';
     f.frequency.value = 600;
     lfo.frequency.value = 0.08;
