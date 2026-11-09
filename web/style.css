@@ -53,6 +53,17 @@ button[aria-pressed=true]{background:var(--cyan);color:var(--on-cyan,#001015)}
 #box{position:absolute;border:2px dashed #fff;background:rgba(255,255,255,.15);pointer-events:none}
 .zoom{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.zoom input{width:min(240px,60vw);accent-color:var(--cyan)}
 #model{display:block;width:100%;max-width:300px;height:auto;margin:0 auto;border:1px solid var(--line);border-radius:4px;cursor:grab;touch-action:none;background:rgba(0,0,0,.2)}
+.head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px}.head{margin-bottom:10px}.head h2{margin:0}.glass{grid-column:1/-1}
+.device{font:600 .8rem var(--mono);letter-spacing:.08em;color:var(--amber);margin:2px 0 12px}
+.eye{display:flex;align-items:center;gap:8px;font:600 .8rem var(--mono);letter-spacing:.06em;border:1px solid var(--line);border-radius:999px;padding:3px 12px}
+.lamp{width:12px;height:12px;border-radius:50%;background:var(--dim);transition:background .3s,box-shadow .3s}
+.eye.has .lamp{background:#2cff9a;box-shadow:0 0 10px #2cff9a;animation:pulse 2s ease-in-out infinite}
+.eye.flip{animation:flip .5s ease-out}
+@keyframes flip{0%{transform:scaleY(.1);border-color:var(--magenta)}60%{transform:scaleY(1.15)}100%{transform:none}}
+.gm{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+.queue{list-style:none;margin:0;padding:8px 10px;border:1px dashed var(--line);border-radius:4px;font:.85rem var(--mono);color:var(--dim)}
+input[type=text]{font:inherit;padding:6px 8px;min-height:36px;border:1px solid var(--line);border-radius:4px;background:rgba(0,0,0,.25);color:var(--fg);width:100%}input[type=text]:disabled{opacity:.6}
+:root[data-theme=light] input[type=text]{background:#fff}
 .mono{font-family:var(--mono);font-size:.85rem;text-align:center;margin:6px 0}
 .pad{display:grid;grid-template-columns:repeat(3,56px);grid-template-areas:". up ." "left . right" ". down .";gap:6px;justify-content:center;margin:8px 0}
 .pad button{min-height:56px;font-size:1.3rem}.up{grid-area:up}.left{grid-area:left}.right{grid-area:right}.down{grid-area:down}

@@ -21,6 +21,7 @@ function tone(freq, start, dur, { type = 'sine', gain = 0.12, to = freq, dest } 
 }
 export const sfx = {
   blip() { if (state.sfx) tone(880, 0, 0.07, { type: 'square', gain: 0.05, to: 1320 }); },
+  relay() { if (state.sfx) { tone(2200, 0, 0.03, { type: 'square', gain: 0.07, to: 300 }); tone(1400, 0.07, 0.04, { type: 'square', gain: 0.05, to: 200 }); } },
   powerUp() { if (state.sfx) { tone(110, 0, 0.9, { type: 'sawtooth', gain: 0.07, to: 880 }); tone(660, 0.5, 0.4, { gain: 0.08, to: 1760 }); } },
   error() { if (state.sfx) { tone(900, 0, 0.12, { type: 'square', gain: 0.06 }); tone(600, 0.16, 0.18, { type: 'square', gain: 0.06 }); } },
 };

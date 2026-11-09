@@ -3,15 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tethys camera control</title>
+<title>Ghost Jack</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <canvas id="bg" aria-hidden="true"></canvas>
 <header class="top">
   <div>
-    <h1 class="glitch" data-text="TETHYS // CAMERA">TETHYS // CAMERA</h1>
-    <p class="lede">Control page for a small network camera, through a service on the same computer.</p>
+    <h1 class="glitch" data-text="GHOST JACK">GHOST JACK</h1>
+    <p class="lede">The port agents jack into when they need eyes in the room. Glassmouth is the voice on the line.</p>
+    <p id="device" class="device mono-l">Camera: none connected</p>
   </div>
   <div class="top-tools">
     <span class="light" id="light" aria-hidden="true"></span>
@@ -20,8 +21,8 @@
 </header>
 <main>
   <section id="demo" class="notice" hidden aria-labelledby="demo-h">
-    <h2 id="demo-h">DEMO // no camera connected</h2>
-    <p>This page only works with the local bridge service running (<code>npm start</code> in the project, then enter its address and access token below). The camera sits on a private cable and is never reachable from the internet, so this is the interface only.</p>
+    <h2 id="demo-h">No signal. The bridge is dark.</h2>
+    <p><strong>Glassmouth:</strong> "Nobody home on this end." Ghost Jack only works with its local service running (<code>npm start</code> in the project, then enter the bridge address and access token below). The camera sits on a private cable and is never reachable from the internet, so what you see here is the interface, unplugged. Look around; every control is real, it just has no eye to talk to.</p>
   </section>
 
   <div class="grid">
@@ -40,11 +41,12 @@
     </section>
 
     <section class="panel wide" aria-labelledby="view-h" style="--i:1">
-      <h2 id="view-h">Live view</h2>
+      <div class="head"><h2 id="view-h">Live view</h2>
+        <div class="eye" id="eye" role="group" aria-label="Who has the eye: who is watching the camera right now"><span class="lamp" aria-hidden="true"></span><span id="eyeText" aria-live="polite">Nobody has the eye</span></div></div>
       <div class="stage" id="stage">
         <video id="video" muted playsinline hidden aria-label="Live camera video"></video>
         <img id="snap" alt="Latest camera snapshot" hidden draggable="false">
-        <svg id="placeholder" viewBox="0 0 160 90" role="img" aria-label="Placeholder: no picture yet">
+        <svg id="placeholder" viewBox="0 0 160 90" role="img" aria-label="No picture yet: no signal">
           <rect width="160" height="90" class="ph-bg"/><circle cx="80" cy="45" r="16" class="ph-ring"/><circle cx="80" cy="45" r="6" class="ph-dot"/>
           <text x="80" y="76" text-anchor="middle" class="ph-text">NO SIGNAL</text>
         </svg>
@@ -110,9 +112,26 @@
         <p class="hint">These are shown so the list is complete. They change or can lock out the camera, so they are not wired up.</p>
       </div>
     </section>
+
+    <section class="panel wide glass" aria-labelledby="gm-h" style="--i:4">
+      <h2 id="gm-h">Glassmouth</h2>
+      <p class="hint" id="gmNote"><strong>Voice relay not enabled in this build.</strong> Later, messages from agents will queue here, each labeled with who said it, and Glassmouth's own asides marked as its own.</p>
+      <div class="gm" aria-describedby="gmNote">
+        <div><h3>Queue</h3><ul class="queue" aria-label="Message queue"><li class="empty">Nothing waiting. Quiet on the line.</li></ul></div>
+        <div><h3>Reply</h3>
+          <div class="row">
+            <button type="button" disabled>Acknowledge</button>
+            <button type="button" disabled>Not now</button>
+            <button type="button" disabled>Repeat</button>
+          </div>
+          <label>Answer by typing <input type="text" disabled placeholder="Voice relay not enabled in this build"></label>
+        </div>
+        <div><h3>History</h3><ul class="queue" aria-label="Message history"><li class="empty">No messages yet.</li></ul></div>
+      </div>
+    </section>
   </div>
 </main>
-<footer><p>Only the bridge address, token, theme and sound choices are stored, in this browser. 3D by three.js (MIT).</p></footer>
+<footer><p>Only the bridge address, token, theme and sound choices are stored, in this browser. 3D by three.js (MIT). Voice and persona: Glassmouth.</p></footer>
 <script src="app.js" type="module"></script>
 </body>
 </html>
