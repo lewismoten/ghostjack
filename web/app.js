@@ -1604,6 +1604,29 @@ async function sendStep(axis, dir) {
   }
   throw new Error('the bridge kept refusing moves');
 }
+// One fast trip for Find limits (back over ground it already covered, and to
+// the middle at the end); resolves once two small pictures in a row match.
+async function travelFind(axis, units) {
+  if (!units) return;
+  while (Date.now() - lastMove < 1100) await sleep(100);
+  const r = await api('/api/travel', {
+    method: 'POST',
+    body: JSON.stringify(axis === 'pan' ? { dx: units } : { dy: units }),
+  });
+  if (!r.ok) throw new Error((await r.json()).error);
+  const { ms } = await r.json();
+  const end = Date.now() + ms;
+  await sleep(500);
+  let prev = await grabSmall();
+  while (Date.now() < end) {
+    await sleep(150);
+    const cur = await grabSmall();
+    if (lim.same(lim.diff(prev, cur), 1)) break;
+    prev = cur;
+  }
+  lastMove = Date.now();
+  api('/api/travel/done', { method: 'POST' }).catch(() => {});
+}
 let cancelFind = false;
 $('limitsStop').onclick = () => {
   cancelFind = true;
@@ -1624,6 +1647,7 @@ $('limitsGo').onclick = async () => {
     res = await lim.findLimits({
       grab: grabSmall,
       send: sendStep,
+      travel: travelFind,
       cancelled: () => cancelFind,
       wait: sleep,
       line: (e) => glass.line(e),

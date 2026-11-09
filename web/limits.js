@@ -37,7 +37,8 @@ export const STEP_MS = 1300; // wait after each step (the bridge allows one a se
 export const CAP_STEPS = 220; // most steps in one walk
 export const CAP_MS = 20 * 60 * 1000; // most time for the whole search
 
-// deps: { grab(): Promise<Uint8Array>, send(axis, dir): Promise<void> (one step of STEP), cancelled(): bool,
+// deps: { grab(): Promise<Uint8Array>, send(axis, dir): Promise<void> (one step of STEP), travel?(axis, units):
+// Promise<void> (one fast trip that resolves once the picture settles), cancelled(): bool,
 // progress(text, fraction), line(event), wait(ms) }. Resolves { pan, tilt } ranges in units (each
 // { min, max }, centered on 0) or null if cancelled or capped. The camera ends at the center of each range.
 export async function findLimits(deps) {
@@ -49,10 +50,10 @@ export async function findLimits(deps) {
   const b = await deps.grab();
   const noise = diff(a, b);
   // Step one way until two steps in a row leave the picture the same. Returns the steps that moved.
-  async function walk(axis, dir, label, from) {
+  async function walk(axis, dir, label, from, already = 0) {
     let prev = await deps.grab(),
       still = 0,
-      moved = 0;
+      moved = already;
     for (let i = 0; i < CAP_STEPS && !over(); i++) {
       await deps.send(axis, dir);
       await deps.wait(STEP_MS);
@@ -76,20 +77,31 @@ export async function findLimits(deps) {
   for (const axis of ['pan', 'tilt']) {
     const name = axis === 'pan' ? 'Pan' : 'Tilt';
     deps.progress(`${name}: finding the first wall.`, base);
-    if ((await walk(axis, -1, `${name} to the first wall`, base)) === null)
-      return null;
+    const first = await walk(axis, -1, `${name} to the first wall`, base);
+    if (first === null) return null;
     deps.line('wall');
     deps.progress(`${name}: crossing to the other wall.`, base + 0.25);
-    const n = await walk(axis, 1, `${name} across`, base + 0.25);
+    // The ground back to the start was just covered: cross it in one fast
+    // trip when the bridge can, and take small steps only from there on.
+    let skip = 0;
+    if (deps.travel && first > 0) {
+      deps.progress(`${name}: back to the start in one trip.`, base + 0.25);
+      await deps.travel(axis, first * STEP);
+      if (over()) return null;
+      skip = first;
+    }
+    const n = await walk(axis, 1, `${name} across`, base + 0.25, skip);
     if (n === null || n < 2) return null;
     deps.progress(
       `${name}: ${n} steps across. Back to the middle.`,
       base + 0.45,
     );
-    for (let i = 0; i < Math.floor(n / 2) && !over(); i++) {
-      await deps.send(axis, -1);
-      await deps.wait(STEP_MS);
-    }
+    if (deps.travel) await deps.travel(axis, -Math.floor(n / 2) * STEP);
+    else
+      for (let i = 0; i < Math.floor(n / 2) && !over(); i++) {
+        await deps.send(axis, -1);
+        await deps.wait(STEP_MS);
+      }
     if (over()) return null;
     const half = (n * STEP) / 2;
     out[axis] = { min: -half, max: half };

@@ -82,6 +82,10 @@ follow [SemVer](https://semver.org/).
 
 ### Changed
 
+- Find limits crosses back over the ground it already covered in one fast trip
+  after the first wall, and returns to the middle in one trip, taking small
+  steps only where it hasn't looked yet (a simulated camera: 75 small steps
+  instead of 125, same range).
 - The bridge's stream uses low-latency ffmpeg options (see Fixed).
 
 ## [0.1.1] - 2026-11-08
