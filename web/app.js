@@ -1098,30 +1098,8 @@ function setMode(on) {
 async function pressSlot(n) {
   if (!connected) return;
   if (setting) {
-    const s = shots[n - 1];
     setMode(false);
-    const name = prompt(
-      `Name for shot ${n} (leave empty to clear it):`,
-      s?.name ?? `Shot ${n}`,
-    );
-    if (name === null) return setStatus('Nothing saved.');
-    const old = shots[n - 1];
-    shots[n - 1] = name.trim()
-      ? { name: name.trim().slice(0, 24), pan, tilt, crop }
-      : null;
-    try {
-      await saveShots();
-      atSlot = shots[n - 1] ? n : 0;
-      setStatus(
-        shots[n - 1]
-          ? `Shot ${n} saved: ${shots[n - 1].name}.`
-          : `Shot ${n} cleared.`,
-      );
-    } catch (e) {
-      shots[n - 1] = old;
-      setStatus(`Shot not saved: ${e.message}`, true);
-    }
-    return renderKeys();
+    return askName(n);
   }
   // an empty slot is the center: pan 0, tilt 0, no zoom
   const s = shots[n - 1] ?? { name: 'center', pan: 0, tilt: 0, crop: null };
@@ -1146,6 +1124,56 @@ async function pressSlot(n) {
   }
   await aimTo(s.pan, s.tilt, true);
 }
+// Name the shot in a small form that takes the strip's place (no pop-up).
+var naming = 0;
+function askName(n) {
+  naming = n;
+  $('shotLabel').textContent = `Shot ${n} name`;
+  $('shotName').value = shots[n - 1]?.name ?? `Shot ${n}`;
+  $('shotClear').hidden = !shots[n - 1];
+  $('keys').hidden = true;
+  $('shotForm').hidden = false;
+  $('shotName').focus();
+  $('shotName').select();
+  setStatus(`Name shot ${n}, then Save (Enter). Esc cancels.`);
+}
+function closeName() {
+  naming = 0;
+  $('shotForm').hidden = true;
+  $('keys').hidden = false;
+}
+async function storeShot(n, shot) {
+  const old = shots[n - 1];
+  shots[n - 1] = shot;
+  try {
+    await saveShots();
+    atSlot = shot ? n : 0;
+    setStatus(shot ? `Shot ${n} saved: ${shot.name}.` : `Shot ${n} cleared.`);
+  } catch (e) {
+    shots[n - 1] = old;
+    setStatus(`Shot not saved: ${e.message}`, true);
+  }
+  renderKeys();
+}
+$('shotForm').onsubmit = (e) => {
+  e.preventDefault();
+  const n = naming,
+    name = $('shotName').value.trim().slice(0, 24);
+  closeName();
+  if (n && name) storeShot(n, { name, pan, tilt, crop });
+};
+$('shotClear').onclick = () => {
+  const n = naming;
+  closeName();
+  if (n) storeShot(n, null);
+};
+$('shotCancel').onclick = () => {
+  closeName();
+  setStatus('Nothing saved.');
+};
+$('shotName').onkeydown = (e) => {
+  if (e.key === 'Escape') $('shotCancel').click();
+};
 for (const b of document.querySelectorAll('#keys [data-slot]'))
   b.onclick = () => pressSlot(+b.dataset.slot);
 $('keySet').onclick = () => setMode(!setting);

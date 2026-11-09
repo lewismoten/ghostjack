@@ -240,6 +240,13 @@
               <b>SET</b><span>save</span>
             </button>
           </div>
+          <form id="shotForm" class="shotform" hidden autocomplete="off">
+            <label for="shotName" id="shotLabel">Shot 1 name</label>
+            <input id="shotName" type="text" maxlength="24" required />
+            <button type="submit">Save</button>
+            <button type="button" id="shotClear">Clear slot</button>
+            <button type="button" id="shotCancel" class="ghost">Cancel</button>
+          </form>
           <div class="row controls">
             <button id="live" type="button" disabled aria-pressed="false">
               Go live

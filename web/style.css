@@ -1213,3 +1213,27 @@ code {
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 }
+
+/* Naming a saved shot: takes the strip's place, so the eyes stay put. */
+.shotform {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  min-height: 40px;
+}
+.shotform[hidden] {
+  display: none;
+}
+.shotform label {
+  color: var(--amber);
+  font: 600 0.8rem var(--mono);
+}
+.shotform input {
+  flex: 1 1 10em;
+  min-width: 0;
+}
+.keys[hidden] {
+  display: none;
+}
