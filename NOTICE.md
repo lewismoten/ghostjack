@@ -19,6 +19,13 @@ https://github.com/mrdoob/three.js/blob/dev/LICENSE
 `playwright-core` 1.64.1 (Apache License 2.0, Microsoft) drives the camera's own
 web page.
 
+## Bench stand kit
+
+The laser-cut bench stands in `hardware/bench-stands/` (generator script, SVG
+sheets and previews) were written with Claude (Anthropic, Sonnet 5.5). The label
+font is a plain 5x7 pixel grid drawn for this project as rectangles. The
+previews use the Playwright entry above.
+
 ## Sounds
 
 All sound in the control page is generated in the browser with the Web Audio
