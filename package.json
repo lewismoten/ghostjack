@@ -2,8 +2,10 @@
   "name": "ghostjack",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "description": "Ghost Jack: a local bridge and control page that gives agents eyes through an IP camera (first supported: Tethys 825-C)",
-  "scripts": { "start": "node src/server.mjs" },
+  "scripts": { "start": "node src/server.mjs",
+    "pages": "node tools/build-pages.mjs" },
   "dependencies": { "playwright-core": "1.64.1" }
 }

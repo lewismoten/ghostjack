@@ -120,7 +120,8 @@
         <label>Words for the camera's speaker <input id="sayText" type="text" maxlength="300" placeholder="Up to 300 characters"></label>
         <div class="sliders">
           <label>Voice <select id="sayVoice"><option value="">Default voice</option></select></label>
-          <label>Level <input id="sayLevel" type="range" min="0.05" max="0.4" step="0.05" value="0.15"> <output id="sayLevelOut">0.15</output></label>
+          <label>Level <input id="sayLevel" type="range" min="0.01" max="0.08" step="0.005" value="0.035"> <output id="sayLevelOut">0.035</output></label>
+          <label>Chime level <input id="sayChime" type="range" min="0.004" max="0.03" step="0.001" value="0.016"> <output id="sayChimeOut">0.016</output></label>
         </div>
         <div class="row"><button id="sayGo" type="submit" disabled>Speak</button><span id="sayStatus" role="status" class="mono-l">Quiet on the line.</span></div>
         <p class="hint">The speaker is small and loud. Start low. One voice at a time; lines wait their turn.</p>

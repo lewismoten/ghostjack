@@ -1,15 +1,25 @@
 # Ghost Jack
 
-Ghost Jack is the port agents jack into when they need eyes in meat space. **Glassmouth** is its voice: one glass eye, a dozen voices ([the character guide](docs/glassmouth.md)). The first supported camera is a $2 thrift-store network camera, the Tethys 825-C (SKU TT000074), which I'm turning into a camera I can use locally, without the maker's cloud app: to watch my Pocket Player boards and the TV the Raspberry Pi drives.
+Ghost Jack is a local bridge and control page that gives people and AI agents eyes, ears and a voice through a cheap network camera. **Glassmouth** is its character: one glass eye, a dozen voices ([the guide](docs/glassmouth.md)). The first supported camera is the Tethys 825-C (SKU TT000074), a $2 thrift-store camera, used locally with no cloud app.
 
-This repository holds what I learn about the camera and the code I write for it. It's kept separate from my other projects.
+**For strangers:** you need a compatible camera (so far only that one) on a private cable or network, a Mac (the bridge reads the camera's password from the macOS Keychain and uses macOS speech), Node, and ffmpeg. You run the bridge on your own machine; the web page is only its remote control. Nothing here works without a camera, but the hosted page shows the interface in a demo state. The page has a neon cyberpunk look: a live-view panel with an on-screen display, a wireframe 3D camera model that turns to the estimated aim, pan/tilt pad, night vision, zoom, camera settings, and a "Glassmouth says" box that speaks through the camera's speaker. It has optional generated sound and a light theme.
 
-- [Finding the camera on the network](docs/discovery.md): step-by-step troubleshooting, from "is the USB cable data?" to signing in and taking a snapshot, with what each step showed.
-- `tools/snapshot.mjs`: saves one 1920 x 1080 snapshot over the local network (no cloud). `tools/web-login-probe.mjs`: records the web app's requests after sign-in.
+## Quick start
 
-- [The local bridge and control page](docs/bridge.md): `npm start` runs a token-protected local service (snapshot, aim, night vision, live stream) and a control page in `web/`; with Tailscale it can be reached from other devices.
+```sh
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install   # uses an installed Chromium
+security add-generic-password -s tethys-camera -a <device id> -w   # once: stores the camera's password
+npm start                                          # http://127.0.0.1:8787; prints an access token once
+```
 
-Both read the device id and password from the macOS Keychain item `tethys-camera` (the name stays: it is this camera's credential, from before the project had its name) and need Playwright (`PLAYWRIGHT=<path>/playwright-core/index.mjs`).
+Open `http://localhost:8787/`, paste the token and Connect. Details, the API and Tailscale: [docs/bridge.md](docs/bridge.md). Changes: [CHANGELOG](CHANGELOG.md). Licensed MIT ([LICENSE](LICENSE), [NOTICE](NOTICE.md)).
+
+## Docs
+
+- [The bridge and control page](docs/bridge.md): endpoints, say, the stream, Tailscale, GitHub Pages.
+- [Finding the camera](docs/discovery.md): the dated log from "is the USB cable data?" to signing in, moving, streaming, listening and talking.
+- [Glassmouth](docs/glassmouth.md), [voice relay plan](docs/voice-relay-plan.md), [room map plan](docs/room-map-plan.md).
+- `tools/`: the original probes (`snapshot.mjs` saves one snapshot; `web-login-probe.mjs` records the web app's requests after sign-in). They read the same Keychain item `tethys-camera` (the name stays: it is this camera's credential) and need Playwright (`PLAYWRIGHT=<path>/playwright-core/index.mjs`).
 
 ## Ground rules
 
@@ -18,7 +28,7 @@ Both read the device id and password from the macOS Keychain item `tethys-camera
 - Never commit passwords, serial numbers, device IDs or full hardware addresses. The serial doubles as the camera's cloud ID.
 - Never commit pictures, video or audio from the camera. They show my home and me; test captures stay local and get deleted after testing (`.gitignore` blocks the usual image, audio and video files).
 
-## What's known so far
+## What's known about the camera
 
 | | |
 | --- | --- |
@@ -26,15 +36,24 @@ Both read the device id and password from the macOS Keychain item `tethys-camera
 | Ports | 5 V input (USB cable, power only), reset button, microSD slot, RJ45 Ethernet (100 Mbps) |
 | Software | MIPC family (the maker's phone app); firmware v5.3.3.2101181516 (2021-01-18), internal model F300; web server "MWS 0.01", web app mipc v2n 8.1 |
 | Network | Asks for DHCP; meanwhile uses a built-in address, 192.168.187.254 |
-| Open ports | 80 (login page titled "IPC"; `ccm_*` API with a snapshot URL and `ccm_play` stream setup), 554 (accepts connections; silent without a session) |
-| Maker's FAQ | Says local HTTP/RTSP video isn't supported, and it works only through the MIPC app |
+| Open ports | 80 (MIPC web app and the `ccm_*` API), 554 (RTSP: H.264 1080p and AAC 16 kHz; one connection per `ccm_play` address), 7010 (RTMP: stream, and the publish for talking), 7030 (the maker's rtdp; refuses TCP) |
+| Maker's FAQ | Says local HTTP/RTSP video isn't supported and it works only through the MIPC app. In practice that's wrong: it all works locally once signed in. |
+| Pan and tilt | Steps queue and run one after another, each with its own speed (`ptz0`); a step of 10 at speed 100 is a good nudge. Position is not reported. |
+| Night vision | `mode` night (forced infrared) or automatic; no white light on this model. |
+| Lens | Fixed: no optical zoom or focus (digital zoom only). |
+| Speaker | AAC 16 kHz mono over an RTMP publish; the amp wakes on sound; one address per stream, one talker at a time; about 3.5% level through the filter chain. |
+| Clock | No battery: resets to 1971 on power-up; the bridge can set it. |
+| Microphone | `as0` / `dev3`, level 70. |
 
-## Possible next steps
+## Roadmap
 
-1. A small local service that stays signed in: snapshot, move, a fresh RTSP address per viewer, and audio clips; plus a little control page for manual use and an MCP server so an AI can look, listen and aim.
-2. Pin down pan/tilt units and stopping (on a tripod).
-3. Speaking through the camera: work out the RTDP upload (`ccm_talk`).
-4. Set the camera's clock (`ccm_date_set`).
+1. Voice relay: agents ask, the camera speaks, the answer is heard and transcribed ([plan](docs/voice-relay-plan.md)).
+2. Room map with re-sweep ([plan](docs/room-map-plan.md)).
+3. MCP tools so agents can "jack in" (look, listen, aim, say).
+4. Local TTS voices per agent (the `synthesize()` boundary in `src/say.mjs`).
+5. Pan/tilt calibration on a tripod.
+6. Check live-stream playback in Safari.
+7. Set the clock automatically on connect after a power loss.
 
 ## Credits
 

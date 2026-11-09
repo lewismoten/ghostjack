@@ -166,10 +166,10 @@ const server = createServer(async (req, res) => {
       if (sayTimes.length >= 10) return json(res, 429, { error: 'ten says a minute' });
       const voice = b.voice ? String(b.voice) : '';
       if (voice && !(await speech.voices()).includes(voice)) return json(res, 400, { error: 'unknown voice' });
-      const level = Math.max(0.05, Math.min(0.4, Number(b.level ?? 0.15) || 0.15));
+      const level = speech.capLevel(b.level ?? 0.035), chimeLevel = speech.capChime(b.chimeLevel ?? 0.016);
       const rate = Math.max(90, Math.min(220, Math.round(Number(b.rate ?? 140) || 140)));
       sayTimes.push(now);
-      return json(res, 202, speech.say({ text, voice, level, rate }));
+      return json(res, 202, { level, chimeLevel: b.chime === false ? null : chimeLevel, ...speech.say({ text, voice, level, rate, chime: b.chime !== false, chimeLevel }) });
     }
     const sm = /^GET \/api\/say\/([0-9a-f]{12})$/.exec(route);
     if (sm) { const j = speech.sayStatus(sm[1]); return j ? json(res, 200, j) : json(res, 404, { error: 'no such say' }); }

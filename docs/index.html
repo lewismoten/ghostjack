@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ghost Jack</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="bg" aria-hidden="true"></canvas>
+<header class="top">
+  <div>
+    <h1 class="glitch" data-text="GHOST JACK">GHOST JACK</h1>
+    <p class="lede">The port agents jack into when they need eyes in the room. Glassmouth is the voice on the line.</p>
+    <p id="device" class="device mono-l">Camera: none connected</p>
+  </div>
+  <div class="top-tools">
+    <span class="light" id="light" aria-hidden="true"></span>
+    <button id="theme" type="button" class="ghost" aria-pressed="false">Light theme</button>
+  </div>
+</header>
+<main>
+  <section id="demo" class="notice" hidden aria-labelledby="demo-h">
+    <h2 id="demo-h">No signal. The bridge is dark.</h2>
+    <p><strong>Glassmouth:</strong> "Nobody home on this end." Ghost Jack only works with its local service running (<code>npm start</code> in the project, then enter the bridge address and access token below). The camera sits on a private cable and is never reachable from the internet, so what you see here is the interface, unplugged. Look around; every control is real, it just has no eye to talk to.</p>
+  </section>
+
+  <div class="grid">
+    <section class="panel" aria-labelledby="conn-h" style="--i:0">
+      <h2 id="conn-h">Bridge</h2>
+      <form id="conn" autocomplete="off">
+        <label>Bridge address <input id="addr" type="url" value="http://localhost:8787" spellcheck="false"></label>
+        <label>Access token <input id="token" type="password" spellcheck="false" autocomplete="off"></label>
+        <button type="submit">Connect</button>
+      </form>
+      <p id="status" role="status">Not connected.</p>
+      <fieldset class="sound"><legend>Sound (off by default)</legend>
+        <label class="check"><input id="sfx" type="checkbox"> Sound effects</label>
+        <label class="check"><input id="music" type="checkbox"> Ambient music</label>
+      </fieldset>
+    </section>
+
+    <section class="panel wide" aria-labelledby="view-h" style="--i:1">
+      <div class="head"><h2 id="view-h">Live view</h2>
+        <div class="eye" id="eye" role="group" aria-label="Who has the eye: who is watching the camera right now"><span class="lamp" aria-hidden="true"></span><span id="eyeText" aria-live="polite">Nobody has the eye</span></div></div>
+      <div class="stage" id="stage">
+        <video id="video" muted playsinline hidden aria-label="Live camera video"></video>
+        <img id="snap" alt="Latest camera snapshot" hidden draggable="false">
+        <svg id="placeholder" viewBox="0 0 160 90" role="img" aria-label="No picture yet: no signal">
+          <rect width="160" height="90" class="ph-bg"/><circle cx="80" cy="45" r="16" class="ph-ring"/><circle cx="80" cy="45" r="6" class="ph-dot"/>
+          <text x="80" y="76" text-anchor="middle" class="ph-text">NO SIGNAL</text>
+        </svg>
+        <div class="radar" id="radar" hidden aria-hidden="true"></div>
+        <div class="hud" aria-hidden="true">
+          <span id="hClock">--:--:--</span>
+          <span id="hConn">OFFLINE</span>
+          <span id="hNight">NV AUTO</span>
+          <span id="hPose">P +0 T +0 est.</span>
+        </div>
+        <div id="box" hidden></div>
+      </div>
+      <div class="row">
+        <button id="live" type="button" disabled aria-pressed="false">Start live view</button>
+        <button id="sound" type="button" disabled aria-pressed="false">Sound off</button>
+        <button id="shot" type="button" disabled>Take snapshot</button>
+      </div>
+      <div class="row"><label class="check"><input id="night" type="checkbox" role="switch" disabled> Night vision: infrared on (off means automatic)</label></div>
+      <div class="row">
+        <label class="zoom">Digital zoom <input id="zoom" type="range" min="1" max="4" step="0.25" value="1" disabled> <output id="zoomOut">1x</output></label>
+        <button id="zoomReset" type="button" disabled>Reset zoom</button>
+      </div>
+      <p class="hint">On a snapshot, drag a box to zoom into that part.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="ctl-h" style="--i:2">
+      <h2 id="ctl-h">Aim</h2>
+      <canvas id="model" width="240" height="200" aria-label="Camera model, turned to the estimated aim. Drag it to nudge the camera." role="img"></canvas>
+      <p id="pose" class="mono" aria-live="polite">Pan ~+0, Tilt ~+0 (estimated, in steps)</p>
+      <div class="pad" role="group" aria-label="Pan and tilt (small steps)">
+        <button type="button" data-dx="0" data-dy="10" aria-label="Tilt up" class="up" disabled>&#9650;</button>
+        <button type="button" data-dx="-10" data-dy="0" aria-label="Pan left" class="left" disabled>&#9664;</button>
+        <button type="button" data-dx="10" data-dy="0" aria-label="Pan right" class="right" disabled>&#9654;</button>
+        <button type="button" data-dx="0" data-dy="-10" aria-label="Tilt down" class="down" disabled>&#9660;</button>
+      </div>
+      <div class="row"><button id="recenter" type="button" class="ghost">Re-center estimate</button></div>
+      <p class="hint">The camera can't report where it points, so this is counted from the moves sent. Arrow keys work when no field is focused. One small step per second.</p>
+    </section>
+
+    <section class="panel wide" aria-labelledby="info-h" style="--i:3">
+      <h2 id="info-h">Camera info and settings</h2>
+      <div class="row"><button id="infoLoad" type="button" disabled>Read camera info</button></div>
+      <div id="info" hidden>
+        <dl id="infoList" class="kv"></dl>
+        <h3>Adjust</h3>
+        <div class="sliders">
+          <label>Brightness <input id="s-brightness" type="range" min="0" max="100"> <output></output></label>
+          <label>Contrast <input id="s-contrast" type="range" min="0" max="100"> <output></output></label>
+          <label>Saturation <input id="s-saturation" type="range" min="0" max="100"> <output></output></label>
+          <label>Sharpness <input id="s-sharpness" type="range" min="0" max="10"> <output></output></label>
+          <label>Microphone level <input id="s-mic" type="range" min="0" max="100"> <output></output></label>
+        </div>
+        <div class="row"><button id="clock" type="button">Set camera clock from this computer</button></div>
+        <h3>Not enabled in this build</h3>
+        <ul class="off">
+          <li><button type="button" disabled>Wi-Fi setup</button></li>
+          <li><button type="button" disabled>Reboot</button></li>
+          <li><button type="button" disabled>Factory restore</button></li>
+          <li><button type="button" disabled>Firmware upgrade</button></li>
+          <li><button type="button" disabled>Format disk</button></li>
+          <li><button type="button" disabled>Change password</button></li>
+        </ul>
+        <p class="hint">These are shown so the list is complete. They change or can lock out the camera, so they are not wired up.</p>
+      </div>
+    </section>
+
+    <section class="panel wide glass" aria-labelledby="gm-h" style="--i:4">
+      <h2 id="gm-h">Glassmouth</h2>
+      <form id="sayForm" class="says" aria-labelledby="say-h" autocomplete="off">
+        <h3 id="say-h">Glassmouth says</h3>
+        <label>Words for the camera's speaker <input id="sayText" type="text" maxlength="300" placeholder="Up to 300 characters"></label>
+        <div class="sliders">
+          <label>Voice <select id="sayVoice"><option value="">Default voice</option></select></label>
+          <label>Level <input id="sayLevel" type="range" min="0.01" max="0.08" step="0.005" value="0.035"> <output id="sayLevelOut">0.035</output></label>
+          <label>Chime level <input id="sayChime" type="range" min="0.004" max="0.03" step="0.001" value="0.016"> <output id="sayChimeOut">0.016</output></label>
+        </div>
+        <div class="row"><button id="sayGo" type="submit" disabled>Speak</button><span id="sayStatus" role="status" class="mono-l">Quiet on the line.</span></div>
+        <p class="hint">The speaker is small and loud. Start low. One voice at a time; lines wait their turn.</p>
+      </form>
+      <p class="hint" id="gmNote"><strong>Voice relay not enabled in this build.</strong> Later, messages from agents will queue here, each labeled with who said it, and Glassmouth's own asides marked as its own.</p>
+      <div class="gm" aria-describedby="gmNote">
+        <div><h3>Queue</h3><ul class="queue" aria-label="Message queue"><li class="empty">Nothing waiting. Quiet on the line.</li></ul></div>
+        <div><h3>Reply</h3>
+          <div class="row">
+            <button type="button" disabled>Acknowledge</button>
+            <button type="button" disabled>Not now</button>
+            <button type="button" disabled>Repeat</button>
+          </div>
+          <label>Answer by typing <input type="text" disabled placeholder="Voice relay not enabled in this build"></label>
+        </div>
+        <div><h3>History</h3><ul class="queue" aria-label="Message history"><li class="empty">No messages yet.</li></ul></div>
+      </div>
+    </section>
+  </div>
+</main>
+<footer><p>Only the bridge address, token, theme and sound choices are stored, in this browser. 3D by three.js (MIT). Voice and persona: Glassmouth.</p></footer>
+<script src="app.js" type="module"></script>
+</body>
+</html>

@@ -22,4 +22,4 @@ The camera has no depth sensor (one fixed lens, no stereo or time-of-flight), an
 
 ## Order
 
-After the bridge and the speaker. The first slice is steps 1, 2 and 6 (sweep, depth and a point cloud in the 3D view); objects, scale and click-to-look come next.
+After the bridge and the speaker (both exist as of 0.1.0). The first slice is steps 1, 2 and 6 (sweep, depth and a point cloud in the 3D view); objects, scale and click-to-look come next.

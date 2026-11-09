@@ -2,7 +2,7 @@
 
 **Ghost Jack** is the port agents jack into when they need eyes in meat space. **Glassmouth** is the voice on the other end: one glass eye, a dozen voices.
 
-This character sketch came from a conversation I had with GPT-6.1 Sol (Medium) and is kept here as the guide for how Glassmouth talks, in the interface text, the chimes and later the voice relay.
+This character sketch came from a conversation I had with GPT-6.1 Sol (Medium) and is kept here as the guide for how Glassmouth talks, in the interface text, the chimes and the camera's speaker. Glassmouth can really speak now: the "Glassmouth says" box and `POST /api/say` send text through the camera (macOS voices for now); agents' messages and the voice relay come later.
 
 ## Who it is
 

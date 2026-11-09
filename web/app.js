@@ -261,7 +261,8 @@ async function loadVoices() {
     for (const v of j.voices || []) { const o = document.createElement('option'); o.value = o.textContent = v; $('sayVoice').append(o); }
   } catch { voicesLoaded = false; }
 }
-$('sayLevel').oninput = () => { $('sayLevelOut').textContent = (+$('sayLevel').value).toFixed(2); };
+$('sayChime').oninput = () => { $('sayChimeOut').textContent = (+$('sayChime').value).toFixed(3); };
+$('sayLevel').oninput = () => { $('sayLevelOut').textContent = (+$('sayLevel').value).toFixed(3); };
 const sayLine = (t) => { $('sayStatus').textContent = t; };
 let saying = false;
 $('sayForm').addEventListener('submit', async (e) => {
@@ -270,7 +271,7 @@ $('sayForm').addEventListener('submit', async (e) => {
   if (!text || saying) return;
   saying = true; $('sayGo').disabled = true;
   try {
-    const r = await api('/api/say', { method: 'POST', body: JSON.stringify({ text, voice: $('sayVoice').value || undefined, level: +$('sayLevel').value }) });
+    const r = await api('/api/say', { method: 'POST', body: JSON.stringify({ text, voice: $('sayVoice').value || undefined, level: +$('sayLevel').value, chimeLevel: +$('sayChime').value }) });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error);
     snd.sfx.relay();

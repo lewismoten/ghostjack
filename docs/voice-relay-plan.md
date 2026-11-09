@@ -53,9 +53,9 @@ It's a feature of the bridge (`src/server.mjs`), so it uses the same login, acce
 
 ## Dependencies and order
 
-1. **Output:** until the camera's speaker works (the RTDP talk channel in `docs/discovery.md` step 13), speech plays through the **Mac's speakers** instead. Everything else works now.
+1. **Output:** the camera's speaker works (`docs/discovery.md` step 13: `ccm_talk` plus an RTMP publish), and the bridge already exposes it as `POST /api/say` with one talker at a time. The relay reuses that queue; the Mac's speakers are only a fallback if the camera is unreachable.
 2. **Input:** the camera microphone over RTSP and local Whisper already work (step 13).
-3. Build order: tickets, queue and webhooks with Mac-speaker output and camera-mic input → the control-page panel → MCP tools → switch output to the camera speaker once talking works.
+3. Build order: tickets, queue and webhooks with camera-speaker output (`/api/say`, done in 0.1.0) and camera-mic input → the control-page panel (the "Glassmouth says" box is its first piece) → MCP tools → per-agent local TTS voices.
 
 ## Limits and safety
 

@@ -2,7 +2,7 @@
 
 How I found out what the Tethys 825-C is and how to reach it, using a Mac and an Ethernet cable. Each step says what to run, what it showed, and what it means. Commands marked `sudo` need an administrator password.
 
-Serial numbers, device IDs and the full hardware address are left out on purpose.
+The log runs from the first cable test (step 1) to signing in, snapshots, moving, the live stream, listening and talking through the speaker (step 13). Serial numbers, device IDs and the full hardware address are left out on purpose.
 
 ## 1. Is the USB cable data or just power?
 
@@ -188,7 +188,7 @@ All from inside the signed-in page (same `acs.send_msg` pattern as the snapshot,
 
 **Listening:** a 6-second recording from that stream (`ffmpeg -rtsp_transport tcp -i <url> -t 6 -map 0:a -c:a pcm_s16le listen.wav`), transcribed locally with `whisper-cli` (large-v3), came back as the exact sentence spoken near the camera. Level about -28 dB mean, -10 dB peak.
 
-**Microphone and speaker settings:** `ccm_mic_get` returns one mic (`dev3`, level 70, not silent). `ccm_speaker_get` with no arguments answers `InvalidArgVal` (it needs a token still to be found).
+**Microphone and speaker settings:** `ccm_mic_get` returns one mic (`dev3`, level 70, not silent). `ccm_speaker_get` with no arguments answers `InvalidArgVal` (it needs a token still to be found; the speaker turned out to take speech through `ccm_talk`, below, and `ccm_speakers_get` never answers).
 
 **Night vision (infrared LEDs and IR-cut filter):** the image settings come from `ccm_video_srcs_get` (`vss[0].extension.conf`) and are written back whole with `ccm_img_set { token: 'vs0', conf }`. Relevant fields: `mode`, `light_mode`, `day_or_night`, `red_or_white`, `ir_cut_filter_modes`, and separate `day` / `night` brightness, saturation, contrast and sharpness.
 
@@ -204,7 +204,15 @@ All from inside the signed-in page (same `acs.send_msg` pattern as the snapshot,
 3. Start with about 3 seconds of silence: the camera begins playing late and cuts off the first second or two.
 4. **One talker at a time, one address per stream.** A finished publish frees the slot, and the next `ccm_talk` works right away. An address that's requested but never published to holds the slot until the camera restarts (`ccm.system.err` until then). So always publish to every address you request.
 
-How it was found: `rtdp` (the web app's default) refused TCP on 7030 and ignored plain RTP over UDP, and there's no ONVIF backchannel on the RTSP stream. The vendor's site still hosts the 2013 Flash version of its media engine (`http://www.mipcm.com/mme/mme.swf`; the camera's own copy and the native plugins are gone). Its strings (`getMicrophone`, `publish_start`, `connectRTMP`) showed the Flash player sends the microphone by publishing RTMP. Of five formats tried with the same RTMP address flow (AAC 16 kHz, G.711 A-law and mu-law 8 kHz, ADPCM SWF 22 kHz, Nellymoser 8 and 16 kHz), **only AAC 16 kHz played**: two recordings made beside the camera and the camera's own microphone all caught "Number one, AAC…" and nothing from the others. The speaker is loud and small. A listening test of four versions (all understood) picked the clearest: slower speech (~140 words a minute), a phone-band filter (high-pass 300 Hz, low-pass 3.4 kHz), gentle compression (threshold -20 dB, ratio 3) and 64 kbps AAC; even at 30% level it was "still a bit loud" and bright. Default chain: `highpass=f=300,lowpass=f=3000,acompressor=threshold=-20dB:ratio=3:attack=5:release=100,volume=0.15`, adjustable later. The speaker volume can't be read or set (`ccm_speakers_get` doesn't answer).
+How it was found: `rtdp` (the web app's default) refused TCP on 7030 and ignored plain RTP over UDP, and there's no ONVIF backchannel on the RTSP stream. The vendor's site still hosts the 2013 Flash version of its media engine (`http://www.mipcm.com/mme/mme.swf`; the camera's own copy and the native plugins are gone). Its strings (`getMicrophone`, `publish_start`, `connectRTMP`) showed the Flash player sends the microphone by publishing RTMP. Of five formats tried with the same RTMP address flow (AAC 16 kHz, G.711 A-law and mu-law 8 kHz, ADPCM SWF 22 kHz, Nellymoser 8 and 16 kHz), **only AAC 16 kHz played**: two recordings made beside the camera and the camera's own microphone all caught "Number one, AAC…" and nothing from the others. The speaker is loud and small. A listening test of four versions (all understood) picked the clearest: slower speech (~140 words a minute), a phone-band filter (high-pass 300 Hz, low-pass 3.4 kHz), gentle compression (threshold -20 dB, ratio 3) and 64 kbps AAC; even at 30% level it was "still a bit loud" and bright. Default chain: `highpass=f=300,lowpass=f=3000,acompressor=threshold=-20dB:ratio=3:attack=5:release=100,volume=0.15`, adjustable later (superseded by the chain below). The speaker volume can't be read or set (`ccm_speakers_get` doesn't answer).
+
+**Clipping and gaps (2026-11-08, after the first bridge `say`).** Listening found the ends cut off, some distortion and silent gaps mid-speech. Fixes in `src/say.mjs`: 1.5 s of silence after the speech (the camera finishes its buffer before the publish closes); the macOS `say` render is normalized to -3 dBFS peak before the chain; a true-peak limiter last (`alimiter=limit=0.5`, about -6 dBFS; offline check: max volume -29 dB at level 0.12); default level 0.07. For the gaps, `-re` (exactly real time) is suspected of underrunning the camera's buffer, so two variants were tried through the camera: **variant one** `-readrate 1.05 -readrate_initial_burst 2` (a little faster than playback, 2 s head start, plus `-flush_packets 1 -flvflags no_duration_filesize`) and **variant two** no rate limit at all (`GJ_SAY_PACE=fast`). Both published and finished; which one plays without gaps is decided by ear (result below once heard). Final chain: `highpass=f=300,lowpass=f=3000,acompressor=threshold=-20dB:ratio=3:attack=5:release=100,volume=<level>,alimiter=limit=0.5:level=disabled`, AAC 16 kHz mono 64k, 3 s lead-in, 1.5 s tail. `GJ_SAY_PACE=ahead|fast|re` picks the pacing (default `ahead`).
+
+**Wake sound and hiss (2026-11-08).** The camera's amp wakes on sound: silence does not wake it, so the first syllable was lost. The say pipeline now plays a 1 s lead-in, then a short attention cue (a 30 ms relay click and a two-tone chime, 880 then 1320 Hz, about -18 dBFS), 0.4 s of quiet, the speech, and the 1.5 s tail; `chime:false` skips the cue. Result of the cue: one test say reached `done`; whether the first syllable now comes through is judged by ear. Known quirk: after the camera speaks, its speaker amplifier stays on with a faint hiss audible up close. It appears only after a talk session (never after a fresh boot before any talk), it has happened every time, and it is gone after a power cycle. No talk connection stays open on our side (no ffmpeg, no TCP to port 7010), and there is no ccm stop message: a session ends by closing the stream. Whether the hiss times out is not yet known.
+
+**Volume defaults (2026-11-08).** The first chime (-18 dBFS) and level 0.12 were "very loud"; the speaker is probably alarm-grade (security cameras use loud speakers to scare off intruders). Defaults now: chime peak 0.03 (-30.5 dBFS offline), speech level 0.07 (peak -35 dBFS offline), speech normalized to -3 dBFS before the chain, `alimiter` with `level=disabled` (no makeup gain). Both are API parameters (`level`, `chimeLevel`) and sliders on the page, and both are hard-capped in the bridge (level 0.15, chime 0.063 = -24 dBFS).
+
+**Lower again (2026-11-08).** Still loud, so the final defaults are speech level 0.035 (cap 0.08) and chime peak 0.016 (-36 dBFS; cap -30 dBFS). Numbers only; the pipeline is unchanged.
 
 ## Cleaning up
 
@@ -214,7 +222,7 @@ Remove the extra address when done:
 sudo ifconfig en10 -alias 192.168.187.10
 ```
 
-## Next
+## Next (written at step 1; done since: steps 11 to 13, then the bridge in `docs/bridge.md`)
 
 Log in to the web page with the password printed on the camera, from the isolated cable, and look for a stream address and the firmware version. See the README for the steps after that.
 
