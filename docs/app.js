@@ -2211,13 +2211,25 @@ async function stripScan(st, o) {
   }
   const profile = o.hd ? 'p0' : 'p1';
   const painted = new Map(); // row -> strips already on the sphere
+  let lastRows = [];
   try {
     const res = await st.stripScan(
       {
+        // the camera now and then sends a picture the browser can't decode;
+        // ask again instead of ending the scan
         snap: async () => {
-          const r = await api(`/api/snapshot.jpg?profile=${profile}`);
-          if (!r.ok) throw new Error((await r.json()).error);
-          return createImageBitmap(await r.blob());
+          let last;
+          for (let i = 0; i < 4; i++) {
+            try {
+              const r = await api(`/api/snapshot.jpg?profile=${profile}`);
+              if (!r.ok) throw new Error((await r.json()).error);
+              return await createImageBitmap(await r.blob());
+            } catch (e) {
+              last = e;
+              await sleep(300);
+            }
+          }
+          throw last;
         },
         step: async (dx, dy) => {
           if (me !== aimRun) return;
@@ -2238,6 +2250,7 @@ async function stripScan(st, o) {
           setStatus(t);
         },
         update: (s) => {
+          lastRows = s.rows;
           stripView.update(s.rows, false);
           // the sphere above the band fills in slice by slice
           if (o.paint && ready) paintStrips(s, o.step || 4, painted);
@@ -2255,6 +2268,7 @@ async function stripScan(st, o) {
   } catch (e) {
     setStatus(`Lost the angle. Strip scan failed: ${e.message}`, true);
     stripView.note(`Strip scan failed: ${e.message}`);
+    stripView.update(lastRows, true); // keep what was scanned, ready to download
   } finally {
     stripping = false;
     stripView.setRunning(false);

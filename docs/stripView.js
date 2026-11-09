@@ -43,6 +43,7 @@ export function createStripView(host, ctl) {
     stale = false,
     scrollX = 0,
     follow = true,
+    newestX = 0,
     dirty = false,
     raf = 0,
     open = false;
@@ -125,7 +126,8 @@ export function createStripView(host, ctl) {
       k = Math.min(avail / pano.height, 2),
       pw = pano.width * k,
       max = Math.max(0, pw - canvas.width);
-    if (follow) scrollX = max;
+    // follow the newest strip (on a later row it is not the panorama's right end)
+    if (follow) scrollX = newestX * k - canvas.width * 0.85;
     scrollX = Math.max(0, Math.min(max, scrollX));
     g.imageSmoothingQuality = 'high';
     g.drawImage(
@@ -213,6 +215,13 @@ export function createStripView(host, ctl) {
     // the scan's state has changed: recompose and redraw (at most once a frame)
     update(rowsNow, finished) {
       rowsRef = rowsNow;
+      dl.disabled = !rowsNow.some((r) => r.width > 0); // download any time
+      const live = rowsNow.filter((r) => r.width > 0);
+      if (live.length) {
+        const minX = Math.min(...live.map((r) => r.ox)),
+          cur = rowsNow[rowsNow.length - 1];
+        newestX = (cur.ox ?? 0) - minX + (cur.width || 0);
+      }
       stale = true;
       if (finished) {
         pano = compose(rowsRef);
@@ -226,7 +235,12 @@ export function createStripView(host, ctl) {
     note(t) {
       note.textContent = t;
     },
+    // whatever has been scanned so far, even mid-scan or after a failed one
     get panorama() {
+      if (stale) {
+        pano = compose(rowsRef);
+        stale = false;
+      }
       return pano;
     },
     get dirty() {
