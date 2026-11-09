@@ -7,6 +7,10 @@ follow [SemVer](https://semver.org/).
 
 ### Fixed
 
+- Speech through the camera works again: since 0.1.1 the bridge sent each line
+  in a few milliseconds instead of at playback pace (the pacing applied only to
+  the opening silence), so the camera played a short blip and dropped the rest.
+  The bridge now mixes the line into one file and sends that at the pace.
 - The aim pad no longer greys out an arrow because the estimated range says the
   camera is at a wall: estimated walls only show an amber hint, the range slides
   to fit when the camera keeps moving past it, and a wall is confirmed only

@@ -185,6 +185,12 @@ const toCamera = (url) => ({
     url,
   ],
 });
+// Send a finished mix to the camera, paced (the options sit right before
+// the only input, so they apply to it).
+export const sendArgs = (wav, url) => {
+  const t = toCamera(url);
+  return ['-loglevel', 'error', ...t.pre, '-i', wav, ...t.post];
+};
 export const toFile = (path) => ({
   pre: [],
   post: ['-c:a', 'pcm_s16le', '-ar', '16000', '-y', path],
@@ -209,21 +215,28 @@ const silentPublish = (url) =>
 
 async function speak(job) {
   mkdirSync(TMP, { recursive: true });
-  let file = null;
+  let file = null,
+    mixed = null;
   try {
     file = await synthesize(job.text, job);
     job.status = 'speaking';
+    // Mix first, then send the one finished file at the pace. (0.1.2 fix: the
+    // pacing options only govern the input right after them, so sending the
+    // mix straight from its pieces paced only the lead-in silence and pushed
+    // the rest in a few milliseconds; the camera played a blip and dropped it.)
+    mixed = file + '.mix.wav';
+    await run(
+      await speechArgs(
+        file,
+        job.level,
+        toFile(mixed),
+        job.chime,
+        job.chimeLevel,
+      ),
+    );
     const url = await camera.talkUrl();
     try {
-      await run(
-        await speechArgs(
-          file,
-          job.level,
-          toCamera(url),
-          job.chime,
-          job.chimeLevel,
-        ),
-      );
+      await run(sendArgs(mixed, url));
     } catch (e) {
       // Free the slot with a short silent publish to the same address.
       await silentPublish(url).catch(() => {});
@@ -235,6 +248,7 @@ async function speak(job) {
     job.error = String(e.message || e).slice(0, 120);
   } finally {
     if (file && existsSync(file)) rmSync(file, { force: true });
+    if (mixed && existsSync(mixed)) rmSync(mixed, { force: true });
   }
 }
 

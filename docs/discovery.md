@@ -455,3 +455,18 @@ README for the steps after that.
 Note (2026-11-08): this project became **Ghost Jack** (voice: Glassmouth). The
 log above is left as it was written; the camera's Keychain item is still named
 `tethys-camera`.
+
+## 16. Speech lost to pacing (2026-11-09)
+
+- **Symptom:** from 0.1.1 on, a say produced only a short sound ("a small
+  sound", "…onder", then no words), and a job finished about 2 s after it was
+  queued, too fast for a 5.5 s line.
+- **Cause:** ffmpeg's `-readrate` (and `-re`) apply only to the input that
+  follows them. 0.1.1 built the line from several lavfi inputs (silence, wake
+  pulse, chime) plus the speech file, so only the 1 s lead-in was paced: the
+  whole publish took 54 ms offline (517 ms with `-re`). The camera kept the
+  first sound and dropped the rest.
+- **Fix:** mix the line to a WAV first, then publish that single file with the
+  pacing options in front of it: 3.3 s offline for the 5.5 s line (2 s burst,
+  then 1.05x). The earlier level and wake-pulse conclusions were drawn while
+  this bug was present, so they may need another listen.
