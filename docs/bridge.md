@@ -166,3 +166,13 @@ Nobody otherwise, with a relay click (if sound effects are on). The Eye panel
 has a working "Glassmouth says" box (text, voice, level, Speak; its status line
 says "On air.", "Done. Said it." or "Line's busy.") above the disabled
 placeholder for the [voice relay](voice-relay-plan.md).
+
+## The photo sphere and the fake room
+
+Find limits also measures the lens (pan step shifts between 160 x 90 pictures,
+pinhole math, pan anchored to 350 degrees). Every picture then paints a 2048 x
+1024 sphere kept in the browser (`web/sphere.js`); the SPH key (O) opens the
+three.js view (`web/sphereView.js`) with Sweep and panorama downloads.
+`node tools/fake-room.mjs` is a fake bridge and room (a known 62 degree lens)
+and `node tools/fake-room-test.mjs <outdir>` runs the whole thing headless,
+offline and against that fake only, never the camera.
