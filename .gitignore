@@ -15,6 +15,6 @@ captures/
 !docs/images/preview.jpg
 
 # Published art (allowed through the image rules above)
-!docs/social-preview-*.png
+!docs/images/social-preview-*0x*0.png
 !web/favicon.ico
 !docs/favicon.ico

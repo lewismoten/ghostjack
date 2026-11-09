@@ -18,10 +18,10 @@
     <meta property="og:url" content="https://lewismoten.github.io/ghostjack/" />
     <meta
       property="og:image"
-      content="https://lewismoten.github.io/ghostjack/social-preview-1200x600.png"
+      content="https://lewismoten.github.io/ghostjack/images/social-preview-1280x640.png"
     />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="600" />
+    <meta property="og:image:width" content="1280" />
+    <meta property="og:image:height" content="640" />
     <meta
       property="og:image:alt"
       content="Ghost Jack: One glass eye. A dozen voices. A neon wireframe camera."
@@ -76,6 +76,13 @@
             <p id="pose" class="pose" aria-live="polite">
               Pan 0 &middot; Tilt 0 (estimated)
             </p>
+            <span id="range" class="range" hidden role="img">
+              <span class="rlab">Pan</span
+              ><span id="rangePan" class="rbar"><i></i></span>
+              <span class="rlab">Tilt</span
+              ><span id="rangeTilt" class="rbar"><i></i></span>
+              <span class="rlab">est.</span>
+            </span>
             <button
               id="recenter"
               type="button"
@@ -426,6 +433,22 @@
             hidden
           >
             <h2>Dials <small>camera adjustments</small></h2>
+            <fieldset class="sound" id="neck">
+              <legend>Neck range</legend>
+              <div class="row">
+                <button id="limitsGo" type="button" disabled>
+                  Find limits
+                </button>
+                <button id="limitsStop" type="button" class="ghost" hidden>
+                  Cancel
+                </button>
+              </div>
+              <progress id="limitsBar" max="1" value="0" hidden></progress>
+              <p id="limitsInfo" class="hint" role="status">
+                Range not measured. Find limits steps the neck to each end in
+                small steps and looks at the picture to see where it stops.
+              </p>
+            </fieldset>
             <fieldset class="sound">
               <legend>Live quality</legend>
               <label class="check"
