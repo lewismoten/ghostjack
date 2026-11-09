@@ -9,7 +9,9 @@ PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install   # once; uses Playwright's cache
 npm start                                        # http://127.0.0.1:8787
 ```
 
-It reads the device id and password from the macOS Keychain item `tethys-camera` (the item keeps its old name because it is this camera's credential; see the README) and needs ffmpeg at `/opt/homebrew/bin/ffmpeg` (`FFMPEG=` to change). Environment: `PORT` (8787), `HOST` (127.0.0.1), `CAMERA_IP` (192.168.187.254). Open `http://localhost:8787/` for the page.
+It reads the device id and password from the macOS Keychain item `tethys-camera` (the item keeps its old name because it is this camera's credential; see the README) and needs ffmpeg at `/opt/homebrew/bin/ffmpeg` (`FFMPEG=` to change).
+
+**Which ffmpeg:** the regular build is enough (tested with Homebrew's `ffmpeg` 9.0.1); `ffmpeg-full` isn't needed. The bridge uses only: the RTSP demuxer over TCP, stream copy of H.264 and AAC into fragmented MP4, the AAC encoder (the camera's speaker plays only AAC 16 kHz), the FLV muxer with RTMP output, and the `highpass`, `lowpass`, `acompressor`, `volume`, `alimiter` and `concat` filters. Check a build with `ffmpeg -hide_banner -encoders | grep aac` and `ffmpeg -hide_banner -protocols | grep rtmp`. If both builds are installed, Homebrew keeps `ffmpeg-full` out of the path, and `FFMPEG=/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg npm start` selects it. Environment: `PORT` (8787), `HOST` (127.0.0.1), `CAMERA_IP` (192.168.187.254). Open `http://localhost:8787/` for the page.
 
 ## The token (the ICE)
 
