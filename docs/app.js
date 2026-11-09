@@ -706,6 +706,7 @@ function autoSnapSoon(ms) {
   }, ms);
 }
 async function move(dx, dy, quiet) {
+  closeGrid();
   if (!connected || finding || Date.now() - lastMove < 1100) return false;
   [dx, dy] = room(dx, dy);
   if (!dx && !dy) {
@@ -942,7 +943,7 @@ async function aimTo(tp, tt, fast) {
 // A travel move: one long step at full speed (re-center, saved shots). The
 // camera can't stop it once sent, so nothing else moves until it should have
 // arrived (the bridge's estimate of the trip).
-async function travel(dx, dy, me) {
+async function travel(dx, dy, me, quiet) {
   if (!connected || finding) return;
   while (Date.now() - lastMove < 1100)
     await new Promise((r) => setTimeout(r, 100));
@@ -950,7 +951,7 @@ async function travel(dx, dy, me) {
   aim = { p: pan + dx, t: tilt + dy };
   scene?.setMoving(true);
   showPose();
-  setStatus(glass.line('moveStart'));
+  if (!quiet) setStatus(glass.line('moveStart'));
   try {
     const r = await api('/api/travel', {
       method: 'POST',
@@ -978,6 +979,7 @@ async function travel(dx, dy, me) {
     learnSpeed(units, settledAt ? settledAt - sentAt : 0);
     lastMove = Date.now();
     api('/api/travel/done', { method: 'POST' }).catch(() => {});
+    if (quiet) return;
     if (!liveOn) await snapshot(true);
     setStatus(glass.line('moveDone'));
   } catch (e) {
@@ -1051,6 +1053,7 @@ function renderKeys() {
   box.classList.toggle('setting', setting);
   $('keySet').setAttribute('aria-pressed', String(setting));
   $('keySet').disabled = !connected;
+  $('keyAll').disabled = !connected;
   for (const b of box.querySelectorAll('[data-slot]')) {
     const n = +b.dataset.slot,
       s = shots?.[n - 1];
@@ -1101,6 +1104,7 @@ async function pressSlot(n) {
     setMode(false);
     return askName(n);
   }
+  closeGrid();
   // an empty slot is the center: pan 0, tilt 0, no zoom
   const s = shots[n - 1] ?? { name: 'center', pan: 0, tilt: 0, crop: null };
   atSlot = n;
@@ -1124,6 +1128,127 @@ async function pressSlot(n) {
   }
   await aimTo(s.pan, s.tilt, true);
 }
+// All nine shots at once: visit every distinct shot (empty slots share the
+// center) on the shortest route from here, take a small picture at each, and
+// fill a 3 by 3 grid over the picture. With at most nine stops, trying every
+// order is quick. Any other move or Esc stops it.
+const CENTER = { name: 'center', pan: 0, tilt: 0, crop: null };
+function shortestRoute(from, stops) {
+  const cost = (a, b) => tripUnits(b.pan - a.pan, b.tilt - a.tilt);
+  const idx = stops.map((_, i) => i);
+  let best = idx.slice(),
+    bestCost = Infinity;
+  const used = Array(stops.length).fill(false),
+    path = [];
+  (function go(at, sum) {
+    if (sum >= bestCost) return;
+    if (path.length === stops.length) {
+      bestCost = sum;
+      best = path.slice();
+      return;
+    }
+    for (const i of idx) {
+      if (used[i]) continue;
+      used[i] = true;
+      path.push(i);
+      go(stops[i], sum + cost(at, stops[i]));
+      path.pop();
+      used[i] = false;
+    }
+  })(from, 0);
+  return best.map((i) => stops[i]);
+}
+function gridCell(n) {
+  return document.querySelector(`#grid [data-cell="${n}"]`);
+}
+function closeGrid() {
+  if ($('grid').hidden) return;
+  $('grid').hidden = true;
+  for (const b of document.querySelectorAll('#grid [data-cell]')) {
+    const img = b.querySelector('img');
+    if (img.src) URL.revokeObjectURL(img.src);
+    img.removeAttribute('src');
+    img.hidden = true;
+    b.classList.remove('now');
+  }
+}
+async function survey() {
+  if (!connected || finding) return;
+  const me = ++aimRun;
+  holdStop();
+  stopLive();
+  closeGrid();
+  // distinct stops, each with the slots that share it
+  const stops = [];
+  for (let n = 1; n <= 9; n++) {
+    let s = shots[n - 1] ?? CENTER;
+    if (limits)
+      s = {
+        ...s,
+        pan: Math.max(limits.panMin, Math.min(limits.panMax, s.pan)),
+        tilt: Math.max(limits.tiltMin, Math.min(limits.tiltMax, s.tilt)),
+      };
+    const key = `${s.pan},${s.tilt},${s.crop ?? ''}`;
+    const have = stops.find((x) => x.key === key);
+    if (have) have.slots.push(n);
+    else stops.push({ ...s, key, slots: [n] });
+    const b = gridCell(n);
+    b.querySelector('span').textContent =
+      `${n} ${shots[n - 1]?.name ?? 'center'}`;
+    b.setAttribute(
+      'aria-label',
+      `Go to shot ${n}: ${shots[n - 1]?.name ?? 'center'}`,
+    );
+  }
+  $('grid').hidden = false;
+  const route = shortestRoute({ pan, tilt }, stops);
+  setStatus(`All shots: ${route.length} stops on the shortest route.`);
+  for (const [k, st] of route.entries()) {
+    if (me !== aimRun || !connected) return;
+    for (const n of st.slots) gridCell(n).classList.add('now');
+    const dx = Math.round(st.pan - pan),
+      dy = Math.round(st.tilt - tilt);
+    if (Math.abs(dx) >= 2 || Math.abs(dy) >= 2) {
+      await travel(dx, dy, me, true);
+      if (me !== aimRun) return;
+    }
+    try {
+      const q = st.crop
+        ? `&crop=${st.crop.map((v) => v.toFixed(4)).join(',')}`
+        : '';
+      const r = await api(`/api/snapshot.jpg?profile=p1${q}`);
+      if (!r.ok) throw new Error((await r.json()).error);
+      const blob = await r.blob();
+      for (const n of st.slots) {
+        const img = gridCell(n).querySelector('img');
+        img.src = URL.createObjectURL(blob);
+        img.hidden = false;
+      }
+    } catch (e) {
+      setStatus(`Lost the angle. Picture failed: ${e.message}`, true);
+    }
+    for (const n of st.slots) gridCell(n).classList.remove('now');
+    setStatus(`All shots: ${k + 1} of ${route.length}.`);
+  }
+  if (me === aimRun) {
+    atSlot = route.at(-1)?.slots[0] ?? 0;
+    renderKeys();
+    setStatus('All shots taken. Press one to go there.');
+  }
+}
+$('keyAll').onclick = () => survey();
+for (const b of document.querySelectorAll('#grid [data-cell]'))
+  b.onclick = () => {
+    const n = +b.dataset.cell;
+    closeGrid();
+    pressSlot(n);
+  };
+$('gridClose').onclick = () => {
+  aimRun++; // stop a survey still running
+  closeGrid();
+  setStatus('Grid closed.');
+};
+
 // Name the shot in a small form that takes the strip's place (no pop-up).
 var naming = 0;
 function askName(n) {
@@ -1190,6 +1315,11 @@ document.addEventListener('keydown', (e) => {
   if (m) {
     e.preventDefault();
     pressSlot(+m[1]);
+  } else if (e.code === 'KeyA') {
+    e.preventDefault();
+    survey();
+  } else if (e.key === 'Escape' && !$('grid').hidden) {
+    $('gridClose').click();
   } else if (e.code === 'KeyS') {
     e.preventDefault();
     setMode(!setting);

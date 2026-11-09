@@ -40,6 +40,11 @@ follow [SemVer](https://semver.org/).
 
 ### Added
 
+- ALL (key A): a small picture of every saved shot in a 3 by 3 grid over the
+  picture. The page visits the distinct shots on the shortest route from where
+  the camera is (empty slots share one picture of the center), fast trips
+  between them, and fills each tile as it arrives; press a tile to go to that
+  shot, Esc closes.
 - Saved shots: nine numbered buttons under the picture, like the preset keypad
   on a camera controller. A number goes to that shot's pan, tilt and zoom (an
   empty slot goes to the center); SET, then a number, saves the current view

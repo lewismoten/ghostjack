@@ -142,6 +142,49 @@
               </div>
               <div id="box" hidden></div>
               <div
+                id="grid"
+                class="shotgrid"
+                hidden
+                role="group"
+                aria-label="All nine shots: press one to go there; Esc closes"
+              >
+                <button type="button" data-cell="1">
+                  <img alt="" hidden /><span>1</span>
+                </button>
+                <button type="button" data-cell="2">
+                  <img alt="" hidden /><span>2</span>
+                </button>
+                <button type="button" data-cell="3">
+                  <img alt="" hidden /><span>3</span>
+                </button>
+                <button type="button" data-cell="4">
+                  <img alt="" hidden /><span>4</span>
+                </button>
+                <button type="button" data-cell="5">
+                  <img alt="" hidden /><span>5</span>
+                </button>
+                <button type="button" data-cell="6">
+                  <img alt="" hidden /><span>6</span>
+                </button>
+                <button type="button" data-cell="7">
+                  <img alt="" hidden /><span>7</span>
+                </button>
+                <button type="button" data-cell="8">
+                  <img alt="" hidden /><span>8</span>
+                </button>
+                <button type="button" data-cell="9">
+                  <img alt="" hidden /><span>9</span>
+                </button>
+                <button
+                  type="button"
+                  id="gridClose"
+                  class="gridclose"
+                  aria-label="Close the grid"
+                >
+                  &times;
+                </button>
+              </div>
+              <div
                 class="pad"
                 role="group"
                 aria-label="Pan and tilt (small steps)"
@@ -238,6 +281,15 @@
               disabled
             >
               <b>SET</b><span>save</span>
+            </button>
+            <button
+              type="button"
+              id="keyAll"
+              class="all"
+              title="All nine shots at once, in a 3 by 3 grid (A)"
+              disabled
+            >
+              <b>ALL</b><span>grid</span>
             </button>
           </div>
           <form id="shotForm" class="shotform" hidden autocomplete="off">
