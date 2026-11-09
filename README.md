@@ -29,22 +29,13 @@ Open `http://localhost:8787/`, paste the token and Jack in (Connect). Flatline m
 
 The camera stays on a private cable with no cloud account, and no pictures, video, audio or camera credentials from it are ever committed here. Rules for anyone (or any agent) working on the code are in [AGENTS.md](AGENTS.md).
 
-## What's known about the camera
+## Supported cameras
 
-| | |
-| --- | --- |
-| Label | TETHYS, Model 825-C, SKU TT000074, DC 5V 1.2A |
-| Ports | 5 V input (USB cable, power only), reset button, microSD slot, RJ45 Ethernet (100 Mbps) |
-| Software | MIPC family (the maker's phone app); firmware v5.3.3.2101181516 (2021-01-18), internal model F300; web server "MWS 0.01", web app mipc v2n 8.1 |
-| Network | Asks for DHCP; meanwhile uses a built-in address, 192.168.187.254 |
-| Open ports | 80 (MIPC web app and the `ccm_*` API), 554 (RTSP: H.264 1080p and AAC 16 kHz; one connection per `ccm_play` address), 7010 (RTMP: stream, and the publish for talking), 7030 (the maker's rtdp; refuses TCP) |
-| Maker's FAQ | Says local HTTP/RTSP video isn't supported and it works only through the MIPC app. In practice that's wrong: it all works locally once signed in. |
-| Pan and tilt | Steps queue and run one after another, each with its own speed (`ptz0`); a step of 10 at speed 100 is a good nudge. Position is not reported. |
-| Night vision | `mode` night (forced infrared) or automatic; no white light on this model. |
-| Lens | Fixed: no optical zoom or focus (digital zoom only). |
-| Speaker | AAC 16 kHz mono over an RTMP publish; the amp wakes on sound; one address per stream, one talker at a time; about 3.5% level through the filter chain. |
-| Clock | No battery: resets to 1971 on power-up; the bridge can set it. |
-| Microphone | `as0` / `dev3`, level 70. |
+| Camera | Status | Notes |
+| --- | --- | --- |
+| [Tethys 825-C](docs/cameras/tethys-825-c.md) (MIPC family) | Working: see, listen, aim, night vision, speak | The first and only camera so far. |
+
+Each camera gets its own page in `docs/cameras/` with what's known about it, how Ghost Jack talks to it, and its quirks.
 
 ## Roadmap
 
