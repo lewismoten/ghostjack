@@ -50,16 +50,19 @@ const median = (a) => {
 };
 // How far the picture slid between two 160 x 90 grays, as fractions of the frame: { sx, sy } (signed,
 // content movement), or null when the match is not clear. Brute force over offsets, mean absolute
-// difference over the overlap (every other pixel); the main axis searches +-45 percent, the other +-8.
-export function imageShift(a, b, axis) {
+// difference over the overlap (every other pixel); the main axis searches +-45 percent (opts.reach), the
+// other +-8; opts.minOverlap (default 0.35) is the least overlap a candidate may have.
+export function imageShift(a, b, axis, opts = {}) {
+  const reach = opts.reach ?? 0.45,
+    minOverlap = opts.minOverlap ?? 0.35;
   let mean = 0;
   for (let i = 0; i < a.length; i += 7) mean += a[i];
   mean /= Math.ceil(a.length / 7);
   let v = 0;
   for (let i = 0; i < a.length; i += 7) v += (a[i] - mean) ** 2;
   if (Math.sqrt(v / Math.ceil(a.length / 7)) < 6) return null; // a blank view: nothing to match
-  const mx = Math.round(HW * (axis === 'pan' ? 0.45 : 0.08)),
-    my = Math.round(HH * (axis === 'tilt' ? 0.45 : 0.08)),
+  const mx = Math.round(HW * (axis === 'pan' ? reach : 0.08)),
+    my = Math.round(HH * (axis === 'tilt' ? reach : 0.08)),
     scores = [];
   let best = Infinity,
     bx = 0,
@@ -71,7 +74,7 @@ export function imageShift(a, b, axis) {
         x1 = Math.min(HW, HW + dx),
         y0 = Math.max(0, dy),
         y1 = Math.min(HH, HH + dy);
-      if ((x1 - x0) * (y1 - y0) < HW * HH * 0.35) continue;
+      if ((x1 - x0) * (y1 - y0) < HW * HH * minOverlap) continue;
       let sum = 0,
         n = 0;
       for (let y = y0; y < y1; y += 2) {

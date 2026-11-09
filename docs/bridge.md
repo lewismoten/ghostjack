@@ -177,3 +177,18 @@ three.js view (`web/sphereView.js`) with Sweep and panorama downloads.
 `node tools/fake-room.mjs` is a fake bridge and room (a known 62 degree lens)
 and `node tools/fake-room-test.mjs <outdir>` runs the whole thing headless,
 offline and against that fake only, never the camera.
+
+### Strip scan
+
+The sphere view's **Strip scan** (`web/strips.js`, `web/stripView.js`) does not
+trust the estimated pose. The camera turns in small steps (4 units); from each
+settled picture it keeps a thin vertical strip from the middle (the part the
+lens bends least), and each strip's x position is the sum of the sideways shifts
+measured between the pictures (coarse on 160 x 90, refined at full size on the
+central band). Real measurements: step shifts are uneven (a 10-unit step moved
+the picture 5 to 13 px of a 320 px frame), and the first one or two steps after
+a turn-around can move nothing (backlash). So a row starts with two throwaway
+steps and a wall needs three still measurements in a row. One fast trip goes to
+a row's start; rows are stacked at the measured vertical shift. The panorama
+lives in memory until you press Download panorama.
+`node tools/strip-scan-test.mjs <outdir>` checks one row against the fake room.

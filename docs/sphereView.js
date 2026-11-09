@@ -42,6 +42,9 @@ export function createView(host, ctl) {
     'Sweep: fill the sphere. The camera visits every angle of its range and takes a small picture at each',
     () => (sweeping ? ctl.stopSweep() : ctl.sweep()),
   );
+  btn('Strip scan', 'Strip scan: a panorama from thin slices', () =>
+    ctl.stripScan(),
+  );
   btn('Panorama', 'Download panorama: the painted part as a picture', () =>
     ctl.exportJpg(false),
   );

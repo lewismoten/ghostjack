@@ -217,6 +217,10 @@ export function startFakeRoom({
       data = Buffer.from(
         String(data).replace('STEP_MS = 1300', 'STEP_MS = 250'),
       );
+    if (fast && f.endsWith('strips.js'))
+      data = Buffer.from(
+        String(data).replace('STRIP_WAIT_MS = 1100', 'STRIP_WAIT_MS = 120'),
+      );
     res.writeHead(200, {
       'Content-Type': TYPES[extname(f)] || 'application/octet-stream',
       'Cache-Control': 'no-store',
