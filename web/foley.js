@@ -254,4 +254,23 @@ export const foley = {
       wet.disconnect();
     }, 3500);
   },
+  // Tape reel: a motor thunk and a short spin-up (start) or a spin-down and clunk (stop).
+  reel(start = true) {
+    if (!on()) return;
+    out();
+    burst(0, 0.04, { freq: 900, q: 1, gain: 0.3 });
+    tone(start ? 70 : 120, 0, 0.5, {
+      type: 'sawtooth',
+      gain: 0.05,
+      to: start ? 140 : 40,
+      dest: (out(), bus),
+    });
+    for (let i = 0; i < 5; i++)
+      burst(0.1 + i * (start ? 0.07 : 0.1), 0.03, {
+        freq: 1600,
+        q: 3,
+        gain: 0.07,
+      });
+    if (!start) burst(0.6, 0.05, { freq: 500, q: 1, gain: 0.25 });
+  },
 };

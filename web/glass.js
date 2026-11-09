@@ -28,6 +28,9 @@ export const LINES = {
   ],
   moveStart: ['On my way.', 'Turning. Hang on.'],
   moveDone: ['There.', 'There. That is the angle.'],
+  recStart: ["Tape's rolling.", 'Rolling tape.'],
+  recStop: ["Tape's in the can.", "That's a wrap. Tape's in the can."],
+  recCap: ['Out of tape.', 'Out of tape. Ten minutes is the reel.'],
   say: ['Patching you through.', 'Opening the speaker line.'],
 };
 const pick = (list, avoid) => {

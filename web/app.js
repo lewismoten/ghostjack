@@ -4,6 +4,8 @@ import { foley } from './foley.js';
 import * as glass from './glass.js';
 import * as live from './live.js';
 import { netpath } from './netpath.js';
+import * as tape from './tape.js';
+import { createRecorder } from './record.js';
 
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -76,6 +78,7 @@ const controls = [
   'live',
   'sound',
   'shot',
+  'rec',
   'zoom',
   'zoomReset',
   'night',
@@ -240,9 +243,10 @@ function showImage(src) {
   $('snap').src = src;
   $('snap').dataset.url = src;
   $('snap').hidden = false;
-  $('placeholder').hidden = true;
+  $('placeholder').setAttribute('hidden', '');
   $('video').hidden = true;
 }
+let lastShot = null; // the picture on screen, with any digital-zoom crop already applied
 async function snapshot() {
   stopLive();
   setStatus(glass.line('snapshot'));
@@ -251,7 +255,9 @@ async function snapshot() {
   try {
     const r = await api('/api/snapshot.jpg' + q);
     if (!r.ok) throw new Error((await r.json()).error);
-    showImage(URL.createObjectURL(await r.blob()));
+    lastShot = await r.blob();
+    $('shotSave').disabled = $('shotDl').disabled = false;
+    showImage(URL.createObjectURL(lastShot));
     setStatus(
       crop
         ? 'Hold that frame. Zoomed snapshot taken.'
@@ -301,7 +307,7 @@ async function startLive() {
   v.muted = $('sound').getAttribute('aria-pressed') !== 'true';
   v.hidden = false;
   $('snap').hidden = true;
-  $('placeholder').hidden = true;
+  $('placeholder').setAttribute('hidden', '');
   $('live').textContent = 'Stop live';
   $('live').setAttribute('aria-pressed', 'true');
   setEye('You');
@@ -359,6 +365,138 @@ $('sound').onclick = () => {
       .catch(() => {});
 };
 $('shot').onclick = snapshot;
+$('shotDl').onclick = () => {
+  if (lastShot) tape.download(lastShot, tape.stamp('jpg'));
+};
+$('shotSave').onclick = async () => {
+  if (!lastShot) return;
+  try {
+    await tape.add({ kind: 'image', blob: lastShot, name: tape.stamp('jpg') });
+    setStatus(
+      `Saved to the Tape (${tape.bytes(lastShot.size)}). It stays in this browser.`,
+    );
+    renderTape();
+  } catch {
+    setStatus(
+      'This browser would not keep it (storage is blocked). Use Download.',
+      true,
+    );
+  }
+};
+
+// Recording: REC button, red blinking dot and timer in the video HUD, lines from Glassmouth.
+const clock = (n) => `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`;
+const recorder = createRecorder({
+  api,
+  video: $('video'),
+  isLive: () => liveOn,
+  on: {
+    start: (mode) => {
+      $('rec').setAttribute('aria-pressed', 'true');
+      $('rec').textContent = 'Stop REC';
+      $('hRec').hidden = false;
+      $('hRecT').textContent = '0:00';
+      foley.reel(true);
+      setStatus(
+        `${glass.line('recStart')} Recording ${mode === 'bridge' ? 'on the bridge (MP4)' : 'in this browser (WebM)'}. Press Stop REC when done.`,
+      );
+    },
+    tick: (n) => {
+      $('hRecT').textContent = clock(n);
+    },
+    end: ({ capped, kept, size }) => {
+      endRec();
+      foley.reel(false);
+      setStatus(
+        `${glass.line(capped ? 'recCap' : 'recStop')} ${kept ? `Saved to the Tape (${tape.bytes(size)}), kept only in this browser.` : 'Downloaded (this browser would not keep it).'}`,
+      );
+      renderTape();
+    },
+    error: (m) => {
+      endRec();
+      setStatus(`Lost the angle. Recording: ${m}.`, true);
+    },
+  },
+});
+function endRec() {
+  $('rec').setAttribute('aria-pressed', 'false');
+  $('rec').textContent = 'REC';
+  $('hRec').hidden = true;
+}
+$('rec').onclick = () => (recorder.active ? recorder.stop() : recorder.start());
+
+// The Tape tab: everything saved, with thumbnails, view/play, Download and Delete.
+async function renderTape() {
+  const list = $('tapeList');
+  let items;
+  try {
+    items = await tape.list();
+  } catch {
+    $('tapeUsed').textContent = 'Storage unavailable in this browser';
+    list.replaceChildren();
+    return;
+  }
+  for (const u of list.querySelectorAll('[data-url]'))
+    URL.revokeObjectURL(u.dataset.url);
+  const total = items.reduce((n, i) => n + i.size, 0);
+  $('tapeUsed').textContent = items.length
+    ? `${items.length} saved, ${tape.bytes(total)} used`
+    : 'Empty';
+  $('tapeClear').disabled = !items.length;
+  list.replaceChildren(
+    ...items.map((it) => {
+      const url = URL.createObjectURL(it.blob);
+      const li = document.createElement('li');
+      const media = document.createElement(
+        it.kind === 'image' ? 'img' : 'video',
+      );
+      media.src = url;
+      media.dataset.url = url;
+      if (it.kind === 'image') media.alt = `Saved snapshot ${it.name}`;
+      else {
+        media.controls = true;
+        media.preload = 'metadata';
+        media.setAttribute('aria-label', `Saved recording ${it.name}`);
+      }
+      const box = document.createElement('div');
+      const name = document.createElement('div');
+      name.textContent = `${it.name} (${tape.bytes(it.size)})`;
+      const row = document.createElement('div');
+      row.className = 'row';
+      const mk = (label, fn) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = label;
+        b.onclick = fn;
+        return b;
+      };
+      row.append(
+        mk('View', () =>
+          it.kind === 'image'
+            ? (showImage(URL.createObjectURL(it.blob)),
+              (lastShot = it.blob),
+              ($('shotSave').disabled = $('shotDl').disabled = false))
+            : media.requestFullscreen?.().catch(() => media.play()),
+        ),
+        mk('Download', () => tape.download(it.blob, it.name)),
+        mk('Delete', async () => {
+          await tape.remove(it.id);
+          renderTape();
+        }),
+      );
+      box.append(name, row);
+      li.append(media, box);
+      return li;
+    }),
+  );
+}
+$('tapeClear').onclick = async () => {
+  if (!confirm('Delete every saved snapshot and recording from this browser?'))
+    return;
+  await tape.clear();
+  renderTape();
+};
+renderTape();
 
 // Estimated aim: counted from the moves sent (the camera cannot report its position). Units are steps.
 let pan = +store.get('gm-pan', 0) || 0,

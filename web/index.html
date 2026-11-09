@@ -104,6 +104,7 @@
                 <span id="hClock">--:--:--</span>
                 <span id="hConn">FLATLINE</span>
                 <span id="hNight">NV AUTO</span>
+                <span id="hRec" hidden><i></i> REC <b id="hRecT">0:00</b></span>
               </div>
               <div id="box" hidden></div>
               <div
@@ -169,6 +170,11 @@
               Sound off
             </button>
             <button id="shot" type="button" disabled>Snapshot</button>
+            <button id="shotSave" type="button" disabled>Save</button>
+            <button id="shotDl" type="button" disabled>Download</button>
+            <button id="rec" type="button" disabled aria-pressed="false">
+              REC
+            </button>
             <label class="check"
               ><input id="night" type="checkbox" role="switch" disabled />
               <span title="Off means automatic">Night vision</span></label
@@ -297,6 +303,17 @@
               title="Deck: sound, theme and about"
             >
               Deck
+            </button>
+            <button
+              role="tab"
+              id="tab-tape"
+              data-tab="tape"
+              aria-controls="p-tape"
+              aria-selected="false"
+              tabindex="-1"
+              title="Tape: saved snapshots and recordings"
+            >
+              Tape
             </button>
           </div>
           <div
@@ -465,6 +482,27 @@
                 </ul>
               </div>
             </div>
+          </div>
+          <div
+            role="tabpanel"
+            id="p-tape"
+            aria-labelledby="tab-tape"
+            tabindex="0"
+            hidden
+          >
+            <h2>Tape <small>saved snapshots and recordings</small></h2>
+            <p class="hint">
+              Pictures and recordings may show people. They are kept only in
+              this browser (IndexedDB) and leave this computer only if you
+              download them.
+            </p>
+            <div class="row">
+              <output id="tapeUsed" class="mono-l">Empty</output>
+              <button id="tapeClear" type="button" class="ghost">
+                Clear all
+              </button>
+            </div>
+            <ul id="tapeList" class="tapelist"></ul>
           </div>
           <div
             role="tabpanel"
