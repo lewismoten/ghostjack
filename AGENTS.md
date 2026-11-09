@@ -22,7 +22,13 @@ camera, the room or the person in it.
 
 - It stays on an isolated cable (straight into the computer, built-in address
   192.168.187.254) unless the owner decides otherwise. No cloud account, no
-  internet access, no Wi-Fi setup.
+  internet connection of its own, no Wi-Fi setup. Only the bridge talks to it,
+  behind its access token, and by default the bridge listens only on 127.0.0.1.
+  `tailscale serve` shares it with the owner's own tailnet devices (reachable
+  over the internet through Tailscale, so only as private as the tailnet and the
+  token).
+- Never use `tailscale funnel` or port forwarding for the bridge: that would put
+  the camera's eye, ears and mouth on the public internet.
 - Look before touching: no factory reset, firmware change, disk format, password
   change or reboot from code. Those stay disabled in the page.
 - When you change a setting to test it, read it back and restore the original.

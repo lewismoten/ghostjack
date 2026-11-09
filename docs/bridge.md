@@ -101,6 +101,16 @@ that address and the token into the Bridge box. The bridge allows cross-origin
 requests only from `https://lewismoten.github.io` and answers Private Network
 Access preflights. Stop sharing with `tailscale serve reset`.
 
+Who can reach it: the camera has no internet connection of its own (private
+cable, no cloud account, no route out); only the bridge talks to it, behind its
+access token (the ICE), and by default the bridge listens only on this computer
+(127.0.0.1). With `tailscale serve`, your own Tailscale devices can reach the
+bridge, and so the camera, over the internet through Tailscale's encrypted
+network. It is only as private as your tailnet and the token.
+
+**Warning: never use `tailscale funnel` (or port forwarding) for the bridge.**
+That would put the camera's eye, ears and mouth on the public internet.
+
 ## GitHub Pages (the demo page)
 
 `web/` is the source of the control page; the bridge serves it. GitHub Pages can

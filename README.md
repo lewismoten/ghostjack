@@ -58,9 +58,16 @@ and Tailscale: [docs/bridge.md](docs/bridge.md). Changes:
 
 ## Privacy
 
-The camera stays on a private cable with no cloud account, and no pictures,
-video, audio or camera credentials from it are ever committed here. Rules for
-anyone (or any agent) working on the code are in [AGENTS.md](AGENTS.md).
+The camera has no internet connection of its own: it sits on a private cable
+with no cloud account and no route out. Only the bridge talks to it, behind its
+access token (the ICE). By default the bridge listens only on this computer
+(127.0.0.1). If you share it with `tailscale serve`, your own Tailscale devices
+can reach it over the internet through Tailscale's encrypted network, so it is
+only as private as your tailnet and the token. Never use `tailscale funnel` or
+port forwarding for the bridge: that would put the camera's eye, ears and mouth
+on the public internet. No pictures, video, audio or camera credentials from the
+camera are ever committed here. Rules for anyone (or any agent) working on the
+code are in [AGENTS.md](AGENTS.md).
 
 ## Supported cameras
 
