@@ -38,6 +38,9 @@ follow [SemVer](https://semver.org/).
   after each move settles (held arrows snap once, at the end).
 - Jacking out (or losing the line) leaves the last frame on screen in grayscale,
   like a dead feed; color returns on Jack in.
+- Coming back flatlined shows the last known frame (a small copy kept only in
+  this browser) in grayscale under a SIGNAL LOST bar with its age; Forget the
+  ICE removes it.
 
 - Find limits (Dials tab, only when you press it): the page steps the neck to
   each end in steps of 10, comparing small pictures, and records the range

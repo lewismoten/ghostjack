@@ -102,6 +102,8 @@ function setConnected(on) {
   $('jackOut').disabled = !on;
   // Flatlined: whatever was last on screen stays, drained to grayscale.
   $('stage').classList.toggle('flat', !on);
+  $('lastBar').hidden = on || $('snap').hidden;
+  if (!on) showAge();
   $('limitsGo').disabled = !on || finding;
   for (const id of [
     's-brightness',
@@ -267,6 +269,7 @@ async function snapshot(auto = false) {
     const r = await api('/api/snapshot.jpg' + q);
     if (!r.ok) throw new Error((await r.json()).error);
     lastShot = await r.blob();
+    rememberFrame(lastShot);
     $('shotSave').disabled = $('shotDl').disabled = false;
     showImage(URL.createObjectURL(lastShot));
     setStatus(
@@ -1373,6 +1376,60 @@ $('forgetIce').onclick = () => {
   }
   token = '';
   $('token').value = '';
+  try {
+    localStorage.removeItem('lastFrame');
+  } catch {
+    /* private window */
+  }
   if (connected) setConnected(false);
   setStatus('ICE forgotten. This browser no longer holds the token.');
 };
+
+// Last known frame: a small copy of the latest snapshot, kept only in this
+// browser, shown in grayscale under a SIGNAL LOST bar when the deck opens
+// flatlined. Forget the ICE removes it too.
+
+async function rememberFrame(blob) {
+  try {
+    const bmp = await createImageBitmap(blob);
+    const w = 640;
+    const h = Math.round((bmp.height / bmp.width) * w);
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    c.getContext('2d').drawImage(bmp, 0, 0, w, h);
+    const data = c.toDataURL('image/jpeg', 0.7);
+    localStorage.setItem('lastFrame', JSON.stringify({ at: Date.now(), data }));
+  } catch {
+    /* storage full or private window: just don't remember */
+  }
+}
+function lastFrame() {
+  try {
+    return JSON.parse(localStorage.getItem('lastFrame') || 'null');
+  } catch {
+    return null;
+  }
+}
+function ago(ms) {
+  const m = Math.round(ms / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  return h < 48 ? `${h} h ago` : `${Math.round(h / 24)} days ago`;
+}
+function showAge() {
+  const f = lastFrame();
+  $('lastAge').textContent = f ? `(${ago(Date.now() - f.at)})` : '';
+}
+function showLastFrame() {
+  const f = lastFrame();
+  if (!f || connected || !$('snap').hidden) return;
+  $('snap').src = f.data;
+  $('snap').hidden = false;
+  $('placeholder').setAttribute('hidden', '');
+  $('snap').alt = 'Last known camera frame, shown while not connected';
+  showAge();
+  $('lastBar').hidden = false;
+}
+showLastFrame();
