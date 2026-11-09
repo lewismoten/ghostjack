@@ -125,6 +125,10 @@ follow [SemVer](https://semver.org/).
 
 ### Changed
 
+- Strip scan edges: each slice is also matched up or down a few pixels (so a
+  wobbling camera keeps straight lines), its brightness is matched to the slice
+  before it (no stripes when the camera adjusts exposure), and seams blend over
+  6 px.
 - Strip scan rows and Find limits use only what the pictures show: walls are
   steps whose measured shift is about zero (after two steps for gear slack),
   rows start at the bottom and at the left wall and climb by measured height,
