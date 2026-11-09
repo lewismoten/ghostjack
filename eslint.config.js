@@ -12,7 +12,7 @@ export default [
   },
   {
     // the sphere test's page.evaluate callbacks run in the browser
-    files: ['tools/fake-room-test.mjs'],
+    files: ['tools/fake-room-test.mjs', 'tools/strip-scan-test.mjs'],
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
   },
   {

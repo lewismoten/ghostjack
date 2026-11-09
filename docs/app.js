@@ -2028,6 +2028,7 @@ async function openSphere() {
       goto: gotoSphere,
       sweep,
       stopSweep: () => aimRun++,
+      stripScan: openStrips,
       exportJpg: downloadPanorama,
       close: closeSphere,
     });
@@ -2066,7 +2067,7 @@ async function downloadPanorama(full) {
 async function sweep() {
   if (!lens || !limits)
     return sphereView?.note('Sweep needs the lens: run Find limits first.');
-  if (!connected || finding || sweeping) return;
+  if (!connected || finding || sweeping || stripping) return;
   const me = ++aimRun;
   sweeping = true;
   sphereView?.setSweeping(true);
@@ -2127,6 +2128,159 @@ async function sweep() {
     if (me !== aimRun) sphereView?.note('Sweep stopped.');
   }
 }
+// Strip scan (strips.js, stripView.js): a panorama from thin slices of small steps; positions come from the
+// pictures, not from the pose estimate.
+var stripView = null,
+  stripping = false;
+globalThis.gjStrip = () => stripView?.panorama ?? null;
+async function openStrips() {
+  if (!stripView) {
+    const [m, st] = await Promise.all([
+      import('./stripView.js'),
+      import('./strips.js'),
+    ]);
+    stripView = m.createStripView($('stage'), {
+      start: (o) => stripScan(st, o),
+      stop: () => aimRun++,
+      download: downloadStrips,
+      close: closeStrips,
+    });
+  }
+  stripView.show();
+}
+function closeStrips() {
+  if (stripping) aimRun++;
+  stripView?.hide();
+}
+async function downloadStrips() {
+  const c = stripView?.panorama;
+  if (!c) return;
+  const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.92)),
+    d = new Date(),
+    z = (n) => String(n).padStart(2, '0'),
+    name = `ghostjack-strips-${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}${z(d.getSeconds())}.jpg`,
+    a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  stripView.note(`Saved ${name}.`);
+}
+async function sendMove(dx, dy) {
+  for (let tries = 0; tries < 5; tries++) {
+    while (Date.now() - lastMove < 1100) await sleep(100);
+    lastMove = Date.now();
+    const r = await api('/api/move', {
+      method: 'POST',
+      body: JSON.stringify({ dx, dy, speed: 100 }),
+    });
+    if (r.status !== 429) {
+      if (!r.ok) throw new Error((await r.json()).error);
+      return;
+    }
+    await sleep(400);
+  }
+  throw new Error('the bridge kept refusing moves');
+}
+async function stripScan(st, o) {
+  if (!connected || finding || sweeping || stripping) return;
+  const ready = lens && limits;
+  if (o.rows && !ready)
+    stripView.note('Rows needs Find limits first; doing one row.');
+  const me = ++aimRun;
+  stripping = true;
+  stripView.setRunning(true);
+  holdStop();
+  stopLive();
+  const rowsAt = [tilt];
+  if (o.rows && ready) {
+    // rows spaced so their pictures overlap by about a third (0.68 of the picture height)
+    const gap = (0.68 * lens.fovV) / degPerTilt(),
+      n = Math.max(
+        1,
+        Math.ceil((limits.tiltMax - limits.tiltMin) / gap - 1e-6) + 1,
+      );
+    rowsAt.length = 0;
+    for (let i = 0; i < n; i++)
+      rowsAt.push(
+        n === 1
+          ? (limits.tiltMin + limits.tiltMax) / 2
+          : limits.tiltMin + ((limits.tiltMax - limits.tiltMin) * i) / (n - 1),
+      );
+  }
+  const profile = o.hd ? 'p0' : 'p1';
+  try {
+    const res = await st.stripScan(
+      {
+        snap: async () => {
+          const r = await api(`/api/snapshot.jpg?profile=${profile}`);
+          if (!r.ok) throw new Error((await r.json()).error);
+          return createImageBitmap(await r.blob());
+        },
+        step: async (dx, dy) => {
+          if (me !== aimRun) return;
+          await sendMove(dx, dy);
+        },
+        pose: () => ({ pan, tilt }),
+        moved: (dx, dy) => {
+          pan += dx; // only steps that were seen to move the picture count
+          tilt += dy;
+        },
+        travel: async (p, t) => {
+          if (me !== aimRun) return;
+          await travel(Math.round(p - pan), Math.round(t - tilt), me, true);
+        },
+        cancelled: () => me !== aimRun || !connected,
+        note: (t) => {
+          stripView.note(t);
+          setStatus(t);
+        },
+        update: (s) => stripView.update(s.rows, false),
+      },
+      {
+        step: o.step || 4,
+        rows: rowsAt,
+        panStart: ready ? limits.panMin : null,
+        hd: o.hd,
+      },
+    );
+    stripView.update(res.rows, true);
+    if (o.paint && ready && !res.cancelled) paintStrips(res, o.step || 4);
+  } catch (e) {
+    setStatus(`Lost the angle. Strip scan failed: ${e.message}`, true);
+    stripView.note(`Strip scan failed: ${e.message}`);
+  } finally {
+    stripping = false;
+    stripView.setRunning(false);
+  }
+}
+// Best effort: each strip is the center meridian of a pinhole picture at its step's pan, so it goes on the
+// sphere as a thin picture that many degrees wide, with rows mapped to latitude through the lens.
+function paintStrips(res, step) {
+  const rad = Math.PI / 180,
+    sp = sphereNow(),
+    th = Math.tan((lens.fovH * rad) / 2);
+  sp.calib = calibNow();
+  for (const row of res.rows) {
+    if (!row.strips.length || row.firstPanUnits === undefined) continue;
+    for (const s of row.strips) {
+      const t = document.createElement('canvas');
+      t.width = s.w;
+      t.height = row.h;
+      t.getContext('2d').drawImage(row.c, s.x, 0, s.w, row.h, 0, 0, s.w, row.h);
+      const cx = s.srcX + s.w / 2, // where in its picture the strip's middle was
+        yaw = (row.firstPanUnits + s.step * step) * degPer(),
+        off = Math.atan(((cx - row.picW / 2) / (row.picW / 2)) * th) / rad;
+      sp.paint(
+        t,
+        yaw + off,
+        row.tilt * degPerTilt(),
+        (2 * Math.atan((th * s.w) / (row.picW / 1))) / rad,
+        lens.fovV,
+      );
+    }
+  }
+}
 $('keySphere').onclick = () =>
   sphereView?.isOpen
     ? closeSphere()
@@ -2142,7 +2296,8 @@ document.addEventListener('keydown', (e) => {
   if (e.code === 'KeyO') {
     e.preventDefault();
     $('keySphere').click();
-  } else if (e.key === 'Escape' && sphereView?.isOpen) closeSphere();
+  } else if (e.key === 'Escape' && stripView?.isOpen) stripView.escape();
+  else if (e.key === 'Escape' && sphereView?.isOpen) closeSphere();
 });
 
 // Find limits: only on the button; steps to each end and back to the middle (limits.js).
