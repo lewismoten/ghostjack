@@ -173,6 +173,44 @@ export function createView(host, ctl) {
     pts.push(pts[0]);
     return pts;
   };
+  // The picture's own border (a pinhole camera turned to yaw, pitch), as yaw
+  // and pitch points: the same basis sphere.js paints with, so the outline
+  // hugs the painted picture instead of bowing along latitude lines.
+  const lensFrame = (yaw, pitch, fovH, fovV) => {
+    const y = yaw * rad,
+      p = pitch * rad,
+      th = Math.tan((fovH * rad) / 2),
+      tv = Math.tan((fovV * rad) / 2);
+    const f = [
+        Math.cos(p) * Math.sin(y),
+        Math.sin(p),
+        Math.cos(p) * Math.cos(y),
+      ],
+      r = [Math.cos(y), 0, -Math.sin(y)],
+      u = [-Math.sin(p) * Math.sin(y), Math.cos(p), -Math.sin(p) * Math.cos(y)];
+    const pts = [];
+    const corner = [
+      [-1, 1],
+      [1, 1],
+      [1, -1],
+      [-1, -1],
+      [-1, 1],
+    ];
+    for (let c = 0; c < 4; c++)
+      for (let i = 0; i < 24; i++) {
+        const t = i / 24,
+          nx = corner[c][0] + (corner[c + 1][0] - corner[c][0]) * t,
+          ny = corner[c][1] + (corner[c + 1][1] - corner[c][1]) * t;
+        const d = [0, 1, 2].map((k) => f[k] + nx * th * r[k] + ny * tv * u[k]);
+        const l = Math.hypot(...d);
+        const a = Math.atan2(d[0], d[2]) / rad;
+        // unwrapped around the picture's yaw, so the outline never jumps at 180
+        const ya = yaw + ((((a - yaw + 180) % 360) + 360) % 360) - 180;
+        pts.push([ya, Math.asin(d[1] / l) / rad]);
+      }
+    pts.push(pts[0]);
+    return pts;
+  };
   function drawOverlay() {
     const { w, h } = size(),
       g = overlay.getContext('2d');
@@ -189,17 +227,7 @@ export function createView(host, ctl) {
     if (p) {
       g.strokeStyle = '#19e3ff';
       g.lineWidth = 2;
-      line(
-        g,
-        rect(
-          p.yaw - p.fovH / 2,
-          p.yaw + p.fovH / 2,
-          p.pitch - p.fovV / 2,
-          p.pitch + p.fovV / 2,
-        ),
-        w,
-        h,
-      );
+      line(g, lensFrame(p.yaw, p.pitch, p.fovH, p.fovV), w, h);
       const c = project(p.yaw, p.pitch, w, h);
       if (c) {
         g.beginPath();
