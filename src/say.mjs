@@ -10,9 +10,11 @@ import * as camera from './camera.mjs';
 
 const FFMPEG = process.env.FFMPEG || '/opt/homebrew/bin/ffmpeg';
 const TMP = join(dirname(fileURLToPath(import.meta.url)), '..', 'captures');
-// Phone band, gentle compression, level, then a true-peak limiter last (about -6 dBFS).
-const CHAIN = (level) =>
-  `highpass=f=300,lowpass=f=3000,acompressor=threshold=-20dB:ratio=3:attack=5:release=100,volume=${level},alimiter=limit=0.5:level=disabled`;
+// Phone band and gentle compression first (0.1.1: measured on their own output, so the gain that
+// normalizes the speech is exact), then gain and level, then a true-peak limiter (about -6 dBFS).
+const BAND =
+  'highpass=f=300,lowpass=f=3000,acompressor=threshold=-20dB:ratio=3:attack=5:release=100';
+const LIMIT = (level) => `volume=${level},alimiter=limit=0.5:level=disabled`;
 // How fast to send: 'ahead' = a little faster than playback with a 2 s head start (the camera's buffer
 // stays full), 'fast' = no limit, 're' = exactly real time (underran in testing; see docs/discovery.md).
 const PACE = {
@@ -87,23 +89,33 @@ async function peakDb(file) {
 // wakes on sound, so without the cue the first syllable is spent waking it (silence does not wake it).
 // The same cue is the voice relay's chime (docs/voice-relay-plan.md).
 // Hard caps: the speaker is alarm-loud, so no caller or page can ask for more than this.
-export const MAX_LEVEL = 0.08,
+// 0.1.1: speech is normalized to -3 dBFS after the phone band and compressor, then scaled by level,
+// so the speech peak is about level x 0.71 (0.03 = -33.5 dBFS). Before, the band and compressor took
+// another 9 dB off after the normalizing and the speech peaked 6 dB BELOW the chime. The chime peak
+// is also held at least 9 dB under the speech peak (CHIME_BELOW), whatever the chime slider says.
+export const MAX_LEVEL = 0.05,
   MAX_CHIME = 0.0316; // speech volume; chime peak (-30 dBFS)
+export const CHIME_BELOW = 0.35; // chime peak <= speech peak x this (-9 dB)
 export const capLevel = (v) =>
-  Math.max(0.01, Math.min(MAX_LEVEL, Number(v) || 0.035));
+  Math.max(0.01, Math.min(MAX_LEVEL, Number(v) || 0.03));
 export const capChime = (v) =>
-  Math.max(0.004, Math.min(MAX_CHIME, Number(v) || 0.016));
+  Math.max(0.004, Math.min(MAX_CHIME, Number(v) || 0.008));
+export const chimeFor = (level, chime) =>
+  Math.min(capChime(chime), 0.7079 * capLevel(level) * CHIME_BELOW);
 
 export async function speechArgs(
   file,
   rawLevel,
   out,
   chime = true,
-  rawChime = 0.016,
+  rawChime = 0.008,
 ) {
   const level = capLevel(rawLevel),
-    chimeLevel = capChime(rawChime);
-  const gain = (-3 - (await peakDb(file))).toFixed(2);
+    chimeLevel = chimeFor(level, rawChime);
+  const banded = file + '.band.wav';
+  await run(['-loglevel', 'error', '-i', file, '-af', BAND, '-y', banded]);
+  const gain = (-3 - (await peakDb(banded))).toFixed(2);
+  rmSync(banded, { force: true });
   const sil = (t) => `anullsrc=r=16000:cl=mono:d=${t}`;
   const tone = (f, d) => `sine=f=${f}:r=16000:d=${d}`;
   const inputs = [sil(1)];
@@ -126,7 +138,7 @@ export async function speechArgs(
     order.push(`[c${i}]`);
   }
   parts.push(
-    `[${fileIdx}:a]aresample=16000,volume=${gain}dB,${CHAIN(level)}[sp]`,
+    `[${fileIdx}:a]aresample=16000,${BAND},volume=${gain}dB,${LIMIT(level)}[sp]`,
     `[${tailIdx}:a]aresample=16000[tl]`,
   );
   order.push('[sp]', '[tl]');
@@ -220,7 +232,7 @@ export function say({
   level,
   rate,
   chime = true,
-  chimeLevel = 0.016,
+  chimeLevel = 0.008,
 }) {
   const id = randomBytes(6).toString('hex');
   const job = {

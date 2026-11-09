@@ -271,8 +271,8 @@ const server = createServer(async (req, res) => {
       const voice = b.voice ? String(b.voice) : '';
       if (voice && !(await speech.voices()).includes(voice))
         return json(res, 400, { error: 'unknown voice' });
-      const level = speech.capLevel(b.level ?? 0.035),
-        chimeLevel = speech.capChime(b.chimeLevel ?? 0.016);
+      const level = speech.capLevel(b.level),
+        chimeLevel = speech.chimeFor(level, b.chimeLevel);
       const rate = Math.max(
         90,
         Math.min(220, Math.round(Number(b.rate ?? 140) || 140)),
