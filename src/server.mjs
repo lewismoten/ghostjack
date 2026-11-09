@@ -135,15 +135,25 @@ async function cropJpeg(jpg, w, h, x, y) {
   });
 }
 
-async function stream(req, res) {
-  const url = await camera.streamUrl(); // never logged or sent to the client
-  // Fragmented MP4: H.264 copied as-is (no re-encode), AAC copied, flushed per fragment.
+async function stream(req, res, profile) {
+  const url = await camera.streamUrl(profile); // never logged or sent to the client
+  // Fragmented MP4: H.264 copied as-is (no re-encode), AAC copied. Low latency (0.1.2): no input
+  // buffering, a short probe, and a fragment every 0.5 s (not only at keyframes: the camera sends one
+  // about every 4.8 s, which made the picture 5 to 10 s late), each flushed as soon as it is written.
   const p = spawn(
     FFMPEG,
     [
       '-hide_banner',
       '-loglevel',
       'error',
+      '-fflags',
+      'nobuffer',
+      '-flags',
+      'low_delay',
+      '-probesize',
+      '32k',
+      '-analyzeduration',
+      '0',
       '-rtsp_transport',
       'tcp',
       '-i',
@@ -152,6 +162,10 @@ async function stream(req, res) {
       'copy',
       '-movflags',
       'frag_keyframe+empty_moov+default_base_moof',
+      '-frag_duration',
+      '500000',
+      '-flush_packets',
+      '1',
       '-f',
       'mp4',
       'pipe:1',
@@ -303,7 +317,12 @@ const server = createServer(async (req, res) => {
       const j = speech.sayStatus(sm[1]);
       return j ? json(res, 200, j) : json(res, 404, { error: 'no such say' });
     }
-    if (route === 'GET /api/stream') return await stream(req, res);
+    if (route === 'GET /api/stream')
+      return await stream(
+        req,
+        res,
+        url.searchParams.get('profile') === 'p1' ? 'p1' : 'p0',
+      );
     if (route === 'GET /api/record') return json(res, 200, rec.state());
     if (route === 'POST /api/record/start') {
       try {

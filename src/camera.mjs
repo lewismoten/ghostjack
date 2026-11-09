@@ -167,11 +167,12 @@ export function status() {
 }
 
 // A fresh rtsp address; each works for one connection only.
-export function streamUrl() {
+// profile 'p0' = main stream (1080p), 'p1' = sub stream (smaller, faster)
+export function streamUrl(profile = 'p0') {
   return run(async () => {
     const msg = await call('ccm_play', {
       setup: { stream: 'RTP_Unicast', trans: { proto: 'rtsp' } },
-      token: 'p0',
+      token: profile === 'p1' ? 'p1' : 'p0',
     });
     const url = msg.uri?.url || msg.uri;
     if (typeof url !== 'string' || !url.startsWith('rtsp://'))
