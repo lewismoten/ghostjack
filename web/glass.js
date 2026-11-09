@@ -5,34 +5,37 @@
 // time (a new line cancels a stale one), ambient music ducked meanwhile. Nothing speaks before a click.
 import * as snd from './sound.js';
 
+// Wording rules (so a text-to-speech voice cannot misread or mishear a line): no heteronyms (live, read,
+// lead, record, close, wind, tear, minute, object, present, content, use), no abbreviations or symbols,
+// no words that run together into something rude when spoken fast (no "shift" or "duck"), and none that
+// sound like the camera speaker's alarms. Keep lines short and plain.
 export const LINES = {
-  jackIn: [
-    "Line's live.",
-    'Jacked in. Line is live.',
-    'Shift starts now. Line is live.',
-  ],
+  jackIn: ["Clocked in. Line's open.", 'On the air.', "Line's hot."],
   jackFail: [
     'No carrier.',
     'Nothing on the line.',
     'No carrier. Check the cable.',
   ],
   lost: ['Lost the line.', 'Line went flat. Lost it.'],
-  snapshot: ['Hold on...', 'Hold still...', 'Easy now...'],
+  snapshot: ['Hold on.', 'Hold still.', 'Easy now.'],
   live: ['Warming up the eye.', 'Shuffling the reels.', 'Give it a second.'],
   liveOpen: ["Eye's open.", "There's the eye.", "Eye's open. Nobody blink."],
   liveStop: ["Eye's shut.", 'Closing the eye.'],
   nightOn: ['Lights out. Going infrared.', 'Lights out. Infrared it is.'],
   nightAuto: [
-    'Lights back on the auto.',
-    'Back to auto. Lights are my own again.',
+    'Lights back on. Auto mode.',
+    'Back to auto. The lights are my own again.',
   ],
   moveStart: ['On my way.', 'Turning. Hang on.'],
   moveDone: ['There.', 'There. That is the angle.'],
   recStart: ["Tape's rolling.", 'Rolling tape.'],
   recStop: ["Tape's in the can.", "That's a wrap. Tape's in the can."],
-  recCap: ['Out of tape.', 'Out of tape. Ten minutes is the reel.'],
+  recCap: ['Out of tape.', 'Out of tape. The reel is full.'],
   say: ['Patching you through.', 'Opening the speaker line.'],
 };
+// Safety net: spoken text only (the status line keeps the original). Lines should not need it.
+const PRONOUNCE = [[/\blive\b/gi, 'lyve']];
+const forVoice = (t) => PRONOUNCE.reduce((x, [re, to]) => x.replace(re, to), t);
 const pick = (list, avoid) => {
   const pool = list.length > 1 ? list.filter((l) => l !== avoid) : list;
   return pool[Math.floor(Math.random() * pool.length)];
@@ -56,7 +59,7 @@ if (synth) {
 function speak(text) {
   if (!synth || !snd.state.voice) return;
   synth.cancel(); // never more than one line queued: a stale one is dropped
-  const u = new SpeechSynthesisUtterance(text);
+  const u = new SpeechSynthesisUtterance(forVoice(text));
   if (voice) u.voice = voice;
   u.lang = voice?.lang || 'en-US';
   u.rate = 0.88;

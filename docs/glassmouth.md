@@ -70,19 +70,27 @@ ducked meanwhile. Each event has a few variants picked at random, and every line
 also appears in the status line, so nothing depends on sound. (The camera's
 speaker still does the real talking through `POST /api/say`.)
 
-| Event                                 | Lines                                                                                         |
-| ------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Jack in                               | "Line's live." / "Jacked in. Line is live." / "Shift starts now. Line is live."               |
-| No answer                             | "No carrier." / "Nothing on the line." / "No carrier. Check the cable."                       |
-| Line lost                             | "Lost the line." / "Line went flat. Lost it."                                                 |
-| Snapshot                              | "Hold on..." / "Hold still..." / "Easy now..." (then a shutter click)                         |
-| Go live                               | "Warming up the eye." / "Shuffling the reels." / "Give it a second." (projector or CRT sound) |
-| The picture is playing                | "Eye's open." / "There's the eye." / "Eye's open. Nobody blink."                              |
-| Stop live                             | "Eye's shut." / "Closing the eye."                                                            |
-| Night vision on / auto                | "Lights out. Going infrared." / "Lights back on the auto."                                    |
-| Camera starts / reaches a dragged aim | "On my way." / "There."                                                                       |
-| Say through the camera                | "Patching you through." / "Opening the speaker line."                                         |
-| Recording starts / ends / cap         | "Tape's rolling." / "Tape's in the can." / "Out of tape."                                     |
+| Event                                 | Lines                                                                                   |
+| ------------------------------------- | --------------------------------------------------------------------------------------- |
+| Jack in                               | "Clocked in. Line's open." / "On the air." / "Line's hot."                              |
+| No answer                             | "No carrier." / "Nothing on the line." / "No carrier. Check the cable."                 |
+| Line lost                             | "Lost the line." / "Line went flat. Lost it."                                           |
+| Snapshot                              | "Hold on." / "Hold still." / "Easy now." (then a shutter click)                         |
+| Go live                               | "Warming up the eye." / "Shuffling the reels." / "Give it a second." (projector or CRT) |
+| The picture is playing                | "Eye's open." / "There's the eye." / "Eye's open. Nobody blink."                        |
+| Stop live                             | "Eye's shut." / "Closing the eye."                                                      |
+| Night vision on / auto                | "Lights out. Going infrared." / "Lights back on. Auto mode."                            |
+| Camera starts / reaches a dragged aim | "On my way." / "There."                                                                 |
+| Say through the camera                | "Patching you through." / "Opening the speaker line."                                   |
+| Recording starts / ends / full        | "Tape's rolling." / "Tape's in the can." / "Out of tape."                               |
+
+Wording rules for any spoken line, because a text-to-speech voice can misread or
+mishear: no words with two pronunciations (live, read, lead, record, close,
+wind, tear, minute, object, present, content, use), no abbreviations or symbols,
+no words that run together into something rude when spoken fast, and nothing
+that sounds like an alarm. The page also has a tiny pronunciation map for spoken
+text only (`PRONOUNCE` in `web/glass.js`), a safety net the current lines do not
+need.
 
 The sounds are original Web Audio foley (noise, oscillators, filters), no
 samples, under the Sound effects switch with their own small levels.
