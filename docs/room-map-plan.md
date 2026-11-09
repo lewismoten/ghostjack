@@ -56,6 +56,16 @@ Once the room map exists, aiming stops being "press left four times" and becomes
   to show the outline over the stitched room picture, without depth, so this can
   start early.
 
+## Showing new discoveries
+
+Whenever the map learns something new (an unseen part of the room comes into
+view, or an object is recognized for the first time), the live picture shows it
+happening: the newly mapped region briefly turns into an animated neon wireframe
+(edges and depth contours traced over that part of the image, with any new
+object's label drawn in), then dissolves back into the normal video. Already
+mapped areas stay plain, so the effect marks only what's new. Reduced motion: a
+brief outline and label instead of the animation.
+
 ## Limits to keep in mind
 
 - Depth from one picture is a good guess at shape and order, not a measurement.
