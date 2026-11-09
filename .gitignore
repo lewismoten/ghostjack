@@ -13,3 +13,8 @@ page-text.txt
 node_modules/
 captures/
 !docs/images/preview.jpg
+
+# Published art (allowed through the image rules above)
+!docs/social-preview-*.png
+!web/favicon.ico
+!docs/favicon.ico
