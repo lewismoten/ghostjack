@@ -4,5 +4,6 @@ import { cpSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-for (const f of readdirSync(join(root, 'web'))) cpSync(join(root, 'web', f), join(root, 'docs', f));
+for (const f of readdirSync(join(root, 'web')))
+  cpSync(join(root, 'web', f), join(root, 'docs', f));
 console.log('web/ copied into docs/');

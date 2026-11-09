@@ -1,12 +1,18 @@
 # Finding the camera on the network
 
-How I found out what the Tethys 825-C is and how to reach it, using a Mac and an Ethernet cable. Each step says what to run, what it showed, and what it means. Commands marked `sudo` need an administrator password.
+How I found out what the Tethys 825-C is and how to reach it, using a Mac and an
+Ethernet cable. Each step says what to run, what it showed, and what it means.
+Commands marked `sudo` need an administrator password.
 
-The log runs from the first cable test (step 1) to signing in, snapshots, moving, the live stream, listening and talking through the speaker (step 13). Serial numbers, device IDs and the full hardware address are left out on purpose.
+The log runs from the first cable test (step 1) to signing in, snapshots,
+moving, the live stream, listening and talking through the speaker (step 13).
+Serial numbers, device IDs and the full hardware address are left out on
+purpose.
 
 ## 1. Is the USB cable data or just power?
 
-Plug the camera's USB cable into the computer and give it about 30 seconds to boot (this one speaks when it's ready). Then list the USB devices:
+Plug the camera's USB cable into the computer and give it about 30 seconds to
+boot (this one speaks when it's ready). Then list the USB devices:
 
 ```sh
 ioreg -p IOUSB -w0 | grep -o '+-o [^<]*<class [A-Za-z]*'
@@ -14,11 +20,14 @@ ioreg -p IOUSB -w0 | grep -o '+-o [^<]*<class [A-Za-z]*'
 
 (`system_profiler SPUSBDataType` shows the same, with more detail.)
 
-**Result:** nothing new appeared, even after the camera booted and spoke. The cable is power only, matching "DC 5V" on the label. It can't be a USB webcam.
+**Result:** nothing new appeared, even after the camera booted and spoke. The
+cable is power only, matching "DC 5V" on the label. It can't be a USB webcam.
 
 ## 2. Put it on an isolated cable
 
-Connect an Ethernet cable from the camera straight to the computer's Ethernet port (here a dock port, interface `en10`), not to the router. That keeps it off the internet and the home network.
+Connect an Ethernet cable from the camera straight to the computer's Ethernet
+port (here a dock port, interface `en10`), not to the router. That keeps it off
+the internet and the home network.
 
 Find the interface and confirm the link:
 
@@ -27,7 +36,9 @@ networksetup -listallhardwareports
 ifconfig en10 | grep -E "status|media|inet"
 ```
 
-**Result:** `status: active`, `100baseTX <full-duplex>` (the camera's 100 Mbps port). With no router on the cable, the Mac gave itself a self-assigned 169.254.x.x address.
+**Result:** `status: active`, `100baseTX <full-duplex>` (the camera's 100 Mbps
+port). With no router on the cable, the Mac gave itself a self-assigned
+169.254.x.x address.
 
 ## 3. Does it speak IPv6?
 
@@ -37,11 +48,13 @@ Ping every device on that cable at once:
 ping6 -c 3 ff02::1%en10
 ```
 
-**Result:** no answer from the camera. It doesn't use IPv6, so we need to learn its IPv4 address.
+**Result:** no answer from the camera. It doesn't use IPv6, so we need to learn
+its IPv4 address.
 
 ## 4. Listen to what it says
 
-Without a router, a camera usually asks for an address and announces itself. Listening needs administrator rights, and sends nothing:
+Without a router, a camera usually asks for an address and announces itself.
+Listening needs administrator rights, and sends nothing:
 
 ```sh
 sudo tcpdump -i en10 -n -e -c 30
@@ -49,19 +62,26 @@ sudo tcpdump -i en10 -n -e -c 30
 
 **Result:**
 
-- DHCP requests twice a second from its hardware address (a locally assigned one, not a registered maker's ID). It wants an address and gets no answer.
-- Broadcasts to UDP port 3703 **from 192.168.187.254**. So it already has a built-in address to fall back on.
+- DHCP requests twice a second from its hardware address (a locally assigned
+  one, not a registered maker's ID). It wants an address and gets no answer.
+- Broadcasts to UDP port 3703 **from 192.168.187.254**. So it already has a
+  built-in address to fall back on.
 
 ## 5. Read its announcement
 
-Give the computer an address on the camera's network, on that cable only (Wi-Fi is unaffected), then look inside the broadcasts:
+Give the computer an address on the camera's network, on that cable only (Wi-Fi
+is unaffected), then look inside the broadcasts:
 
 ```sh
 sudo ifconfig en10 alias 192.168.187.10 255.255.255.0
 sudo tcpdump -i en10 -n -X -c 4 udp port 3703
 ```
 
-**Result:** a text message, `HelloRequest {_msysenv:{...}, Nick:"Camera-…", type:"IPC", sn:"…", XAddrs:"192.168.187.254", listen_port:0}`. That's the MIPC app's own discovery protocol (port 3703, next to ONVIF's 3702 but not the same). It names the camera, its type (IPC, an IP camera) and its serial.
+**Result:** a text message,
+`HelloRequest {_msysenv:{...}, Nick:"Camera-…", type:"IPC", sn:"…", XAddrs:"192.168.187.254", listen_port:0}`.
+That's the MIPC app's own discovery protocol (port 3703, next to ONVIF's 3702
+but not the same). It names the camera, its type (IPC, an IP camera) and its
+serial.
 
 ## 6. Which ports are open?
 
@@ -74,7 +94,8 @@ for p in 21 22 23 80 81 443 554 1935 3702 5000 6668 7070 8000 8001 8080 8081 808
 done
 ```
 
-**Result:** it answers ping (under 1.2 ms). **Port 80 and port 554 are open**, which the maker's FAQ says shouldn't be.
+**Result:** it answers ping (under 1.2 ms). **Port 80 and port 554 are open**,
+which the maker's FAQ says shouldn't be.
 
 ## 7. What answers on those ports?
 
@@ -85,7 +106,8 @@ curl -s -D - -o page.html http://192.168.187.254/
 grep -o -i 'title>[^<]*' page.html
 ```
 
-**Result:** `Server: MWS 0.01`, a login page titled "IPC" that loads `mipc.v2n.min.js?v2n.8.1.1508311025` (MIPC web app 8.1, built 2015-08-31).
+**Result:** `Server: MWS 0.01`, a login page titled "IPC" that loads
+`mipc.v2n.min.js?v2n.8.1.1508311025` (MIPC web app 8.1, built 2015-08-31).
 
 RTSP's list of supported commands, without logging in:
 
@@ -93,31 +115,57 @@ RTSP's list of supported commands, without logging in:
 printf 'OPTIONS rtsp://192.168.187.254:554/ RTSP/1.0\r\nCSeq: 1\r\n\r\n' | nc -w 8 192.168.187.254 554
 ```
 
-**Result:** the connection opens, but no reply in 8 seconds. Port 554 may need a stream path or a login first, or it may not be RTSP at all.
+**Result:** the connection opens, but no reply in 8 seconds. Port 554 may need a
+stream path or a login first, or it may not be RTSP at all.
 
 ## 8. The browser can't reach it, but curl can
 
-`curl http://192.168.187.254/` returned the page, yet Chrome just spun. A headless Chromium run from Terminal also loaded it fine: a dark login page with a language button, the user name already filled in (the camera's serial), a password box and "Stay signed in".
+`curl http://192.168.187.254/` returned the page, yet Chrome just spun. A
+headless Chromium run from Terminal also loaded it fine: a dark login page with
+a language button, the user name already filled in (the camera's serial), a
+password box and "Stay signed in".
 
-**Cause:** macOS's Local Network privacy setting. Terminal (and anything run from it) had permission to reach local devices; Chrome didn't.
+**Cause:** macOS's Local Network privacy setting. Terminal (and anything run
+from it) had permission to reach local devices; Chrome didn't.
 
-**Fix (when the entry exists):** System Settings → Privacy & Security → Local Network → turn on the browser, then quit it completely (Cmd+Q) and reopen. Type the address with `http://`. If the browser still upgrades to https, allow the insecure page (the camera has no https).
+**Fix (when the entry exists):** System Settings → Privacy & Security → Local
+Network → turn on the browser, then quit it completely (Cmd+Q) and reopen. Type
+the address with `http://`. If the browser still upgrades to https, allow the
+insecure page (the camera has no https).
 
 ## 9. Chrome still fails: it switched to https
 
-Chrome's error was `https://192.168.187.254/ is unreachable. ERR_ADDRESS_UNREACHABLE`, with only "provisional headers" in the network panel. Note the `https`: Chrome upgraded the typed `http://` address, and the camera has no https (port 443 is closed). Safari didn't upgrade and showed the login page. On this Mac there was no Local Network entry under Privacy & Security to change, so the permission wasn't the cause here.
+Chrome's error was
+`https://192.168.187.254/ is unreachable. ERR_ADDRESS_UNREACHABLE`, with only
+"provisional headers" in the network panel. Note the `https`: Chrome upgraded
+the typed `http://` address, and the camera has no https (port 443 is closed).
+Safari didn't upgrade and showed the login page. On this Mac there was no Local
+Network entry under Privacy & Security to change, so the permission wasn't the
+cause here.
 
-**Fix:** `chrome://settings/security` → turn off **Always use secure connections**, then type `http://192.168.187.254/` again (an Incognito window helps if Chrome remembered the upgrade).
+**Fix:** `chrome://settings/security` → turn off **Always use secure
+connections**, then type `http://192.168.187.254/` again (an Incognito window
+helps if Chrome remembered the upgrade).
 
 ## 10. The printed password doesn't work
 
-The login page fills in the user ID (the serial) by itself, but the password on the label was rejected. A secondhand camera usually means the previous owner changed it. Don't guess passwords. Hold the rear RESET button for about 10 seconds while it's powered (until it speaks or restarts) to restore factory settings, including the printed password; firmware isn't touched. Afterward, check whether the camera's built-in address changed (repeat step 4).
+The login page fills in the user ID (the serial) by itself, but the password on
+the label was rejected. A secondhand camera usually means the previous owner
+changed it. Don't guess passwords. Hold the rear RESET button for about 10
+seconds while it's powered (until it speaks or restarts) to restore factory
+settings, including the printed password; firmware isn't touched. Afterward,
+check whether the camera's built-in address changed (repeat step 4).
 
 ## 11. After logging in: version, and how the web app gets video
 
-After a factory reset and a new password, the web page showed **software version v5.3.3.2101181516** (built 2021-01-18) and **model F300** (the internal model; the label says 825-C).
+After a factory reset and a new password, the web page showed **software version
+v5.3.3.2101181516** (built 2021-01-18) and **model F300** (the internal model;
+the label says 825-C).
 
-Port 554 stays silent for every stream path tried (`live/ch00_0`, `live/ch00_1`, `11`, `12`, `onvif1`, `stream1`, `h264`, `ch0_0.h264`), and `/video.mjpg`, `/video.mpeg` and `/snapshot.jpg` are 404. So there's no plain RTSP or MJPEG address without a session.
+Port 554 stays silent for every stream path tried (`live/ch00_0`, `live/ch00_1`,
+`11`, `12`, `onvif1`, `stream1`, `h264`, `ch0_0.h264`), and `/video.mjpg`,
+`/video.mpeg` and `/snapshot.jpg` are 404. So there's no plain RTSP or MJPEG
+address without a session.
 
 The web app's script shows how it does it (it's served gzipped; unzip it first):
 
@@ -130,15 +178,25 @@ grep -o '.\{200\}ccm_pic_get.jpg.\{200\}' mipc.js
 
 What it shows:
 
-- It talks to the camera with `ccm_*` messages (111 of them: login, Wi-Fi, date, disk, devices and more).
-- **Snapshot:** after `ccm_snapshot`, the picture is at `/ccm/ccm_pic_get.jpg?hfrom_handle=887330&dsess=1&dsess_nid=<session id>&dsess_sn=<device id>&dtoken=<token>`. The session id comes from signing in, and the token from the snapshot reply.
-- **Live video:** `ccm_play` returns a stream address; the settings offer the protocols rtmp, rtsp, rtdp and mutp.
-- VLC can't open `rtsp://192.168.187.254:554` ("Your input can't be opened"), as expected: the stream address only exists after a signed-in `ccm_play` request.
-- The device id doesn't need storing: the camera announces it in its port-3703 HelloRequest (step 5).
+- It talks to the camera with `ccm_*` messages (111 of them: login, Wi-Fi, date,
+  disk, devices and more).
+- **Snapshot:** after `ccm_snapshot`, the picture is at
+  `/ccm/ccm_pic_get.jpg?hfrom_handle=887330&dsess=1&dsess_nid=<session id>&dsess_sn=<device id>&dtoken=<token>`.
+  The session id comes from signing in, and the token from the snapshot reply.
+- **Live video:** `ccm_play` returns a stream address; the settings offer the
+  protocols rtmp, rtsp, rtdp and mutp.
+- VLC can't open `rtsp://192.168.187.254:554` ("Your input can't be opened"), as
+  expected: the stream address only exists after a signed-in `ccm_play` request.
+- The device id doesn't need storing: the camera announces it in its port-3703
+  HelloRequest (step 5).
 
 ## 12. Signing in and taking a snapshot from a script
 
-Rebuilding the web app's sign-in by hand would mean reimplementing its Diffie-Hellman exchange (`cacs_dh_req`), MD5 password scrambling and session ids (`cacs_login_req`). Instead, `tools/web-login-probe.mjs` opens the camera's own page in a headless browser, types the password from the macOS Keychain, and records the requests the page makes:
+Rebuilding the web app's sign-in by hand would mean reimplementing its
+Diffie-Hellman exchange (`cacs_dh_req`), MD5 password scrambling and session ids
+(`cacs_login_req`). Instead, `tools/web-login-probe.mjs` opens the camera's own
+page in a headless browser, types the password from the macOS Keychain, and
+records the requests the page makes:
 
 ```sh
 security add-generic-password -s tethys-camera -a <device id> -w   # once
@@ -147,72 +205,185 @@ PLAYWRIGHT=<path>/playwright-core/index.mjs node tools/web-login-probe.mjs out/p
 
 What it showed:
 
-- Every message is a script request: `GET /ccm/<message>.js?hfrom_handle=…&d<field>=…` (for example `cacs_dh_req.js?…&dbnum_prime&droot_num&dkey_a2b&dtid`, then `cacs_login_req.js?…&dlid&dnid&duser&dpass&dsession_req&dparam…`). After sign-in each request carries `dsess`, `dsess_nid` and `dsess_sn`.
-- On a direct connection the page fills in and locks the user name (the device id) itself; only the password is typed.
-- After "Successful login" the page asks to configure Wi-Fi; skipping it is fine.
+- Every message is a script request:
+  `GET /ccm/<message>.js?hfrom_handle=…&d<field>=…` (for example
+  `cacs_dh_req.js?…&dbnum_prime&droot_num&dkey_a2b&dtid`, then
+  `cacs_login_req.js?…&dlid&dnid&duser&dpass&dsession_req&dparam…`). After
+  sign-in each request carries `dsess`, `dsess_nid` and `dsess_sn`.
+- On a direct connection the page fills in and locks the user name (the device
+  id) itself; only the password is typed.
+- After "Successful login" the page asks to configure Wi-Fi; skipping it is
+  fine.
 
 Then `ccm_snapshot` from inside the signed-in page:
 
-- It needs the device id as `sess.sn` **and** a profile token, `token: "p0"` (main stream). Without them the reply is `ccm.system.err`.
-- The reply is `{ ret: {code: ""}, uri: { url: ".../ccm/ccm_pic_get/-dtoken-p0_….jpg" }, token: "p0_…" }`.
-- Fetching that `uri.url` as-is returns a 525-byte error. Fetching `/ccm/ccm_pic_get.jpg?hfrom_handle=887330&dsess=1&dsess_nid=<nid>&dsess_sn=<device id>&dtoken=<token>` returns the picture: **a 1920 x 1080 JPEG** (about 130 KB).
-- The picture's on-screen clock read 1971: the camera has no time source on an isolated cable.
+- It needs the device id as `sess.sn` **and** a profile token, `token: "p0"`
+  (main stream). Without them the reply is `ccm.system.err`.
+- The reply is
+  `{ ret: {code: ""}, uri: { url: ".../ccm/ccm_pic_get/-dtoken-p0_….jpg" }, token: "p0_…" }`.
+- Fetching that `uri.url` as-is returns a 525-byte error. Fetching
+  `/ccm/ccm_pic_get.jpg?hfrom_handle=887330&dsess=1&dsess_nid=<nid>&dsess_sn=<device id>&dtoken=<token>`
+  returns the picture: **a 1920 x 1080 JPEG** (about 130 KB).
+- The picture's on-screen clock read 1971: the camera has no time source on an
+  isolated cable.
 
-`tools/snapshot.mjs out/now.jpg` does all of this in one step. A snapshot described back to me matched the room exactly (laptop, monitors, the blue speaker on the shelf), so the picture is live, not cached. Colors run a little warm.
+`tools/snapshot.mjs out/now.jpg` does all of this in one step. A snapshot
+described back to me matched the room exactly (laptop, monitors, the blue
+speaker on the shelf), so the picture is live, not cached. Colors run a little
+warm.
 
 ## 13. Moving, live stream, listening and talking
 
-All from inside the signed-in page (same `acs.send_msg` pattern as the snapshot, with `sess: { nid, sn: <device id> }`).
+All from inside the signed-in page (same `acs.send_msg` pattern as the snapshot,
+with `sess: { nid, sn: <device id> }`).
 
-**Pan and tilt: `ccm_ptz_ctl`** with `token: "ptz0"` (found by trying; the web app never shows where it gets it):
+**Pan and tilt: `ccm_ptz_ctl`** with `token: "ptz0"` (found by trying; the web
+app never shows where it gets it):
 
 ```js
 { token: 'ptz0', trans: { pan_tilt: { x, y, space: '' }, _deprecated_zoom: { x: 0, space: '' } },
   speed: { pan_tilt: { x: 1, y: 1, space: '' }, _deprecated_zoom: { x: 0, space: '' } } }
 ```
 
-- It replies "success" to anything, so check with snapshots before and after (compare them; a real move changes most of the picture).
+- It replies "success" to anything, so check with snapshots before and after
+  (compare them; a real move changes most of the picture).
 - Small values (x = 0.1 or 0.5 with `space: ''`) did nothing visible.
-- **Moves queue and run one after another; each carries its own speed.** `trans` is the step size and `speed` how fast it runs: x = 100 at speed 1 crawled for over a minute, while the same step at speed 100 ran fast. An all-zero command does not cancel a step that's already running, and a "down" sent during a long "up" ran only after the "up" finished.
-- **A good nudge is a step of 10 at speed 100**: tilt down 10 then up 10 at speed 100 each took under 4 seconds, and the view came back close to where it started (positive y = up, negative y = down; positive x = right).
-- `ccm_video_srcs_get` reports video source `vs0` (25 fps) and its image settings.
+- **Moves queue and run one after another; each carries its own speed.** `trans`
+  is the step size and `speed` how fast it runs: x = 100 at speed 1 crawled for
+  over a minute, while the same step at speed 100 ran fast. An all-zero command
+  does not cancel a step that's already running, and a "down" sent during a long
+  "up" ran only after the "up" finished.
+- **A good nudge is a step of 10 at speed 100**: tilt down 10 then up 10 at
+  speed 100 each took under 4 seconds, and the view came back close to where it
+  started (positive y = up, negative y = down; positive x = right).
+- `ccm_video_srcs_get` reports video source `vs0` (25 fps) and its image
+  settings.
 
-**Zoom and focus: none.** `_deprecated_zoom` steps of +10 and -10 at speed 100 were accepted but changed nothing measurable (picture difference 7.3 and 5.4, about noise; no change in sharpness). The lens is fixed; the zoom and focus fields are leftovers from the shared MIPC software. Digital zoom (cropping the 1080p picture) is the way to look closer.
+**Zoom and focus: none.** `_deprecated_zoom` steps of +10 and -10 at speed 100
+were accepted but changed nothing measurable (picture difference 7.3 and 5.4,
+about noise; no change in sharpness). The lens is fixed; the zoom and focus
+fields are leftovers from the shared MIPC software. Digital zoom (cropping the
+1080p picture) is the way to look closer.
 
-**Live stream: `ccm_play`** with `setup: { stream: 'RTP_Unicast', trans: { proto: 'rtsp' } }, token: 'p0'` returns
-`rtsp://192.168.187.254:554/live/<device id>_p0_<random>` (also `rtmp://…:7010/…` and the maker's `rtdp://…:7030/…`).
+**Live stream: `ccm_play`** with
+`setup: { stream: 'RTP_Unicast', trans: { proto: 'rtsp' } }, token: 'p0'`
+returns `rtsp://192.168.187.254:554/live/<device id>_p0_<random>` (also
+`rtmp://…:7010/…` and the maker's `rtdp://…:7030/…`).
 
-- `ffprobe -rtsp_transport tcp <url>` shows **H.264 1920x1080 video and AAC 16 kHz mono audio**.
-- **Each address works for one connection only**: probing it used it up, and ffmpeg then failed with "Invalid data found when processing input". Ask `ccm_play` again for each connection.
+- `ffprobe -rtsp_transport tcp <url>` shows **H.264 1920x1080 video and AAC 16
+  kHz mono audio**.
+- **Each address works for one connection only**: probing it used it up, and
+  ffmpeg then failed with "Invalid data found when processing input". Ask
+  `ccm_play` again for each connection.
 - The page must stay signed in while streaming.
 
-**Listening:** a 6-second recording from that stream (`ffmpeg -rtsp_transport tcp -i <url> -t 6 -map 0:a -c:a pcm_s16le listen.wav`), transcribed locally with `whisper-cli` (large-v3), came back as the exact sentence spoken near the camera. Level about -28 dB mean, -10 dB peak.
+**Listening:** a 6-second recording from that stream
+(`ffmpeg -rtsp_transport tcp -i <url> -t 6 -map 0:a -c:a pcm_s16le listen.wav`),
+transcribed locally with `whisper-cli` (large-v3), came back as the exact
+sentence spoken near the camera. Level about -28 dB mean, -10 dB peak.
 
-**Microphone and speaker settings:** `ccm_mic_get` returns one mic (`dev3`, level 70, not silent). `ccm_speaker_get` with no arguments answers `InvalidArgVal` (it needs a token still to be found; the speaker turned out to take speech through `ccm_talk`, below, and `ccm_speakers_get` never answers).
+**Microphone and speaker settings:** `ccm_mic_get` returns one mic (`dev3`,
+level 70, not silent). `ccm_speaker_get` with no arguments answers
+`InvalidArgVal` (it needs a token still to be found; the speaker turned out to
+take speech through `ccm_talk`, below, and `ccm_speakers_get` never answers).
 
-**Night vision (infrared LEDs and IR-cut filter):** the image settings come from `ccm_video_srcs_get` (`vss[0].extension.conf`) and are written back whole with `ccm_img_set { token: 'vs0', conf }`. Relevant fields: `mode`, `light_mode`, `day_or_night`, `red_or_white`, `ir_cut_filter_modes`, and separate `day` / `night` brightness, saturation, contrast and sharpness.
+**Night vision (infrared LEDs and IR-cut filter):** the image settings come from
+`ccm_video_srcs_get` (`vss[0].extension.conf`) and are written back whole with
+`ccm_img_set { token: 'vs0', conf }`. Relevant fields: `mode`, `light_mode`,
+`day_or_night`, `red_or_white`, `ir_cut_filter_modes`, and separate `day` /
+`night` brightness, saturation, contrast and sharpness.
 
-- **`mode: "night"` forces night vision**: the picture turns black-and-white and the IR LEDs glow faint red. Confirmed by eye: set at 18:25:01, the red light came on; `mode: ""` at 18:25:14 turned it off and the picture returned to color. **`mode: ""` (the factory value) is automatic**: covering the lens with a hand also triggers night vision, with an audible click from the IR-cut filter. `mode: "day"` was accepted, but the next picture was still black-and-white; forcing day mode is unconfirmed.
-- `day_or_night` reads as the current state (2 while in night vision, 1 in day); writing 0 or 3 stored 1, and writing 2 back didn't stick, so it isn't the switch.
-- **No white light on this model:** with night vision on, writing `red_or_white: 1` was accepted but stored as 0, and only the red IR glow appeared (seen by eye 18:26:57 to 18:27:22).
-- Write back the whole `conf` you read, with only the field you're changing altered, and restore the original afterward.
+- **`mode: "night"` forces night vision**: the picture turns black-and-white and
+  the IR LEDs glow faint red. Confirmed by eye: set at 18:25:01, the red light
+  came on; `mode: ""` at 18:25:14 turned it off and the picture returned to
+  color. **`mode: ""` (the factory value) is automatic**: covering the lens with
+  a hand also triggers night vision, with an audible click from the IR-cut
+  filter. `mode: "day"` was accepted, but the next picture was still
+  black-and-white; forcing day mode is unconfirmed.
+- `day_or_night` reads as the current state (2 while in night vision, 1 in day);
+  writing 0 or 3 stored 1, and writing 2 back didn't stick, so it isn't the
+  switch.
+- **No white light on this model:** with night vision on, writing
+  `red_or_white: 1` was accepted but stored as 0, and only the red IR glow
+  appeared (seen by eye 18:26:57 to 18:27:22).
+- Write back the whole `conf` you read, with only the field you're changing
+  altered, and restore the original afterward.
 
-**Talking (working):** the camera's speaker plays **AAC, 16 kHz, mono, published over RTMP**.
+**Talking (working):** the camera's speaker plays **AAC, 16 kHz, mono, published
+over RTMP**.
 
-1. `ccm_talk` with `setup: { stream: 'RTP_Unicast', trans: { proto: 'rtmp' } }, token: 'p0'` returns `rtmp://192.168.187.254:7010/pub/<random>`.
-2. Publish to it: `ffmpeg -re -i speech.wav -c:a aac -ar 16000 -ac 1 -b:a 32k -f flv <url>`.
-3. Start with about 3 seconds of silence: the camera begins playing late and cuts off the first second or two.
-4. **One talker at a time, one address per stream.** A finished publish frees the slot, and the next `ccm_talk` works right away. An address that's requested but never published to holds the slot until the camera restarts (`ccm.system.err` until then). So always publish to every address you request.
+1. `ccm_talk` with
+   `setup: { stream: 'RTP_Unicast', trans: { proto: 'rtmp' } }, token: 'p0'`
+   returns `rtmp://192.168.187.254:7010/pub/<random>`.
+2. Publish to it:
+   `ffmpeg -re -i speech.wav -c:a aac -ar 16000 -ac 1 -b:a 32k -f flv <url>`.
+3. Start with about 3 seconds of silence: the camera begins playing late and
+   cuts off the first second or two.
+4. **One talker at a time, one address per stream.** A finished publish frees
+   the slot, and the next `ccm_talk` works right away. An address that's
+   requested but never published to holds the slot until the camera restarts
+   (`ccm.system.err` until then). So always publish to every address you
+   request.
 
-How it was found: `rtdp` (the web app's default) refused TCP on 7030 and ignored plain RTP over UDP, and there's no ONVIF backchannel on the RTSP stream. The vendor's site still hosts the 2013 Flash version of its media engine (`http://www.mipcm.com/mme/mme.swf`; the camera's own copy and the native plugins are gone). Its strings (`getMicrophone`, `publish_start`, `connectRTMP`) showed the Flash player sends the microphone by publishing RTMP. Of five formats tried with the same RTMP address flow (AAC 16 kHz, G.711 A-law and mu-law 8 kHz, ADPCM SWF 22 kHz, Nellymoser 8 and 16 kHz), **only AAC 16 kHz played**: two recordings made beside the camera and the camera's own microphone all caught "Number one, AAC…" and nothing from the others. The speaker is loud and small. A listening test of four versions (all understood) picked the clearest: slower speech (~140 words a minute), a phone-band filter (high-pass 300 Hz, low-pass 3.4 kHz), gentle compression (threshold -20 dB, ratio 3) and 64 kbps AAC; even at 30% level it was "still a bit loud" and bright. Default chain: `highpass=f=300,lowpass=f=3000,acompressor=threshold=-20dB:ratio=3:attack=5:release=100,volume=0.15`, adjustable later (superseded by the chain below). The speaker volume can't be read or set (`ccm_speakers_get` doesn't answer).
+How it was found: `rtdp` (the web app's default) refused TCP on 7030 and ignored
+plain RTP over UDP, and there's no ONVIF backchannel on the RTSP stream. The
+vendor's site still hosts the 2013 Flash version of its media engine
+(`http://www.mipcm.com/mme/mme.swf`; the camera's own copy and the native
+plugins are gone). Its strings (`getMicrophone`, `publish_start`, `connectRTMP`)
+showed the Flash player sends the microphone by publishing RTMP. Of five formats
+tried with the same RTMP address flow (AAC 16 kHz, G.711 A-law and mu-law 8 kHz,
+ADPCM SWF 22 kHz, Nellymoser 8 and 16 kHz), **only AAC 16 kHz played**: two
+recordings made beside the camera and the camera's own microphone all caught
+"Number one, AAC…" and nothing from the others. The speaker is loud and small. A
+listening test of four versions (all understood) picked the clearest: slower
+speech (~140 words a minute), a phone-band filter (high-pass 300 Hz, low-pass
+3.4 kHz), gentle compression (threshold -20 dB, ratio 3) and 64 kbps AAC; even
+at 30% level it was "still a bit loud" and bright. Default chain:
+`highpass=f=300,lowpass=f=3000,acompressor=threshold=-20dB:ratio=3:attack=5:release=100,volume=0.15`,
+adjustable later (superseded by the chain below). The speaker volume can't be
+read or set (`ccm_speakers_get` doesn't answer).
 
-**Clipping and gaps (2026-11-08, after the first bridge `say`).** Listening found the ends cut off, some distortion and silent gaps mid-speech. Fixes in `src/say.mjs`: 1.5 s of silence after the speech (the camera finishes its buffer before the publish closes); the macOS `say` render is normalized to -3 dBFS peak before the chain; a true-peak limiter last (`alimiter=limit=0.5`, about -6 dBFS; offline check: max volume -29 dB at level 0.12); default level 0.07. For the gaps, `-re` (exactly real time) is suspected of underrunning the camera's buffer, so two variants were tried through the camera: **variant one** `-readrate 1.05 -readrate_initial_burst 2` (a little faster than playback, 2 s head start, plus `-flush_packets 1 -flvflags no_duration_filesize`) and **variant two** no rate limit at all (`GJ_SAY_PACE=fast`). Both published and finished; which one plays without gaps is decided by ear (result below once heard). Final chain: `highpass=f=300,lowpass=f=3000,acompressor=threshold=-20dB:ratio=3:attack=5:release=100,volume=<level>,alimiter=limit=0.5:level=disabled`, AAC 16 kHz mono 64k, 3 s lead-in, 1.5 s tail. `GJ_SAY_PACE=ahead|fast|re` picks the pacing (default `ahead`).
+**Clipping and gaps (2026-11-08, after the first bridge `say`).** Listening
+found the ends cut off, some distortion and silent gaps mid-speech. Fixes in
+`src/say.mjs`: 1.5 s of silence after the speech (the camera finishes its buffer
+before the publish closes); the macOS `say` render is normalized to -3 dBFS peak
+before the chain; a true-peak limiter last (`alimiter=limit=0.5`, about -6 dBFS;
+offline check: max volume -29 dB at level 0.12); default level 0.07. For the
+gaps, `-re` (exactly real time) is suspected of underrunning the camera's
+buffer, so two variants were tried through the camera: **variant one**
+`-readrate 1.05 -readrate_initial_burst 2` (a little faster than playback, 2 s
+head start, plus `-flush_packets 1 -flvflags no_duration_filesize`) and
+**variant two** no rate limit at all (`GJ_SAY_PACE=fast`). Both published and
+finished; which one plays without gaps is decided by ear (result below once
+heard). Final chain:
+`highpass=f=300,lowpass=f=3000,acompressor=threshold=-20dB:ratio=3:attack=5:release=100,volume=<level>,alimiter=limit=0.5:level=disabled`,
+AAC 16 kHz mono 64k, 3 s lead-in, 1.5 s tail. `GJ_SAY_PACE=ahead|fast|re` picks
+the pacing (default `ahead`).
 
-**Wake sound and hiss (2026-11-08).** The camera's amp wakes on sound: silence does not wake it, so the first syllable was lost. The say pipeline now plays a 1 s lead-in, then a short attention cue (a 30 ms relay click and a two-tone chime, 880 then 1320 Hz, about -18 dBFS), 0.4 s of quiet, the speech, and the 1.5 s tail; `chime:false` skips the cue. Result of the cue: one test say reached `done`; whether the first syllable now comes through is judged by ear. Known quirk: after the camera speaks, its speaker amplifier stays on with a faint hiss audible up close. It appears only after a talk session (never after a fresh boot before any talk), it has happened every time, and it is gone after a power cycle. No talk connection stays open on our side (no ffmpeg, no TCP to port 7010), and there is no ccm stop message: a session ends by closing the stream. Whether the hiss times out is not yet known.
+**Wake sound and hiss (2026-11-08).** The camera's amp wakes on sound: silence
+does not wake it, so the first syllable was lost. The say pipeline now plays a 1
+s lead-in, then a short attention cue (a 30 ms relay click and a two-tone chime,
+880 then 1320 Hz, about -18 dBFS), 0.4 s of quiet, the speech, and the 1.5 s
+tail; `chime:false` skips the cue. Result of the cue: one test say reached
+`done`; whether the first syllable now comes through is judged by ear. Known
+quirk: after the camera speaks, its speaker amplifier stays on with a faint hiss
+audible up close. It appears only after a talk session (never after a fresh boot
+before any talk), it has happened every time, and it is gone after a power
+cycle. No talk connection stays open on our side (no ffmpeg, no TCP to port
+7010), and there is no ccm stop message: a session ends by closing the stream.
+Whether the hiss times out is not yet known.
 
-**Volume defaults (2026-11-08).** The first chime (-18 dBFS) and level 0.12 were "very loud"; the speaker is probably alarm-grade (security cameras use loud speakers to scare off intruders). Defaults now: chime peak 0.03 (-30.5 dBFS offline), speech level 0.07 (peak -35 dBFS offline), speech normalized to -3 dBFS before the chain, `alimiter` with `level=disabled` (no makeup gain). Both are API parameters (`level`, `chimeLevel`) and sliders on the page, and both are hard-capped in the bridge (level 0.15, chime 0.063 = -24 dBFS).
+**Volume defaults (2026-11-08).** The first chime (-18 dBFS) and level 0.12 were
+"very loud"; the speaker is probably alarm-grade (security cameras use loud
+speakers to scare off intruders). Defaults now: chime peak 0.03 (-30.5 dBFS
+offline), speech level 0.07 (peak -35 dBFS offline), speech normalized to -3
+dBFS before the chain, `alimiter` with `level=disabled` (no makeup gain). Both
+are API parameters (`level`, `chimeLevel`) and sliders on the page, and both are
+hard-capped in the bridge (level 0.15, chime 0.063 = -24 dBFS).
 
-**Lower again (2026-11-08).** Still loud, so the final defaults are speech level 0.035 (cap 0.08) and chime peak 0.016 (-36 dBFS; cap -30 dBFS). Numbers only; the pipeline is unchanged.
+**Lower again (2026-11-08).** Still loud, so the final defaults are speech level
+0.035 (cap 0.08) and chime peak 0.016 (-36 dBFS; cap -30 dBFS). Numbers only;
+the pipeline is unchanged.
 
 ## Cleaning up
 
@@ -224,8 +395,12 @@ sudo ifconfig en10 -alias 192.168.187.10
 
 ## Next (written at step 1; done since: steps 11 to 13, then the bridge in `docs/bridge.md`)
 
-Log in to the web page with the password printed on the camera, from the isolated cable, and look for a stream address and the firmware version. See the README for the steps after that.
+Log in to the web page with the password printed on the camera, from the
+isolated cable, and look for a stream address and the firmware version. See the
+README for the steps after that.
 
 ---
 
-Note (2026-11-08): this project became **Ghost Jack** (voice: Glassmouth). The log above is left as it was written; the camera's Keychain item is still named `tethys-camera`.
+Note (2026-11-08): this project became **Ghost Jack** (voice: Glassmouth). The
+log above is left as it was written; the camera's Keychain item is still named
+`tethys-camera`.

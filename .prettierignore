@@ -1,4 +1,9 @@
-docs/
+docs/index.html
+docs/app.js
+docs/scene.js
+docs/sound.js
+docs/style.css
+docs/images/
 captures/
 node_modules/
 package-lock.json
