@@ -1452,10 +1452,16 @@ code {
 
 /* The strip scan panel: the panorama growing strip by strip, with its controls. */
 .stripview {
+  /* a band along the bottom, so the sphere above stays in view and can be
+     dragged while the strips come in */
   position: absolute;
-  inset: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 42%;
   z-index: 7;
-  background: #0b0f14;
+  background: rgba(11, 15, 20, 0.92);
+  border-top: 1px solid var(--line);
   touch-action: pan-y;
   cursor: grab;
 }
@@ -1525,5 +1531,10 @@ code {
 @media (max-width: 480px) {
   .keys b {
     font-size: 0.7rem;
+  }
+}
+@media (max-width: 640px) {
+  .stripview {
+    height: 78%;
   }
 }

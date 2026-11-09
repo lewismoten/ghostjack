@@ -984,6 +984,7 @@ async function aimTo(tp, tt, fast) {
 // arrived (the bridge's estimate of the trip).
 async function travel(dx, dy, me, quiet) {
   if (!connected || finding) return;
+  if (!dx && !dy) return; // already there (the bridge refuses an empty move)
   while (Date.now() - lastMove < 1100)
     await new Promise((r) => setTimeout(r, 100));
   if (me !== aimRun) return;
@@ -2209,6 +2210,7 @@ async function stripScan(st, o) {
       );
   }
   const profile = o.hd ? 'p0' : 'p1';
+  const painted = new Map(); // row -> strips already on the sphere
   try {
     const res = await st.stripScan(
       {
@@ -2235,7 +2237,11 @@ async function stripScan(st, o) {
           stripView.note(t);
           setStatus(t);
         },
-        update: (s) => stripView.update(s.rows, false),
+        update: (s) => {
+          stripView.update(s.rows, false);
+          // the sphere above the band fills in slice by slice
+          if (o.paint && ready) paintStrips(s, o.step || 4, painted);
+        },
       },
       {
         step: o.step || 4,
@@ -2245,7 +2251,7 @@ async function stripScan(st, o) {
       },
     );
     stripView.update(res.rows, true);
-    if (o.paint && ready && !res.cancelled) paintStrips(res, o.step || 4);
+    if (o.paint && ready) paintStrips(res, o.step || 4, painted);
   } catch (e) {
     setStatus(`Lost the angle. Strip scan failed: ${e.message}`, true);
     stripView.note(`Strip scan failed: ${e.message}`);
@@ -2256,14 +2262,16 @@ async function stripScan(st, o) {
 }
 // Best effort: each strip is the center meridian of a pinhole picture at its step's pan, so it goes on the
 // sphere as a thin picture that many degrees wide, with rows mapped to latitude through the lens.
-function paintStrips(res, step) {
+function paintStrips(res, step, done = new Map()) {
   const rad = Math.PI / 180,
     sp = sphereNow(),
     th = Math.tan((lens.fovH * rad) / 2);
   sp.calib = calibNow();
   for (const row of res.rows) {
     if (!row.strips.length || row.firstPanUnits === undefined) continue;
-    for (const s of row.strips) {
+    const from = done.get(row) || 0;
+    done.set(row, row.strips.length);
+    for (const s of row.strips.slice(from)) {
       const t = document.createElement('canvas');
       t.width = s.w;
       t.height = row.h;
