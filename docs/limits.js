@@ -1,7 +1,8 @@
 // Finding the neck's ends. The camera cannot say where its pan and tilt stops are, so the page finds them
-// by looking: step toward one end in small steps (10 at speed 100, waiting for each to finish), compare
-// small pictures, and when two steps in a row change the picture no more than the noise does, that end is
-// reached. It only runs when the user presses "Find limits", and it can be cancelled. What it cannot see:
+// by looking: step toward one end in small steps (10 at speed 100, waiting for each to finish), measure how
+// far the picture slid (imageShift on 160 x 90), and when 3 steps in a row slide it by about nothing (after
+// 2 steps that may be swallowed by backlash), that end is reached. The range and the lens come from the
+// steps that really moved the picture. It only runs when the user presses "Find limits", and it can be cancelled. What it cannot see:
 // a blank, featureless view looks the same moving or not (it can stop early), and a hand on the neck.
 const W = 32,
   H = 18;
@@ -139,6 +140,9 @@ export const same = (d, noise) => d < Math.max(1.5, noise * 2 + 0.8);
 
 export const STEP = 10; // units per step, speed 100: the safe step
 export const STEP_MS = 1300; // wait after each step (the bridge allows one a second)
+const STILL_PX = 0.5; // under this many px (of 160) a step's measured slide counts as still
+const WALL_STILLS = 3; // consecutive still steps that mean a wall
+const BACKLASH = 2; // steps after a turn-around that may move nothing
 export const CAP_STEPS = 220; // most steps in one walk
 export const CAP_MS = 20 * 60 * 1000; // most time for the whole search
 
@@ -187,22 +191,27 @@ export async function findLimits(deps) {
   async function walk(axis, dir, label, from, already = 0) {
     let prev = await deps.grab(),
       still = 0,
+      taken = 0,
       moved = already;
     show(prev);
     for (let i = 0; i < CAP_STEPS && !over(); i++) {
       await deps.send(axis, dir);
       await deps.wait(STEP_MS);
       const cur = await deps.grab();
-      if (same(diff(prev, cur), noise)) {
-        if (++still >= 2) return moved;
+      taken++;
+      // How far the picture really slid along this axis (px of 160 x 90). Only a blank or unclear view
+      // (no measurement) falls back to the old "same picture" test on the 32 x 18 grays.
+      const m = prev.hi && cur.hi ? imageShift(prev.hi, cur.hi, axis) : null,
+        px = m ? Math.abs(axis === 'pan' ? m.sx * HW : m.sy * HH) : null,
+        isStill = px !== null ? px < STILL_PX : same(diff(prev, cur), noise);
+      if (isStill) {
+        // the first steps after a turn-around can move nothing (backlash): they never count
+        if (taken > BACKLASH && ++still >= WALL_STILLS) return moved;
       } else {
-        moved += 1 + still;
+        moved++;
         still = 0;
         here[axis] += dir * STEP;
-        if (prev.hi && cur.hi) {
-          const m = imageShift(prev.hi, cur.hi, axis);
-          if (m) shifts[axis].push(Math.abs(axis === 'pan' ? m.sx : m.sy));
-        }
+        if (m) shifts[axis].push(Math.abs(axis === 'pan' ? m.sx : m.sy));
         show(cur);
       }
       prev = cur;

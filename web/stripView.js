@@ -61,7 +61,7 @@ export function createStripView(host, ctl) {
   btn('×', 'Close the strip scan view', () => view.escape(true));
   const rows = check(
     'Rows',
-    'Rows: cover the measured tilt range with several rows (needs Find limits). Off: one row at the current tilt',
+    'Rows: find the bottom wall, then scan row after row upward (up to 8) until the top wall. Off: one row at the current tilt',
     false,
   );
   const hd = check(

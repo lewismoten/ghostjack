@@ -188,7 +188,18 @@ measured between the pictures (coarse on 160 x 90, refined at full size on the
 central band). Real measurements: step shifts are uneven (a 10-unit step moved
 the picture 5 to 13 px of a 320 px frame), and the first one or two steps after
 a turn-around can move nothing (backlash). So a row starts with two throwaway
-steps and a wall needs three still measurements in a row. One fast trip goes to
-a row's start; rows are stacked at the measured vertical shift. The panorama
-lives in memory until you press Download panorama.
-`node tools/strip-scan-test.mjs <outdir>` checks one row against the fake room.
+steps and a wall needs three still measurements in a row. Every row starts at
+the left wall (a physical reference), so rows share x near 0 and only a small
+refine (+-10 px at 640) corrects the offset. With **Rows** on, the scan never
+uses the lens or the old limits: it steps down to the bottom wall by measured
+vertical shift, scans a row, steps up until the measured shifts add up to 0.65
+of the picture height (the next row goes above, since tilting up moves content
+down), makes one fast trip back to the left wall, and stops at the top wall (up
+to 8 rows). Rows near the top or bottom are narrower in pixels than the middle
+one (a flat picture's pan shift shrinks with the cosine of the pitch). The
+panorama lives in memory until you press Download panorama. While a scan runs
+the sphere view does not follow the camera. Find limits uses the same wall test
+(3 steps whose measured shift is about 0, after 2 backlash steps), with the
+small-gray comparison only for blank views.
+`node tools/strip-scan-test.mjs <outdir> [--rows [--quick]]` checks a row, or
+Find limits plus a multi-row scan, against the fake room.

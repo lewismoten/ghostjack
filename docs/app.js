@@ -2008,6 +2008,7 @@ async function openSphere() {
       sphere: sphereNow(),
       reduced,
       pose: () => {
+        if (stripping) return null; // its estimate is unreliable: leave the view where the person left it
         if (liveLens) return liveLens;
         if (!lens || !limits) return null;
         return {
@@ -2185,30 +2186,12 @@ async function sendMove(dx, dy) {
 }
 async function stripScan(st, o) {
   if (!connected || finding || sweeping || stripping) return;
-  const ready = lens && limits;
-  if (o.rows && !ready)
-    stripView.note('Rows needs Find limits first; doing one row.');
+  const ready = lens && limits; // only for painting the sphere
   const me = ++aimRun;
   stripping = true;
   stripView.setRunning(true);
   holdStop();
   stopLive();
-  const rowsAt = [tilt];
-  if (o.rows && ready) {
-    // rows spaced so their pictures overlap by about a third (0.68 of the picture height)
-    const gap = (0.68 * lens.fovV) / degPerTilt(),
-      n = Math.max(
-        1,
-        Math.ceil((limits.tiltMax - limits.tiltMin) / gap - 1e-6) + 1,
-      );
-    rowsAt.length = 0;
-    for (let i = 0; i < n; i++)
-      rowsAt.push(
-        n === 1
-          ? (limits.tiltMin + limits.tiltMax) / 2
-          : limits.tiltMin + ((limits.tiltMax - limits.tiltMin) * i) / (n - 1),
-      );
-  }
   const profile = o.hd ? 'p0' : 'p1';
   const painted = new Map(); // row -> strips already on the sphere
   let lastRows = [];
@@ -2240,9 +2223,9 @@ async function stripScan(st, o) {
           pan += dx; // only steps that were seen to move the picture count
           tilt += dy;
         },
-        travel: async (p, t) => {
+        travelBy: async (dx) => {
           if (me !== aimRun) return;
-          await travel(Math.round(p - pan), Math.round(t - tilt), me, true);
+          await travel(Math.round(dx), 0, me, true);
         },
         cancelled: () => me !== aimRun || !connected,
         note: (t) => {
@@ -2258,8 +2241,8 @@ async function stripScan(st, o) {
       },
       {
         step: o.step || 4,
-        rows: rowsAt,
-        panStart: ready ? limits.panMin : null,
+        multi: !!o.rows,
+        maxRows: 8,
         hd: o.hd,
       },
     );
