@@ -19,3 +19,7 @@ captures/
 !web/favicon.ico
 !docs/favicon.ico
 .claude/
+
+# Bench stand kit: SVG sheets and previews are drawings, not camera media
+!hardware/bench-stands/out/
+!hardware/bench-stands/out/*.png
