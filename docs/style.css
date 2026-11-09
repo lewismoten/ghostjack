@@ -1109,3 +1109,14 @@ code {
 #limitsBar {
   width: 100%;
 }
+
+/* Flatlined: the last frame stays on screen as a dead feed. */
+.stage.flat #snap,
+.stage.flat #video {
+  filter: grayscale(1) brightness(0.75) contrast(1.1);
+  transition: filter 0.8s ease;
+}
+.stage #snap,
+.stage #video {
+  transition: filter 0.4s ease;
+}

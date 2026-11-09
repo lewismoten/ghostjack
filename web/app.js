@@ -100,6 +100,8 @@ function setConnected(on) {
   updateArrowsSoon();
   $('sayGo').disabled = !on;
   $('jackOut').disabled = !on;
+  // Flatlined: whatever was last on screen stays, drained to grayscale.
+  $('stage').classList.toggle('flat', !on);
   $('limitsGo').disabled = !on || finding;
   for (const id of [
     's-brightness',
@@ -195,6 +197,7 @@ async function connect(e) {
       lost = false;
       loadDevice();
       loadAim().then(showLimitsInfo);
+      if (first && !liveOn) autoSnapSoon(300);
     } catch (err) {
       setConnected(false);
       lost = true;
@@ -251,10 +254,14 @@ function showImage(src) {
   $('video').hidden = true;
 }
 let lastShot = null; // the picture on screen, with any digital-zoom crop already applied
-async function snapshot() {
+// auto: a quiet refresh (after jacking in or a move while not live): no voice
+// line or shutter sound, just a fresh frame.
+async function snapshot(auto = false) {
   stopLive();
-  setStatus(glass.line('snapshot'));
-  setTimeout(foley.shutter, 450);
+  if (!auto) {
+    setStatus(glass.line('snapshot'));
+    setTimeout(foley.shutter, 450);
+  }
   const q = crop ? `?crop=${crop.map((n) => n.toFixed(4)).join(',')}` : '';
   try {
     const r = await api('/api/snapshot.jpg' + q);
@@ -263,9 +270,11 @@ async function snapshot() {
     $('shotSave').disabled = $('shotDl').disabled = false;
     showImage(URL.createObjectURL(lastShot));
     setStatus(
-      crop
-        ? 'Hold that frame. Zoomed snapshot taken.'
-        : 'Hold that frame. Snapshot taken.',
+      auto
+        ? 'Fresh frame.'
+        : crop
+          ? 'Hold that frame. Zoomed snapshot taken.'
+          : 'Hold that frame. Snapshot taken.',
     );
   } catch (e) {
     setStatus(`Lost the angle. Snapshot failed: ${e.message}`, true);
@@ -667,6 +676,15 @@ let finding = false; // Find limits is running: no other moves
 const STEP_MS = 1150; // the bridge allows one move a second
 const TRAVEL_MS = 700; // a guess at how long one queued step takes to run
 
+// When not live, show where the camera ended up: one quiet snapshot after the
+// last move settles (held arrows reset the timer, so only the final position).
+let autoSnapTimer = 0;
+function autoSnapSoon(ms) {
+  clearTimeout(autoSnapTimer);
+  autoSnapTimer = setTimeout(() => {
+    if (connected && !liveOn) snapshot(true);
+  }, ms);
+}
 async function move(dx, dy, quiet) {
   if (!connected || finding || Date.now() - lastMove < 1100) return false;
   [dx, dy] = room(dx, dy);
@@ -696,6 +714,7 @@ async function move(dx, dy, quiet) {
     }
     showPose();
     wallCheck(dx, dy, before);
+    if (!liveOn) autoSnapSoon(TRAVEL_MS + 300);
     if (!quiet) setStatus('Nudged one small step.');
     return true;
   } catch (e) {
