@@ -9,98 +9,109 @@
 <body>
 <canvas id="bg" aria-hidden="true"></canvas>
 <header class="top">
-  <div>
+  <div class="title">
     <h1 class="glitch" data-text="GHOST JACK">GHOST JACK</h1>
     <p class="lede">The port agents jack into when they need eyes, ears and a mouth in meatspace. Glassmouth is the voice on the wire.</p>
     <p id="device" class="device mono-l">Chrome: none jacked in</p>
   </div>
   <div class="top-tools">
     <span class="light" id="light" aria-hidden="true"></span>
-    <button id="theme" type="button" class="ghost" aria-pressed="false">Light theme</button>
+    <button id="uplinkState" type="button" class="pill" aria-label="Connection: flatline. Open the Uplink tab">Flatline</button>
   </div>
 </header>
 <main>
-  <section id="demo" class="notice" hidden aria-labelledby="demo-h">
-    <h2 id="demo-h">No carrier. The bridge is flatlined. <small>(Demo: no bridge running)</small></h2>
-    <p><strong>Glassmouth:</strong> "Nobody home on this end. Just static and the meat at the desk." Ghost Jack only works with its local bridge running (<code>npm start</code> in the project, then enter the bridge address and access token in the Uplink box below). The camera chrome sits on a private cable behind its own ICE and is never reachable from the internet, so this deck is shown unplugged. Look around; every control is real, it just has no eye to talk to.</p>
-  </section>
-
-  <div class="grid">
-    <section class="panel" aria-labelledby="conn-h" style="--i:0">
-      <h2 id="conn-h">Uplink <small>bridge connection</small></h2>
-      <form id="conn" autocomplete="off">
-        <label>Bridge address <input id="addr" type="url" value="http://localhost:8787" spellcheck="false"></label>
-        <label>Access token (the ICE) <input id="token" type="password" spellcheck="false" autocomplete="off"></label>
-        <button type="submit" aria-label="Jack in: connect to the bridge">Jack in</button>
-      </form>
-      <p id="status" role="status">Flatlined. Not connected.</p>
-      <fieldset class="sound"><legend>Sound (off by default)</legend>
-        <label class="check"><input id="sfx" type="checkbox"> Sound effects</label>
-        <label class="check"><input id="music" type="checkbox"> Ambient music</label>
-      </fieldset>
-    </section>
-
-    <section class="panel wide" aria-labelledby="view-h" style="--i:1">
-      <div class="head"><h2 id="view-h">Eye <small>live view and snapshots</small></h2>
-        <div class="eye" id="eye" role="group" aria-label="Who has the eye: who is watching the camera right now"><span class="lamp" aria-hidden="true"></span><span id="eyeText" aria-live="polite">Nobody has the eye</span></div></div>
-      <div class="stage" id="stage">
-        <video id="video" muted playsinline hidden aria-label="Live camera video"></video>
-        <img id="snap" alt="Latest camera snapshot" hidden draggable="false">
-        <svg id="placeholder" viewBox="0 0 160 90" role="img" aria-label="No picture yet: no carrier, not connected">
-          <rect width="160" height="90" class="ph-bg"/><circle cx="80" cy="45" r="16" class="ph-ring"/><circle cx="80" cy="45" r="6" class="ph-dot"/>
-          <text x="80" y="76" text-anchor="middle" class="ph-text">NO CARRIER</text>
-        </svg>
-        <div class="radar" id="radar" hidden aria-hidden="true"></div>
-        <div class="hud" aria-hidden="true">
-          <span id="hClock">--:--:--</span>
-          <span id="hConn">OFFLINE</span>
-          <span id="hNight">NV AUTO</span>
-          <span id="hPose">P +0 T +0 est.</span>
-        </div>
-        <div id="box" hidden></div>
+  <div class="strip">
+    <p id="demo" class="demoline" hidden><strong>NO CARRIER</strong> &middot; bridge flatlined &middot; demo only (<code>npm start</code>) <button type="button" id="demoHelp" class="linkish" aria-label="What is this? Open the Uplink tab" title="What is this?">?</button></p>
+    <p id="status" role="status">Flatlined. Not connected.</p>
+  </div>
+  <div class="deckgrid">
+  <section class="panel eyepanel" aria-labelledby="view-h" >
+    <div class="head"><h2 id="view-h">Eye <small>live, aim, snapshots</small></h2>
+      <p id="pose" class="pose" aria-live="polite">Pan 0 &middot; Tilt 0 (estimated)</p>
+      <button id="recenter" type="button" class="ghost" aria-label="Re-center the estimated aim at zero">Re-center</button>
+      <div class="eye" id="eye" role="group" aria-label="Who has the eye: who is watching the camera right now"><span class="lamp" aria-hidden="true"></span><span id="eyeText" aria-live="polite">Nobody has the eye</span></div></div>
+    <div class="stagewrap"><div class="stage" id="stage">
+      <video id="video" muted playsinline hidden aria-label="Live camera video"></video>
+      <img id="snap" alt="Latest camera snapshot" hidden draggable="false">
+      <svg id="placeholder" viewBox="0 0 160 90" role="img" aria-label="No picture yet: no carrier, not connected">
+        <rect width="160" height="90" class="ph-bg"/><circle cx="80" cy="45" r="16" class="ph-ring"/><circle cx="80" cy="45" r="6" class="ph-dot"/>
+        <text x="80" y="76" text-anchor="middle" class="ph-text">NO CARRIER</text>
+      </svg>
+      <div class="radar" id="radar" hidden aria-hidden="true"></div>
+      <div class="hud" aria-hidden="true">
+        <span id="hClock">--:--:--</span>
+        <span id="hConn">FLATLINE</span>
+        <span id="hNight">NV AUTO</span>
       </div>
-      <div class="row">
-        <button id="live" type="button" disabled aria-pressed="false">Start live view</button>
-        <button id="sound" type="button" disabled aria-pressed="false">Sound off</button>
-        <button id="shot" type="button" disabled>Take snapshot</button>
-      </div>
-      <div class="row"><label class="check"><input id="night" type="checkbox" role="switch" disabled> Night vision: infrared on (off means automatic)</label></div>
-      <div class="row">
-        <label class="zoom">Digital zoom <input id="zoom" type="range" min="1" max="4" step="0.25" value="1" disabled> <output id="zoomOut">1x</output></label>
-        <button id="zoomReset" type="button" disabled>Reset zoom</button>
-      </div>
-      <p class="hint">On a snapshot, drag a box to zoom into that part.</p>
-    </section>
-
-    <section class="panel" aria-labelledby="ctl-h" style="--i:2">
-      <h2 id="ctl-h">Neck <small>aim: pan and tilt</small></h2>
-      <canvas id="model" width="240" height="200" aria-label="Camera model, turned to the estimated aim. Drag it to nudge the camera." role="img"></canvas>
-      <p id="pose" class="mono" aria-live="polite">Pan ~+0, Tilt ~+0 (estimated, in steps)</p>
+      <div id="box" hidden></div>
       <div class="pad" role="group" aria-label="Pan and tilt (small steps)">
         <button type="button" data-dx="0" data-dy="10" aria-label="Tilt up" class="up" disabled>&#9650;</button>
         <button type="button" data-dx="-10" data-dy="0" aria-label="Pan left" class="left" disabled>&#9664;</button>
         <button type="button" data-dx="10" data-dy="0" aria-label="Pan right" class="right" disabled>&#9654;</button>
         <button type="button" data-dx="0" data-dy="-10" aria-label="Tilt down" class="down" disabled>&#9660;</button>
       </div>
-      <div class="row"><button id="recenter" type="button" class="ghost">Re-center estimate</button></div>
-      <p class="hint">The camera can't report where it points, so this is counted from the moves sent. Arrow keys work when no field is focused. One small step per second.</p>
-    </section>
+      <canvas id="model" width="240" height="200" aria-label="Camera model, turned to the estimated aim. Drag it to nudge the camera." role="img"></canvas>
+    </div></div>
+    <div class="row controls">
+      <button id="live" type="button" disabled aria-pressed="false">Go live</button>
+      <button id="sound" type="button" disabled aria-pressed="false">Sound off</button>
+      <button id="shot" type="button" disabled>Snapshot</button>
+      <label class="check"><input id="night" type="checkbox" role="switch" disabled> <span title="Off means automatic">Night vision</span></label>
+      <label class="zoom">Zoom <input id="zoom" type="range" min="1" max="4" step="0.25" value="1" disabled> <output id="zoomOut">1x</output></label>
+      <button id="zoomReset" type="button" disabled>Reset zoom</button>
+    </div>
+    <form id="sayForm" class="saybar" aria-labelledby="say-h" autocomplete="off">
+      <h3 id="say-h">Glassmouth says <small>via the camera</small></h3>
+      <div class="sayrow">
+        <label class="grow"><span class="sr">Words for the camera's speaker</span><input id="sayText" type="text" maxlength="300" placeholder="Words for the speaker" aria-describedby="say-h"></label>
+        <button id="sayGo" type="submit" disabled>Speak</button>
+      </div>
+      <div class="sayrow">
+        <label class="lvl" title="The speaker is small and loud. Start low.">Level <input id="sayLevel" type="range" min="0.01" max="0.08" step="0.005" value="0.035"> <output id="sayLevelOut">0.035</output></label>
+        <span id="sayStatus" role="status" class="mono-l">Quiet on the line.</span>
+      </div>
+      <details class="sayopts"><summary>Voice and chime</summary>
+        <div class="sliders">
+          <label>Voice <select id="sayVoice"><option value="">Default voice</option></select></label>
+          <label>Chime level <input id="sayChime" type="range" min="0.004" max="0.03" step="0.001" value="0.016"> <output id="sayChimeOut">0.016</output></label>
+        </div>
+        <p class="hint">Lines wait their turn. Arrow keys aim too.</p>
+      </details>
+    </form>
+  </section>
 
-    <section class="panel wide" aria-labelledby="info-h" style="--i:3">
-      <h2 id="info-h">Chrome <small>camera info and settings</small></h2>
+
+    <section class="panel tabs" aria-label="Deck tabs">
+      <div role="tablist" aria-label="Deck sections">
+        <button role="tab" id="tab-uplink" data-tab="uplink" aria-controls="p-uplink" aria-selected="true" title="Uplink: bridge connection">Uplink</button>
+        <button role="tab" id="tab-chrome" data-tab="chrome" aria-controls="p-chrome" aria-selected="false" tabindex="-1" title="Chrome: camera info and settings">Chrome</button>
+        <button role="tab" id="tab-glass" data-tab="glass" aria-controls="p-glass" aria-selected="false" tabindex="-1" title="Glassmouth: the voice relay">Glassmouth</button>
+        <button role="tab" id="tab-deck" data-tab="deck" aria-controls="p-deck" aria-selected="false" tabindex="-1" title="Deck: sound, theme and about">Deck</button>
+      </div>
+      <div role="tabpanel" id="p-uplink" aria-labelledby="tab-uplink" tabindex="0">
+        <h2>Uplink <small>bridge link</small></h2>
+        <p id="demoText" class="hint" hidden><strong>Glassmouth:</strong> "Nobody home. Just static and the meat at the desk." Run <code>npm start</code> in the project, then enter the address and token here. The camera stays on its own cable, never on the internet.</p>
+        <form id="conn" autocomplete="off">
+          <label>Bridge address <input id="addr" type="url" value="http://localhost:8787" spellcheck="false"></label>
+          <label>Access token (the ICE) <input id="token" type="password" spellcheck="false" autocomplete="off"></label>
+          <button type="submit" aria-label="Jack in: connect to the bridge">Jack in</button>
+        </form>
+      </div>
+      <div role="tabpanel" id="p-chrome" aria-labelledby="tab-chrome" tabindex="0" hidden>
+      <h2 id="info-h">Chrome <small>camera info, settings</small></h2>
       <div class="row"><button id="infoLoad" type="button" disabled>Read camera info</button></div>
-      <div id="info" hidden>
+      <div id="info">
         <dl id="infoList" class="kv"></dl>
         <h3>Adjust</h3>
         <div class="sliders">
-          <label>Brightness <input id="s-brightness" type="range" min="0" max="100"> <output></output></label>
-          <label>Contrast <input id="s-contrast" type="range" min="0" max="100"> <output></output></label>
-          <label>Saturation <input id="s-saturation" type="range" min="0" max="100"> <output></output></label>
-          <label>Sharpness <input id="s-sharpness" type="range" min="0" max="10"> <output></output></label>
-          <label>Microphone level <input id="s-mic" type="range" min="0" max="100"> <output></output></label>
+          <label>Brightness <input id="s-brightness" type="range" min="0" max="100" disabled> <output>--</output></label>
+          <label>Contrast <input id="s-contrast" type="range" min="0" max="100" disabled> <output>--</output></label>
+          <label>Saturation <input id="s-saturation" type="range" min="0" max="100" disabled> <output>--</output></label>
+          <label>Sharpness <input id="s-sharpness" type="range" min="0" max="10" disabled> <output>--</output></label>
+          <label>Mic level <input id="s-mic" type="range" min="0" max="100" disabled> <output>--</output></label>
         </div>
-        <div class="row"><button id="clock" type="button">Set camera clock from this computer</button></div>
-        <h3>Not enabled in this build</h3>
+        <div class="row"><button id="clock" type="button" disabled>Sync camera clock</button></div>
+        <h3>Not enabled here</h3>
         <ul class="off">
           <li><button type="button" disabled>Wi-Fi setup</button></li>
           <li><button type="button" disabled>Reboot</button></li>
@@ -109,24 +120,12 @@
           <li><button type="button" disabled>Format disk</button></li>
           <li><button type="button" disabled>Change password</button></li>
         </ul>
-        <p class="hint">These are shown so the list is complete. They change or can lock out the camera, so they are not wired up.</p>
+        <p class="hint">Shown for completeness; they can lock out the camera.</p>
       </div>
-    </section>
-
-    <section class="panel wide glass" aria-labelledby="gm-h" style="--i:4">
-      <h2 id="gm-h">Glassmouth <small>the voice on the wire</small></h2>
-      <form id="sayForm" class="says" aria-labelledby="say-h" autocomplete="off">
-        <h3 id="say-h">Glassmouth says <small>speak through the camera</small></h3>
-        <label>Words for the camera's speaker <input id="sayText" type="text" maxlength="300" placeholder="Up to 300 characters"></label>
-        <div class="sliders">
-          <label>Voice <select id="sayVoice"><option value="">Default voice</option></select></label>
-          <label>Level <input id="sayLevel" type="range" min="0.01" max="0.08" step="0.005" value="0.035"> <output id="sayLevelOut">0.035</output></label>
-          <label>Chime level <input id="sayChime" type="range" min="0.004" max="0.03" step="0.001" value="0.016"> <output id="sayChimeOut">0.016</output></label>
-        </div>
-        <div class="row"><button id="sayGo" type="submit" disabled>Speak</button><span id="sayStatus" role="status" class="mono-l">Quiet on the line.</span></div>
-        <p class="hint">The speaker is small and loud. Start low. One voice at a time; lines wait their turn.</p>
-      </form>
-      <p class="hint" id="gmNote"><strong>Voice relay not enabled in this build.</strong> Later, messages from netrunners (agents) will queue here, each labeled with who said it, and Glassmouth's own asides marked as its own.</p>
+      </div>
+      <div role="tabpanel" id="p-glass" aria-labelledby="tab-glass" tabindex="0" hidden>
+      <h2 id="gm-h">Relay <small>agent voice queue</small></h2>
+      <p class="hint" id="gmNote"><strong>Not enabled in this build.</strong> Netrunner messages will queue here.</p>
       <div class="gm" aria-describedby="gmNote">
         <div><h3>Queue</h3><ul class="queue" aria-label="Message queue"><li class="empty">Nothing waiting. Quiet on the line.</li></ul></div>
         <div><h3>Reply</h3>
@@ -139,10 +138,19 @@
         </div>
         <div><h3>History</h3><ul class="queue" aria-label="Message history"><li class="empty">No messages yet.</li></ul></div>
       </div>
+      </div>
+      <div role="tabpanel" id="p-deck" aria-labelledby="tab-deck" tabindex="0" hidden>
+        <h2>Deck <small>sound, theme, about</small></h2>
+        <div class="row"><button id="theme" type="button" class="ghost" aria-pressed="false">Light theme</button></div>
+        <fieldset class="sound"><legend>Sound (off by default)</legend>
+          <label class="check"><input id="sfx" type="checkbox"> Sound effects</label>
+          <label class="check"><input id="music" type="checkbox"> Ambient music</label>
+        </fieldset>
+        <p class="hint">Only the uplink address, token, theme, sound and last-tab choices are stored, in this browser . 3D by three.js (MIT). Voice: Glassmouth. No camera pictures are stored.</p>
+      </div>
     </section>
   </div>
 </main>
-<footer><p>Only the uplink address, token, theme and sound choices are stored, in this browser (the meat's own memory). 3D by three.js (MIT). Voice and persona: Glassmouth.</p></footer>
 <script src="app.js" type="module"></script>
 </body>
 </html>

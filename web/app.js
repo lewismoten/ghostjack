@@ -38,6 +38,10 @@ function setConnected(on) {
   for (const id of controls) $(id).disabled = !on;
   for (const b of pads) b.disabled = !on;
   $('sayGo').disabled = !on;
+  for (const id of ['s-brightness', 's-contrast', 's-saturation', 's-sharpness', 's-mic', 'clock']) $(id).disabled = !on;
+  $('uplinkState').textContent = on ? 'Jacked in' : 'Flatline'; $('uplinkState').classList.toggle('on', on);
+  $('uplinkState').setAttribute('aria-label', `Connection: ${on ? 'jacked in' : 'flatline'}. Open the Uplink tab`);
+  $('demoText').hidden = on;
   if (on) loadVoices();
   $('demo').hidden = on;
   $('light').classList.toggle('on', on);
@@ -52,22 +56,23 @@ async function connect(e) {
   base = $('addr').value.trim().replace(/\/+$/, '');
   token = $('token').value.trim();
   store.set('bridge', base); store.set('token', token);
-  setStatus('Jacking in... listening for the wire.');
+  setStatus('Jacking in...');
   $('radar').hidden = false;
   try {
     try {
       const hello = await fetch(base + '/api/hello').then((r) => r.json());
       if (!hello.ok) throw new Error('not a camera bridge');
-    } catch { setConnected(false); $('demo').hidden = false; return setStatus("No carrier. Nothing answered on the wire at that address: the bridge is flatlined. Showing the demo.", true); }
+    } catch { setConnected(false); $('demo').hidden = false; return setStatus("No carrier: nothing answered at that address. Demo shown.", true); }
     try {
       const r = await api('/api/status');
-      if (r.status === 401) { setConnected(false); return setStatus("Wrong token. The ICE held: the bridge answered but won't talk to strangers.", true); }
+      if (r.status === 401) { setConnected(false); return setStatus("Wrong token. The ICE held.", true); }
       const s = await r.json();
       if (!r.ok) throw new Error(s.error);
-      setConnected(true);
+      const first = !connected; setConnected(true);
+      if (first && tabNow() === 'uplink') selectTab('chrome');
       $('night').checked = s.night === 'night'; showNight(s.night);
       setStatus(`${lost ? 'Back in sight. ' : "Eye's open. "}Jacked in. Night vision: ${s.night}${s.inNightVision ? ' (infrared on now)' : ''}.`); lost = false; loadDevice();
-    } catch (err) { setConnected(false); lost = true; setStatus(`Lost the angle. The bridge is up but the chrome did not answer: ${err.message}`, true); }
+    } catch (err) { setConnected(false); lost = true; setStatus(`Lost the angle. Chrome did not answer: ${err.message}`, true); }
   } finally { $('radar').hidden = true; }
 }
 // Who has the eye: You while this page is watching live, Nobody otherwise (agents come with the voice relay).
@@ -108,7 +113,7 @@ async function snapshot() {
 function stopLive() {
   const v = $('video'); if (!v.getAttribute('src')) return;
   v.removeAttribute('src'); v.load(); v.hidden = true;
-  $('live').textContent = 'Start live view'; $('live').setAttribute('aria-pressed', 'false');
+  $('live').textContent = 'Go live'; $('live').setAttribute('aria-pressed', 'false');
   setEye('Nobody');
 }
 function startLive() {
@@ -118,8 +123,8 @@ function startLive() {
   v.hidden = false; $('snap').hidden = true; $('placeholder').hidden = true;
   v.play().catch(() => setStatus('Lost the angle. The browser could not play the live view.', true));
   v.onerror = () => { setStatus('Lost the angle. Live view stopped.', true); stopLive(); };
-  $('live').textContent = 'Stop live view'; $('live').setAttribute('aria-pressed', 'true');
-  setEye('You'); setStatus("Eye's open on live view. It takes a few seconds. Sound is off until you press Sound.");
+  $('live').textContent = 'Stop live'; $('live').setAttribute('aria-pressed', 'true');
+  setEye('You'); setStatus("Eye's open. Starting in a few seconds; sound is off.");
 }
 $('live').onclick = () => ($('video').getAttribute('src') ? stopLive() : startLive());
 $('sound').onclick = () => {
@@ -131,11 +136,11 @@ $('shot').onclick = snapshot;
 
 // Estimated aim: counted from the moves sent (the camera cannot report its position). Units are steps.
 let pan = +store.get('gm-pan', 0) || 0, tilt = +store.get('gm-tilt', 0) || 0, scene = null;
-const sgn = (n) => (n >= 0 ? '+' : '') + n;
+const sgn = (n) => (n > 0 ? '+' : '') + n;
 const DEG_PER_STEP = 1.5; // illustration only
 function showPose(instant) {
-  const t = `Pan ~${sgn(pan)}, Tilt ~${sgn(tilt)} (estimated, in steps)`;
-  $('pose').textContent = t; $('hPose').textContent = `P ${sgn(pan)} T ${sgn(tilt)} est.`;
+  const t = `Pan ${sgn(pan)} \u00b7 Tilt ${sgn(tilt)} (estimated)`;
+  $('pose').textContent = t;
   store.set('gm-pan', pan); store.set('gm-tilt', tilt);
   scene?.setPose(Math.max(-90, Math.min(90, pan * DEG_PER_STEP)), Math.max(-60, Math.min(60, tilt * DEG_PER_STEP)), instant);
 }
@@ -153,6 +158,7 @@ async function move(dx, dy) {
     setStatus('Nudged one small step.');
   } catch (e) { setStatus(`Lost the angle. Move failed: ${e.message}`, true); }
 }
+$('stage').querySelector('.pad').addEventListener('pointerdown', (e) => e.stopPropagation());
 for (const b of pads) b.onclick = () => move(+b.dataset.dx, +b.dataset.dy);
 const keys = { ArrowUp: [0, 10], ArrowDown: [0, -10], ArrowLeft: [-10, 0], ArrowRight: [10, 0] };
 document.addEventListener('keydown', (e) => {
@@ -163,7 +169,7 @@ document.addEventListener('keydown', (e) => {
 {
   let from = null;
   const m = $('model');
-  m.addEventListener('pointerdown', (e) => { from = [e.clientX, e.clientY]; m.setPointerCapture(e.pointerId); });
+  m.addEventListener('pointerdown', (e) => { e.stopPropagation(); from = [e.clientX, e.clientY]; m.setPointerCapture(e.pointerId); });
   m.addEventListener('pointerup', (e) => {
     if (!from) return;
     const dx = e.clientX - from[0], dy = e.clientY - from[1]; from = null;
@@ -230,8 +236,9 @@ function fill(info) {
   $('infoList').replaceChildren(...rows.flatMap(([k, v]) => { const dt = document.createElement('dt'), dd = document.createElement('dd'); dt.textContent = k; dd.textContent = v; return [dt, dd]; }));
   if (i) for (const [k, id] of Object.entries(sliders)) setSlider(id, i[k]);
   if (info.mic) setSlider('s-mic', info.mic.level);
-  $('info').hidden = false;
 }
+const blank = () => $('infoList').replaceChildren(...['Type', 'Model', 'Software', 'Network link', 'IP address', 'Camera clock (UTC)', 'SD card', 'Picture', 'Night mode', 'Microphone', 'Alerts'].flatMap((k) => { const dt = document.createElement('dt'), dd = document.createElement('dd'); dt.textContent = k; dd.textContent = '--'; return [dt, dd]; }));
+blank();
 function setSlider(id, v) { if (v === undefined) return; $(id).value = v; $(id).nextElementSibling.textContent = v; }
 async function loadInfo() {
   setStatus('Looking the chrome over...');
@@ -250,6 +257,31 @@ for (const [k, id] of Object.entries(sliders)) {
 $('s-mic').oninput = () => { $('s-mic').nextElementSibling.textContent = $('s-mic').value; };
 $('s-mic').onchange = () => write('/api/mic', { level: +$('s-mic').value }, `Microphone level set to ${$('s-mic').value}.`);
 $('clock').onclick = async () => { const j = await write('/api/clock', {}, 'Camera clock set from this computer (UTC).'); if (j) loadInfo(); };
+
+// Tabs (WAI-ARIA tabs pattern): arrows, Home and End move between them; the last one is remembered.
+const tabEls = [...document.querySelectorAll('[role=tab]')];
+const tabNow = () => tabEls.find((t) => t.getAttribute('aria-selected') === 'true').dataset.tab;
+function selectTab(id, focus) {
+  if (!tabEls.some((t) => t.dataset.tab === id)) id = 'uplink';
+  for (const t of tabEls) {
+    const on = t.dataset.tab === id;
+    t.setAttribute('aria-selected', String(on)); t.tabIndex = on ? 0 : -1;
+    $(t.getAttribute('aria-controls')).hidden = !on;
+    if (on && focus) t.focus();
+  }
+  store.set('gm-tab', id);
+}
+tabEls.forEach((t, i) => {
+  t.onclick = () => selectTab(t.dataset.tab);
+  t.onkeydown = (e) => {
+    const to = { ArrowRight: (i + 1) % tabEls.length, ArrowLeft: (i + tabEls.length - 1) % tabEls.length, Home: 0, End: tabEls.length - 1 }[e.key];
+    if (to === undefined) return;
+    e.preventDefault(); selectTab(tabEls[to].dataset.tab, true);
+  };
+});
+selectTab(store.get('gm-tab', 'uplink'));
+$('uplinkState').onclick = () => selectTab('uplink', true);
+$('demoHelp').onclick = () => selectTab('uplink', true);
 
 // Glassmouth says: speak through the camera's speaker (one line at a time; the bridge queues them).
 let voicesLoaded = false;
@@ -291,7 +323,7 @@ $('sayForm').addEventListener('submit', async (e) => {
 
 $('conn').addEventListener('submit', connect);
 setConnected(false);
-if (store.get('token', '')) connect(); else { $('demo').hidden = false; setStatus('Flatlined, no carrier yet. Enter the uplink address and token, then Jack in.'); }
+if (store.get('token', '')) connect(); else { $('demo').hidden = false; setStatus('Flatlined. Open Uplink, enter the token, Jack in.'); }
 
 // The 3D extras load last, so the page works without them; any failure leaves the plain CSS look.
 const loadScene = () => import('./scene.js').then((m) => m.start({ bg: $('bg'), model: $('model'), reduced })).then((s) => { scene = s; showPose(true); }).catch(() => { $('bg').hidden = true; });
