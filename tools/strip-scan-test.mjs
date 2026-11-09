@@ -7,13 +7,19 @@
 // room that is in the row appears once (no repeats), no page errors and no outside requests. Screenshots of
 // the live view and the finished one at 1440 and 390 wide go into the folder given as the first argument
 // (default captures/strip-test, git-ignored; delete it after looking). Needs ffmpeg with v360.
-// Run: node tools/strip-scan-test.mjs <outdir>
+// Run: node tools/strip-scan-test.mjs <outdir> [--rows [--quick]]   (--quick skips the Find limits part)
+// --rows first runs Find limits and checks its range and lens against the fake's truth (3 still steps = a wall),
+// then scans with Rows on (a bottom wall, rows stepped up by measured shifts, a top wall) and checks that the rows
+// line up: height and width near the expected, each landmark once, and the landmarks in the right vertical order.
 import { chromium } from 'playwright-core';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { startFakeRoom, TRUE } from './fake-room.mjs';
 
-const out = process.argv[2] || 'captures/strip-test';
+const rows = process.argv.includes('--rows');
+const out =
+  process.argv.find((a, i) => i > 1 && !a.startsWith('--')) ||
+  'captures/strip-test';
 mkdirSync(out, { recursive: true });
 const room = await startFakeRoom({ fast: true });
 const url = `http://127.0.0.1:${room.port}/`;
@@ -54,7 +60,8 @@ const countLandmarks = () => {
   const CELL = 8,
     cw = Math.ceil(c.width / CELL),
     ch = Math.ceil(c.height / CELL),
-    found = {};
+    found = {},
+    cy = {};
   for (const [name, col] of Object.entries(cols)) {
     const cnt = new Uint16Array(cw * ch);
     for (let y = 0; y < c.height; y++)
@@ -101,8 +108,16 @@ const countLandmarks = () => {
       if (size >= 20) blobs++;
     }
     found[name] = blobs;
+    let sy = 0,
+      sn = 0;
+    for (let i = 0; i < cnt.length; i++)
+      if (cnt[i] >= 50) {
+        sy += ((i / cw) | 0) * cnt[i];
+        sn += cnt[i];
+      }
+    cy[name] = sn ? (sy / sn) * CELL : null;
   }
-  return { w: c.width, h: c.height, found };
+  return { w: c.width, h: c.height, found, cy };
 };
 try {
   const ctx = await browser.newContext({
@@ -136,8 +151,46 @@ try {
     null,
     { timeout: 20000 },
   );
-  await page.evaluate(() => document.getElementById('keySphere').click());
-  await page.waitForTimeout(1500);
+  if (rows && !process.argv.includes('--quick')) {
+    // Find limits first: range and lens from real travel, against the fake's truth
+    await page.evaluate(() => {
+      document.getElementById('limitsSweep').checked = false;
+    });
+    await page.evaluate(() => document.getElementById('tab-rig')?.click());
+    await page.evaluate(() => document.getElementById('limitsGo').click());
+    await page.waitForFunction(
+      () =>
+        /Lens about/.test(document.getElementById('limitsInfo').textContent),
+      null,
+      { timeout: 15 * 60 * 1000, polling: 1000 },
+    );
+    const info = await page.evaluate(
+      () => document.getElementById('limitsInfo').textContent,
+    );
+    console.log(info);
+    await page.waitForTimeout(1500);
+    const m = /pan (\d+) steps.*tilt (\d+) steps/.exec(info),
+      aim = room.aim(),
+      near = (v, t, tol) => Math.abs(v - t) / t <= tol;
+    check(
+      !!m && near(+m[1], TRUE.panUnits / 10, 0.1),
+      `Find limits pan ${m?.[1]} steps vs true ${TRUE.panUnits / 10} (10%)`,
+    );
+    check(
+      !!m && near(+m[2], TRUE.tiltUnits / 10, 0.1),
+      `Find limits tilt ${m?.[2]} steps vs true ${TRUE.tiltUnits / 10} (10%)`,
+    );
+    check(near(aim.fovH, TRUE.fovH, 0.1), `fovH ${aim.fovH} vs ${TRUE.fovH}`);
+    check(
+      near(aim.fovV, TRUE.fovV, 0.1),
+      `fovV ${aim.fovV} vs ${TRUE.fovV.toFixed(1)}`,
+    );
+    // the camera is back in the middle; the scan must find its own walls
+  }
+  if (!rows || process.argv.includes('--quick')) {
+    await page.evaluate(() => document.getElementById('keySphere').click());
+    await page.waitForTimeout(1500);
+  }
   await clickBtn(page, '.spherebar button', 'Strip scan');
   await page.waitForSelector('.stripview', {
     state: 'visible',
@@ -147,6 +200,17 @@ try {
     await page.evaluate(() => !document.querySelector('.stripview').hidden),
     'Strip scan opens its view',
   );
+  if (rows) {
+    await page.evaluate(() => {
+      const l = [...document.querySelectorAll('.stripbar label')].find((x) =>
+        x.textContent.includes('Rows'),
+      );
+      l.querySelector('input').click();
+      const sel = document.querySelector('.stripbar select');
+      sel.value = '10';
+      sel.dispatchEvent(new Event('change'));
+    });
+  }
   await clickBtn(page, '.stripbar button', 'Start');
   const t0 = Date.now();
   await page.waitForTimeout(25000);
@@ -166,7 +230,7 @@ try {
         document.querySelector('.stripnote')?.textContent,
       ),
     null,
-    { timeout: 15 * 60 * 1000, polling: 1000 },
+    { timeout: 45 * 60 * 1000, polling: 1000 },
   );
   console.log(
     `scan took about ${Math.round((Date.now() - t0) / 1000)} s (fast waits)`,
@@ -191,9 +255,37 @@ try {
       Math.abs(stats.w - expect) / expect < 0.1,
       `width ${stats.w} within 10% of ${Math.round(expect)}`,
     );
+    if (rows) {
+      // rows: height from the tilt travel (the bottom wall to the top wall plus one picture), landmarks in order
+      const kv =
+          (360 / (2 * Math.tan((TRUE.fovV * Math.PI) / 360))) * (Math.PI / 180),
+        eh = (TRUE.tiltUnits * TRUE.tiltDegPerUnit + TRUE.fovV) * kv;
+      console.log(`height ${stats.h}, expected about ${Math.round(eh)}`);
+      check(
+        Math.abs(stats.h - eh) / eh < 0.15,
+        `height ${stats.h} within 15% of ${Math.round(eh)} (bottom and top walls found)`,
+      );
+      const lat = {
+          orange: 35,
+          green: 10,
+          red: 0,
+          blue: -10,
+          cyan: -25,
+          magenta: -30,
+        },
+        got = Object.keys(lat).filter((c) => stats.cy[c] !== null);
+      check(got.length >= 5, `${got.length} of 6 landmarks found`);
+      const byY = [...got].sort((a, b) => stats.cy[a] - stats.cy[b]),
+        byLat = [...got].sort((a, b) => lat[b] - lat[a]);
+      check(
+        byY.join() === byLat.join(),
+        `landmarks top to bottom ${byY.join(' ')} (expected ${byLat.join(' ')})`,
+      );
+    }
     const total = Object.values(stats.found).reduce((a, b) => a + b, 0);
     check(
-      total >= 2 && Object.values(stats.found).every((n) => n <= 1),
+      total >= (rows ? 5 : 2) &&
+        Object.values(stats.found).every((n) => n <= 1),
       `each landmark in the row appears at most once, ${total} found`,
     );
   }

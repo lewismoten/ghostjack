@@ -13,6 +13,7 @@ export const MAX_UNITS = 1500; // most pan units in one row
 const FEATHER = 3; // px blended at each strip's left edge (rows: at a row's top edge)
 const STILL_PX_PER_640 = 1; // under this many px (at 640 wide) a measured shift counts as still
 const WALL_STILLS = 3; // consecutive still measurements that mean a wall
+const CLIMB = 0.65; // of the picture height from one row to the next (about a third overlaps)
 const THROWAWAY = 2; // steps taken in the scan direction before the first picture of a row
 
 const median = (a) => {
@@ -192,9 +193,10 @@ export function compose(rows) {
 }
 
 // deps: { snap(): Promise<ImageBitmap> (the chosen picture size), step(dx, dy): Promise<void> (one small move,
-// resolves once sent), pose(): { pan } (the page's estimate, only used to paint the sphere), moved(dx, dy) (a step that was seen to move the picture), travel(pan, tilt): Promise<void>
-// (one fast trip to these absolute units, resolves once the picture settles), cancelled(), note(text), update(state) }.
-// plan: { step (units), rows: [tilt units, ...], panStart (units) or null, hd, waitMs? }.
+// resolves once sent), pose(): { pan, tilt } (the page's estimate, only used to paint the sphere), moved(dx, dy) (a step that was seen to move the picture), travelBy(dx): Promise<void>
+// (one fast trip sideways by these units, resolves once the picture settles), cancelled(), note(text), update(state) }.
+// plan: { step (units), multi (several rows: bottom wall, then up by measured shifts), maxRows (8), hd, waitMs? }.
+// Rows never use the lens or limits: walls are found from measured shifts and rows are placed by them.
 // Resolves { rows, steps, cancelled }.
 export async function stripScan(d, plan) {
   const wait = plan.waitMs ?? STRIP_WAIT_MS,
@@ -237,10 +239,12 @@ export async function stripScan(d, plan) {
         : recent.length
           ? median(recent)
           : expectPx(prev.w);
-    const r = refine(prev.full, cur.full, prev.w, prev.h, est, 0, 6, 1, 'x'),
+    // no coarse answer (smooth or stretched picture, or a different pitch than the last steps): search wide
+    const rx = c ? 6 : Math.round(est * 0.9) + 2,
+      r = refine(prev.full, cur.full, prev.w, prev.h, est, 0, rx, 1, 'x'),
       z = refine(prev.full, cur.full, prev.w, prev.h, 0, 0, 2, 1, 'x');
-    // no movement fits as well as the movement found: a wall (or a swallowed step)
-    if (z.score <= r.score * 1.05 + 0.3) return z.sx;
+    // no movement fits at least as well as the movement found: a wall (or a swallowed step)
+    if (z.score <= r.score) return z.sx;
     let s = r.sx;
     if (recent.length >= 3) {
       const m = median(recent);
@@ -269,7 +273,7 @@ export async function stripScan(d, plan) {
     }
     prev.bmp.close();
   }
-  async function scanRow(r, tilt) {
+  async function scanRow(r) {
     const row = newRow(first.h);
     state.rows.push(row);
     // a turn-around can swallow the first steps: take two before the first picture
@@ -297,6 +301,7 @@ export async function stripScan(d, plan) {
       }
       still = 0;
       s = m;
+      row.moves = (row.moves || 0) + 1;
       recent.push(s);
       d.moved(plan.step, 0);
       const mid = Xc + s / 2;
@@ -310,63 +315,115 @@ export async function stripScan(d, plan) {
       prev = cur;
       Xc += s;
       state.steps++;
-      say(`Row ${r + 1} of ${plan.rows.length}: ${row.strips.length} strips.`);
+      say(`Row ${r + 1}: ${row.strips.length} strips.`);
     }
     if (pend.B !== null)
       cut(row, pend.pic, pend.Xc, pend.B, Xc + s / 2, pend.step);
     pend.pic.bmp.close();
-    row.tilt = tilt;
+    row.tilt = d.pose().tilt;
     d.update(state);
     return row;
   }
-  // where the first picture of this row sits against the first picture of the row before
-  async function align(row, ref) {
-    const cur = row.firstGray;
-    const c = lim.imageShift(ref.hi, cur.hi, 'tilt', {
-      reach: 0.75,
-      minOverlap: 0.25,
-    });
-    if (!c) return null;
-    const r = refine(
-      ref.full,
-      cur.full,
-      cur.w,
-      cur.h,
-      c.sx * cur.w,
-      c.sy * cur.h,
-      6,
-      6,
-      'y',
-    );
+  // Vertical shift of `cur` against `prev`, px: negative when the camera tilted up (content moves down).
+  function measureV(prev, cur) {
+    const c = lim.imageShift(prev.hi, cur.hi, 'tilt'),
+      est = c ? c.sy * prev.h : 0,
+      r = refine(prev.full, cur.full, prev.w, prev.h, 0, est, 2, 6, 'y'),
+      z = refine(prev.full, cur.full, prev.w, prev.h, 0, 0, 2, 2, 'y');
+    return z.score <= r.score ? z.sy : r.sy;
+  }
+  const stillV = (pic) => (STILL_PX_PER_640 * pic.h) / 360;
+  // Step down until the picture stops sliding vertically (3 near-zero measurements in a row, after 2
+  // throwaway steps for the turn-around).
+  async function bottomWall() {
+    say('Looking for the bottom wall.');
+    let prev = await settle(),
+      still = 0;
+    for (let i = 0; i * plan.step < MAX_UNITS && !over(); i++) {
+      await d.step(0, -plan.step);
+      const cur = await settle(),
+        s = Math.abs(measureV(prev, cur));
+      prev.bmp.close();
+      prev = cur;
+      if (s < stillV(cur)) {
+        if (i >= THROWAWAY && ++still >= WALL_STILLS) break;
+      } else {
+        still = 0;
+        d.moved(0, -plan.step);
+      }
+      say(`Looking for the bottom wall (${i + 1} steps).`);
+    }
+    prev.bmp.close();
+  }
+  // Step up until the measured shifts add up to CLIMB of the picture height, or the top wall (3 stills after
+  // 2 throwaway steps). Returns { accum (px, the measured content shift: negative going up), top }.
+  async function climb() {
+    let prev = await settle(),
+      accum = 0,
+      still = 0,
+      top = false;
+    for (
+      let i = 0;
+      i * plan.step < MAX_UNITS && Math.abs(accum) < CLIMB * prev.h && !over();
+      i++
+    ) {
+      await d.step(0, plan.step);
+      const cur = await settle(),
+        s = measureV(prev, cur);
+      prev.bmp.close();
+      prev = cur;
+      if (Math.abs(s) < stillV(cur)) {
+        if (i >= THROWAWAY && ++still >= WALL_STILLS) {
+          top = true;
+          break;
+        }
+      } else {
+        still = 0;
+        accum += s;
+        d.moved(0, plan.step);
+      }
+      say(`Stepping up (${Math.round((Math.abs(accum) / prev.h) * 100)}%).`);
+    }
+    prev.bmp.close();
+    return { accum, top };
+  }
+  // Where this row's first picture sits against the previous row's first picture. Both were taken at the
+  // left wall, so x is nearly the same (a small refine of +-10 px at 640); y is the measured climb (+-8).
+  function align(row, ref, ey) {
+    const g = row.firstGray,
+      k = g.w / 640,
+      r = refine(ref.full, g.full, g.w, g.h, 0, ey, Math.round(10 * k), 8, 'y');
+    if (Math.abs(r.sy - ey) > 7.5) return { sx: 0, sy: ey, guess: true };
     return { sx: r.sx, sy: r.sy };
   }
+  const maxRows = plan.multi ? (plan.maxRows ?? 8) : 1;
   let ref = null,
-    master = { x: 0, y: 0 };
-  for (const [r, tilt] of plan.rows.entries()) {
+    master = { x: 0, y: 0 },
+    climbed = 0,
+    last = false;
+  if (plan.multi) await bottomWall();
+  for (let r = 0; r < maxRows && !over(); r++) {
+    await seekWall();
     if (over()) break;
-    if (r === 0 && plan.panStart === null) await seekWall();
-    else if (plan.panStart !== null) {
-      say(`Row ${r + 1}: a fast trip to the start.`);
-      await d.travel(plan.panStart - 40, tilt, r);
-      if (over()) break;
-      await seekWall();
-    }
-    if (over()) break;
-    const row = await scanRow(r, tilt);
+    const row = await scanRow(r);
     if (r > 0 && row.firstGray) {
-      const a = ref && (await align(row, ref));
-      if (a) {
-        master = { x: master.x + a.sx, y: master.y + a.sy };
-        row.alignedBy = a;
-      } else {
-        row.misaligned = true;
-        master = { x: master.x, y: master.y + row.h * 0.68 };
-      }
+      const a = align(row, ref, climbed);
+      master = { x: master.x + a.sx, y: master.y + a.sy };
+      row.alignedBy = a;
     }
     ref = row.firstGray;
     row.ox = master.x + row.firstGray.w / 2 + (row.origin ?? 0);
     row.oy = master.y;
     d.update(state);
+    if (!plan.multi || last || r + 1 >= maxRows) break;
+    // up at the right wall by small measured steps, then one fast trip back to the left
+    say(`Row ${r + 1} done: stepping up.`);
+    const c = await climb();
+    if (over()) break;
+    climbed = c.accum;
+    if (c.top && Math.abs(c.accum) < 0.25 * first.h) break; // nothing new above
+    last = c.top;
+    if (d.travelBy && row.moves > 0) await d.travelBy(-row.moves * plan.step);
   }
   say(over() ? 'Strip scan stopped.' : 'Strip scan done.');
   return { rows: state.rows, steps: state.steps, cancelled: over() };
