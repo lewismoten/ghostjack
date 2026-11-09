@@ -273,6 +273,19 @@ let liveOn = false,
   liveLoop = null,
   liveToken = 0; // a new Go live or a stop cancels a start that is still waiting
 let projectorNext = false;
+// Live quality: the 1080p main stream, or the small sub-stream (p1) that starts faster and runs lighter.
+// Recording and snapshots always use the main stream.
+let liveQ = store.get('gm-liveq', 'hd') === 'fast' ? 'fast' : 'hd';
+for (const r of document.querySelectorAll('input[name="lq"]')) {
+  r.checked = r.value === liveQ;
+  r.onchange = () => {
+    liveQ = r.value;
+    store.set('gm-liveq', liveQ);
+    setStatus(
+      `Live quality: ${liveQ === 'fast' ? 'Fast (sub-stream)' : '1080p'}. It applies the next time you go live.`,
+    );
+  };
+}
 function stopLive() {
   if (!liveOn) return;
   liveOn = false;
@@ -329,7 +342,7 @@ async function startLive() {
     foley.staticBurst();
     stopLive();
   };
-  const url = `${base}/api/stream`;
+  const url = `${base}/api/stream${liveQ === 'fast' ? '?profile=p1' : ''}`;
   // Cross-origin (the public page talking to localhost): fetch + MediaSource, because the browser can
   // block a <video src> to a private address that fetch() is allowed to reach (see live.js).
   if (live.canUse(base)) {
@@ -348,7 +361,7 @@ async function startLive() {
       // No MSE for this stream: fall through to the plain <video src>.
     }
   }
-  v.src = `${url}?token=${encodeURIComponent(token)}`;
+  v.src = `${url}${liveQ === 'fast' ? '&' : '?'}token=${encodeURIComponent(token)}`;
   v.play().catch(() => fail('the browser could not play the live view'));
 }
 $('live').onclick = () =>

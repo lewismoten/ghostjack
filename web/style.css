@@ -1078,3 +1078,34 @@ code {
   padding: 0.2rem 0.5rem;
   min-height: 28px;
 }
+
+.range {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.68rem;
+  color: var(--dim);
+}
+.range[hidden] {
+  display: none;
+}
+.rbar {
+  --at: 50%;
+  position: relative;
+  width: 44px;
+  height: 6px;
+  background: rgba(25, 227, 255, 0.25);
+  border-radius: 3px;
+}
+.rbar i {
+  position: absolute;
+  top: -2px;
+  left: var(--at);
+  width: 4px;
+  height: 10px;
+  margin-left: -2px;
+  background: #ffb000;
+}
+#limitsBar {
+  width: 100%;
+}

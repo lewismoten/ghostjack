@@ -76,6 +76,13 @@
             <p id="pose" class="pose" aria-live="polite">
               Pan 0 &middot; Tilt 0 (estimated)
             </p>
+            <span id="range" class="range" hidden role="img">
+              <span class="rlab">Pan</span
+              ><span id="rangePan" class="rbar"><i></i></span>
+              <span class="rlab">Tilt</span
+              ><span id="rangeTilt" class="rbar"><i></i></span>
+              <span class="rlab">est.</span>
+            </span>
             <button
               id="recenter"
               type="button"
@@ -426,6 +433,22 @@
             hidden
           >
             <h2>Dials <small>camera adjustments</small></h2>
+            <fieldset class="sound" id="neck">
+              <legend>Neck range</legend>
+              <div class="row">
+                <button id="limitsGo" type="button" disabled>
+                  Find limits
+                </button>
+                <button id="limitsStop" type="button" class="ghost" hidden>
+                  Cancel
+                </button>
+              </div>
+              <progress id="limitsBar" max="1" value="0" hidden></progress>
+              <p id="limitsInfo" class="hint" role="status">
+                Range not measured. Find limits steps the neck to each end in
+                small steps and looks at the picture to see where it stops.
+              </p>
+            </fieldset>
             <fieldset class="sound">
               <legend>Live quality</legend>
               <label class="check"
