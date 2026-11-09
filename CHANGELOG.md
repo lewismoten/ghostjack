@@ -45,6 +45,11 @@ follow [SemVer](https://semver.org/).
 
 ### Added
 
+- Strip scan (sphere view): a panorama built from thin slices from the middle of
+  each picture, taken in small steps and placed by how far the picture really
+  moved (measured from the pictures, not the step count, which is small, uneven
+  and has slack). One row or stacked rows; it grows on screen slice by slice and
+  downloads as a JPEG.
 - Photo sphere: Find limits now measures the lens (field of view and tilt
   degrees per step, from how far the picture slides each step; a fake room with
   a 62-degree lens measured 60.7) and paints every small picture onto a sphere
