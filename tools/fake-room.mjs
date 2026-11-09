@@ -122,13 +122,19 @@ const TYPES = {
   '.json': 'application/json',
 };
 
-// startFakeRoom({ port, fast }): fast shortens the page's wait after each Find limits step (limits.js STEP_MS).
+// startFakeRoom({ port, fast, jitter }): fast shortens the page's wait after each Find limits step (limits.js STEP_MS).
 export function startFakeRoom({
   port = 18792,
   fast = false,
   startPan = 130,
   startTilt = 60,
+  jitter = false,
 } = {}) {
+  // jitter (off by default): each picture is nudged up to 2 px vertically (like a camera that wobbles) and its
+  // exposure drifts slowly up to 8 percent (like auto exposure), both deterministic.
+  let shot = 0,
+    seed = 11;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647) * 2 - 1;
   makePanorama();
   let panU = startPan,
     tiltU = startTilt,
@@ -175,8 +181,16 @@ export function startFakeRoom({
       });
     });
   const render = (res, profile) => {
-    const { yaw, pitch } = yawPitch(poseNow()),
+    const { yaw, pitch: p0 } = yawPitch(poseNow()),
       [w, h] = profile === 'p1' ? [640, 360] : [1920, 1080];
+    let pitch = p0,
+      post = '';
+    if (jitter) {
+      shot++;
+      pitch += (rnd() * 2 * TRUE.fovV) / 360; // up to +-2 px at 360 high
+      const g = (1 + 0.08 * Math.sin(shot * 0.37)).toFixed(4);
+      post = `,lutrgb=r='clip(val*${g},0,255)':g='clip(val*${g},0,255)':b='clip(val*${g},0,255)'`;
+    }
     const ff = spawn(
       FFMPEG,
       [
@@ -186,7 +200,7 @@ export function startFakeRoom({
         '-i',
         PANO,
         '-vf',
-        `v360=e:flat:yaw=${yaw.toFixed(3)}:pitch=${pitch.toFixed(3)}:h_fov=${TRUE.fovH}:v_fov=${TRUE.fovV.toFixed(4)}:w=${w}:h=${h}:interp=linear`,
+        `v360=e:flat:yaw=${yaw.toFixed(3)}:pitch=${pitch.toFixed(3)}:h_fov=${TRUE.fovH}:v_fov=${TRUE.fovV.toFixed(4)}:w=${w}:h=${h}:interp=linear${post}`,
         '-frames:v',
         '1',
         '-q:v',
@@ -307,6 +321,9 @@ export function startFakeRoom({
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const s = await startFakeRoom({ fast: process.argv.includes('--fast') });
+  const s = await startFakeRoom({
+    fast: process.argv.includes('--fast'),
+    jitter: process.argv.includes('--jitter'),
+  });
   console.log(`Fake room at http://127.0.0.1:${s.port}/ (token: anything)`);
 }
