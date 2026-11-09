@@ -16,6 +16,8 @@ import { dirname, extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as camera from './camera.mjs';
 import * as speech from './say.mjs';
+import * as rec from './record.mjs';
+import { createReadStream } from 'node:fs';
 
 const PORT = Number(process.env.PORT) || 8787;
 const HOST = process.env.HOST || '127.0.0.1';
@@ -62,8 +64,13 @@ function cors(req, res) {
       'Access-Control-Allow-Headers',
       'Authorization, Content-Type',
     );
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Private-Network', 'true');
+    res.setHeader('Access-Control-Max-Age', '600');
+    res.setHeader(
+      'Access-Control-Expose-Headers',
+      'Content-Disposition, Content-Length',
+    );
   }
 }
 
@@ -297,6 +304,45 @@ const server = createServer(async (req, res) => {
       return j ? json(res, 200, j) : json(res, 404, { error: 'no such say' });
     }
     if (route === 'GET /api/stream') return await stream(req, res);
+    if (route === 'GET /api/record') return json(res, 200, rec.state());
+    if (route === 'POST /api/record/start') {
+      try {
+        return json(res, 202, await rec.start());
+      } catch (e) {
+        if (e.code === 409) return json(res, 409, { error: e.message });
+        throw e;
+      }
+    }
+    if (route === 'POST /api/record/stop') {
+      try {
+        return json(res, 200, await rec.stop());
+      } catch (e) {
+        if (e.code === 409) return json(res, 409, { error: e.message });
+        throw e;
+      }
+    }
+    const rm = /^(GET|DELETE) \/api\/record\/([0-9a-f]{12})$/.exec(route);
+    if (rm) {
+      const r = rec.get(rm[2]);
+      if (!r) return json(res, 404, { error: 'no such recording' });
+      if (rm[1] === 'DELETE') {
+        if (rec.remove(rm[2]) === null)
+          return json(res, 409, { error: 'still recording' });
+        return json(res, 200, { ok: true });
+      }
+      if (r.status !== 'ready')
+        return json(res, r.status === 'recording' ? 409 : 404, rec.view(r));
+      const d = new Date(r.started),
+        z = (n) => String(n).padStart(2, '0');
+      const name = `ghostjack-${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}${z(d.getSeconds())}.mp4`;
+      res.writeHead(200, {
+        'Content-Type': 'video/mp4',
+        'Content-Length': r.bytes,
+        'Content-Disposition': `attachment; filename="${name}"`,
+        'Cache-Control': 'no-store',
+      });
+      return createReadStream(r.file).pipe(res);
+    }
     json(res, 404, { error: 'no such route' });
   } catch (e) {
     if (!res.headersSent)
@@ -307,11 +353,13 @@ const server = createServer(async (req, res) => {
 
 function stop() {
   for (const p of children) p.kill('SIGKILL');
+  rec.cleanup();
   camera.shutdown().finally(() => process.exit(0));
 }
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);
 
+rec.sweep();
 server.listen(PORT, HOST, () =>
   console.log(`Ghost Jack bridge on http://${HOST}:${PORT}`),
 );
