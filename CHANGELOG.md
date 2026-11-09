@@ -42,7 +42,9 @@ follow [SemVer](https://semver.org/).
   with a name. Keys 1 to 9 (number row or numpad) and S for SET. The bridge
   keeps them for agents and other browsers (`GET`/`POST /api/shots`).
 - Going to a saved shot or re-centering moves in one fast trip instead of small
-  steps a second apart (`POST /api/travel`).
+  steps a second apart (`POST /api/travel`). The page watches quick small frames
+  for the picture to settle, then takes the snapshot and frees the controls,
+  instead of waiting out the trip estimate.
 - Jack out (disconnect) and Forget the ICE (remove the saved token from this
   browser) in the Uplink tab.
 - When not live, the Eye refreshes itself: a quiet snapshot after jacking in and
