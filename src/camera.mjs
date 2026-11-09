@@ -219,3 +219,14 @@ export function setClock() {
     return (await infoNow()).date;
   });
 }
+
+// A fresh rtmp address to publish speech to. Request one ONLY when a publish follows at once:
+// an address nobody publishes to jams the speaker until the camera restarts (docs/discovery.md step 13).
+export function talkUrl() {
+  return run(async () => {
+    const msg = await call('ccm_talk', { setup: { stream: 'RTP_Unicast', trans: { proto: 'rtmp' } }, token: 'p0' });
+    const url = msg.uri?.url || msg.uri;
+    if (typeof url !== 'string' || !url.startsWith('rtmp://')) throw new Error('no talk address');
+    return url;
+  });
+}

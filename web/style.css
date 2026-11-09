@@ -73,3 +73,6 @@ input[type=text]{font:inherit;padding:6px 8px;min-height:36px;border:1px solid v
 code{background:rgba(0,0,0,.3);padding:1px 4px;border-radius:4px;font-family:var(--mono)}
 footer{font-size:.85rem;color:var(--dim);padding-bottom:24px}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}body::after{display:none}}
+.says{margin-bottom:16px}.says select{font:inherit;min-height:36px;width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:4px;background:rgba(0,0,0,.25);color:var(--fg)}
+:root[data-theme=light] .says select{background:#fff}
+#sayStatus{font-family:var(--mono);font-size:.85rem;color:var(--amber)}

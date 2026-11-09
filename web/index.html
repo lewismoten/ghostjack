@@ -115,6 +115,16 @@
 
     <section class="panel wide glass" aria-labelledby="gm-h" style="--i:4">
       <h2 id="gm-h">Glassmouth</h2>
+      <form id="sayForm" class="says" aria-labelledby="say-h" autocomplete="off">
+        <h3 id="say-h">Glassmouth says</h3>
+        <label>Words for the camera's speaker <input id="sayText" type="text" maxlength="300" placeholder="Up to 300 characters"></label>
+        <div class="sliders">
+          <label>Voice <select id="sayVoice"><option value="">Default voice</option></select></label>
+          <label>Level <input id="sayLevel" type="range" min="0.05" max="0.4" step="0.05" value="0.15"> <output id="sayLevelOut">0.15</output></label>
+        </div>
+        <div class="row"><button id="sayGo" type="submit" disabled>Speak</button><span id="sayStatus" role="status" class="mono-l">Quiet on the line.</span></div>
+        <p class="hint">The speaker is small and loud. Start low. One voice at a time; lines wait their turn.</p>
+      </form>
       <p class="hint" id="gmNote"><strong>Voice relay not enabled in this build.</strong> Later, messages from agents will queue here, each labeled with who said it, and Glassmouth's own asides marked as its own.</p>
       <div class="gm" aria-describedby="gmNote">
         <div><h3>Queue</h3><ul class="queue" aria-label="Message queue"><li class="empty">Nothing waiting. Quiet on the line.</li></ul></div>

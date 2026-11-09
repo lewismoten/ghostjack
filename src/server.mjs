@@ -8,6 +8,7 @@ import { homedir } from 'node:os';
 import { dirname, extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as camera from './camera.mjs';
+import * as speech from './say.mjs';
 
 const PORT = Number(process.env.PORT) || 8787;
 const HOST = process.env.HOST || '127.0.0.1';
@@ -68,6 +69,7 @@ async function readBody(req) {
 
 const clamp = (n, lim) => Math.max(-lim, Math.min(lim, Math.round(Number(n) || 0)));
 let lastMove = 0;
+const sayTimes = []; // timestamps of recent say requests (10 per minute)
 const children = new Set();
 
 // Crop a JPEG (fractions of the picture) and scale it back up to 1280 wide.
@@ -153,6 +155,24 @@ const server = createServer(async (req, res) => {
       return json(res, 200, { level: await camera.setMic(Number(b.level)) });
     }
     if (route === 'POST /api/clock') return json(res, 200, await camera.setClock());
+    if (route === 'GET /api/voices') return json(res, 200, { voices: await speech.voices() });
+    if (route === 'POST /api/say') {
+      const b = await readBody(req);
+      const text = String(b.text ?? '').replace(/\s+/g, ' ').trim();
+      if (!text) return json(res, 400, { error: 'text needed' });
+      if (text.length > 300) return json(res, 400, { error: 'text is 300 characters at most' });
+      const now = Date.now();
+      while (sayTimes.length && now - sayTimes[0] > 60000) sayTimes.shift();
+      if (sayTimes.length >= 10) return json(res, 429, { error: 'ten says a minute' });
+      const voice = b.voice ? String(b.voice) : '';
+      if (voice && !(await speech.voices()).includes(voice)) return json(res, 400, { error: 'unknown voice' });
+      const level = Math.max(0.05, Math.min(0.4, Number(b.level ?? 0.15) || 0.15));
+      const rate = Math.max(90, Math.min(220, Math.round(Number(b.rate ?? 140) || 140)));
+      sayTimes.push(now);
+      return json(res, 202, speech.say({ text, voice, level, rate }));
+    }
+    const sm = /^GET \/api\/say\/([0-9a-f]{12})$/.exec(route);
+    if (sm) { const j = speech.sayStatus(sm[1]); return j ? json(res, 200, j) : json(res, 404, { error: 'no such say' }); }
     if (route === 'GET /api/stream') return await stream(req, res);
     json(res, 404, { error: 'no such route' });
   } catch (e) {

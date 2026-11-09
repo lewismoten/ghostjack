@@ -37,6 +37,8 @@ function setConnected(on) {
   connected = on;
   for (const id of controls) $(id).disabled = !on;
   for (const b of pads) b.disabled = !on;
+  $('sayGo').disabled = !on;
+  if (on) loadVoices();
   $('demo').hidden = on;
   $('light').classList.toggle('on', on);
   $('hConn').textContent = on ? 'LINK OK' : 'OFFLINE';
@@ -248,6 +250,43 @@ for (const [k, id] of Object.entries(sliders)) {
 $('s-mic').oninput = () => { $('s-mic').nextElementSibling.textContent = $('s-mic').value; };
 $('s-mic').onchange = () => write('/api/mic', { level: +$('s-mic').value }, `Microphone level set to ${$('s-mic').value}.`);
 $('clock').onclick = async () => { const j = await write('/api/clock', {}, 'Camera clock set from this computer (UTC).'); if (j) loadInfo(); };
+
+// Glassmouth says: speak through the camera's speaker (one line at a time; the bridge queues them).
+let voicesLoaded = false;
+async function loadVoices() {
+  if (voicesLoaded) return;
+  voicesLoaded = true;
+  try {
+    const j = await (await api('/api/voices')).json();
+    for (const v of j.voices || []) { const o = document.createElement('option'); o.value = o.textContent = v; $('sayVoice').append(o); }
+  } catch { voicesLoaded = false; }
+}
+$('sayLevel').oninput = () => { $('sayLevelOut').textContent = (+$('sayLevel').value).toFixed(2); };
+const sayLine = (t) => { $('sayStatus').textContent = t; };
+let saying = false;
+$('sayForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const text = $('sayText').value.trim();
+  if (!text || saying) return;
+  saying = true; $('sayGo').disabled = true;
+  try {
+    const r = await api('/api/say', { method: 'POST', body: JSON.stringify({ text, voice: $('sayVoice').value || undefined, level: +$('sayLevel').value }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error);
+    snd.sfx.relay();
+    sayLine('Line open. Waiting for the floor.');
+    for (let i = 0; i < 90; i++) {
+      await new Promise((ok) => setTimeout(ok, 1000));
+      const s = await (await api(`/api/say/${j.id}`)).json();
+      if (s.status === 'speaking') sayLine('On air.');
+      else if (s.status === 'queued') sayLine(`Waiting for the floor. ${s.ahead} ahead.`);
+      else if (s.status === 'done') { sayLine('Done. Said it.'); snd.sfx.relay(); $('sayText').value = ''; return; }
+      else { sayLine(`Line's busy. It did not go out (${s.error || 'failed'}).`); snd.sfx.error(); return; }
+    }
+    sayLine("Line's busy. No word back; check the camera.");
+  } catch (err) { sayLine(`Line's busy. ${err.message}`); snd.sfx.error(); }
+  finally { saying = false; $('sayGo').disabled = !connected; }
+});
 
 $('conn').addEventListener('submit', connect);
 setConnected(false);
