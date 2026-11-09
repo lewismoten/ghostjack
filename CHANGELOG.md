@@ -32,6 +32,9 @@ follow [SemVer](https://semver.org/).
 
 ### Added
 
+- Jack out (disconnect) and Forget the ICE (remove the saved token from this
+  browser) in the Uplink tab.
+
 - Find limits (Dials tab, only when you press it): the page steps the neck to
   each end in steps of 10, comparing small pictures, and records the range
   (measured here: pan 48 steps, tilt 19 steps; 480 and 190 units). It shows

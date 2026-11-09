@@ -99,6 +99,7 @@ function setConnected(on) {
   for (const id of controls) $(id).disabled = !on;
   updateArrowsSoon();
   $('sayGo').disabled = !on;
+  $('jackOut').disabled = !on;
   $('limitsGo').disabled = !on || finding;
   for (const id of [
     's-brightness',
@@ -1337,3 +1338,22 @@ const loadScene = () =>
 if ('requestIdleCallback' in window)
   requestIdleCallback(loadScene, { timeout: 3000 });
 else setTimeout(loadScene, 1500);
+
+// Jack out: drop the line without forgetting anything; Forget the ICE: remove
+// the saved token from this browser (for shared computers or a wrong paste).
+$('jackOut').onclick = async () => {
+  if (recorder.active) await recorder.stop();
+  setConnected(false);
+  setStatus('Jacked out. Line closed.');
+};
+$('forgetIce').onclick = () => {
+  try {
+    localStorage.removeItem('token');
+  } catch {
+    /* private window */
+  }
+  token = '';
+  $('token').value = '';
+  if (connected) setConnected(false);
+  setStatus('ICE forgotten. This browser no longer holds the token.');
+};
