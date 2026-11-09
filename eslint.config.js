@@ -7,12 +7,21 @@ export default [
   { ignores: ['web/vendor/**', 'docs/**', 'node_modules/**', 'captures/**'] },
   js.configs.recommended,
   {
-    files: ['src/**/*.mjs', 'tools/**/*.mjs', 'eslint.config.js'],
+    files: [
+      'src/**/*.mjs',
+      'tools/**/*.mjs',
+      'hardware/**/*.mjs',
+      'eslint.config.js',
+    ],
     languageOptions: { globals: globals.node },
   },
   {
     // the sphere test's page.evaluate callbacks run in the browser
-    files: ['tools/fake-room-test.mjs', 'tools/strip-scan-test.mjs'],
+    files: [
+      'tools/fake-room-test.mjs',
+      'tools/strip-scan-test.mjs',
+      'hardware/bench-stands/build.mjs',
+    ],
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
   },
   {

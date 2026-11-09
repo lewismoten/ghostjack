@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="540mm" height="300mm" viewBox="0 0 540 300">
+<title>Ghost Jack bench: assembly diagram</title>
+<rect width="540" height="300" fill="#ffffff"/>
+<text x="10" y="14" font-family="Helvetica, Arial, sans-serif" font-size="6" fill="#222" font-weight="bold">Ghost Jack bench: CYD 2.8 inch cradle on a deck, side view (screen faces right)</text>
+<text x="10" y="22" font-family="Helvetica, Arial, sans-serif" font-size="3.6" fill="#222" >Wood tan, board blue dashed, near rail ghosted, wedge key red. One strut notch per angle; the strut tab goes through the plate slot beside that angle number.</text>
+<polygon points="128.82,140.00 18.35,140.00 18.35,143.00 128.82,143.00" fill="#e6c79a" stroke="#333" stroke-width="0.4" />
+<polygon points="124.82,140.00 121.82,140.00 121.82,131.00 124.82,131.00" fill="#e6c79a" stroke="#333" stroke-width="0.4" />
+<polygon points="118.47,140.00 121.37,139.22 99.04,55.88 96.14,56.66" fill="#e6c79a" stroke="#333" stroke-width="0.4" />
+<polygon points="118.78,129.56 129.41,126.72 128.63,123.82 118.01,126.67" fill="#e6c79a" stroke="#333" stroke-width="0.4" />
+<polygon points="118.01,126.67 127.67,124.08 114.73,75.78 105.07,78.37" fill="rgba(31,111,235,0.12)"  stroke-width="0.4" stroke-dasharray="1.5 1" stroke="#1f6feb"/>
+<polygon points="118.78,129.56 129.41,126.72 114.14,69.73 103.51,72.57" fill="rgba(230,199,154,0.35)" stroke="#333" stroke-width="0.4" stroke-dasharray="3 1"/>
+<polygon points="112.08,116.12 115.70,129.65 77.06,140.00 73.44,126.48" fill="#e6c79a" stroke="#333" stroke-width="0.4" />
+<polygon points="112.85,119.02 114.92,126.75 126.51,123.64 124.44,115.92" fill="#e6c79a" stroke="#333" stroke-width="0.4" />
+<polygon points="115.75,118.25 117.82,125.97 123.62,124.42 121.55,116.69" fill="#c0392b" stroke="#333" stroke-width="0.4" />
+<text x="28.000000000000014" y="156" font-family="Helvetica, Arial, sans-serif" font-size="5" fill="#222" font-weight="bold">15 deg from vertical</text>
+<polygon points="258.82,140.00 148.35,140.00 148.35,143.00 258.82,143.00" fill="#e6c79a" stroke="#333" stroke-width="0.4" />
+<polygon points="254.82,140.00 251.82,140.00 251.82,131.00 254.82,131.00" fill="#e6c79a" stroke="#333" stroke-width="0.4" />
+<polygon points="248.47,140.00 251.07,138.50 207.93,63.78 205.33,65.28" fill="#e6c79a" stroke="#333" stroke-width="0.4" />
+<polygon points="246.07,129.84 255.60,124.34 254.10,121.74 244.57,127.24" fill="#e6c79a" stroke="#333" stroke-width="0.4" />
+<polygon points="244.57,127.24 253.23,122.24 228.23,78.94 219.57,83.94" fill="rgba(31,111,235,0.12)"  stroke-width="0.4" stroke-dasharray="1.5 1" stroke="#1f6feb"/>
+<polygon points="246.07,129.84 255.60,124.34 226.10,73.24 216.57,78.74" fill="rgba(230,199,154,0.35)" stroke="#333" stroke-width="0.4" stroke-dasharray="3 1"/>
+<polygon points="229.93,107.88 236.93,120.00 202.29,140.00 195.29,127.88" fill="#e6c79a" stroke="#333" stroke-width="0.4" />
+<polygon points="231.43,110.47 235.43,117.40 245.82,111.40 241.82,104.47" fill="#e6c79a" stroke="#333" stroke-width="0.4" />
+<polygon points="234.03,108.97 238.03,115.90 243.22,112.90 239.22,105.97" fill="#c0392b" stroke="#333" stroke-width="0.4" />
+<text x="158" y="156" font-family="Helvetica, Arial, sans-serif" font-size="5" fill="#222" font-weight="bold">30 deg from vertical</text>
+<polygon points="388.82,140.00 278.35,140.00 278.35,143.00 388.82,143.00" fill="#e6c79a" stroke="#333" stroke-width="0.4" />
+<polygon points="384.82,140.00 381.82,140.00 381.82,131.00 384.82,131.00" fill="#e6c79a" stroke="#333" stroke-width="0.4" />
+<polygon points="378.47,140.00 380.60,137.88 319.59,76.87 317.46,78.99" fill="#e6c79a" stroke="#333" stroke-width="0.4" />
+<polygon points="373.52,130.81 381.30,123.03 379.18,120.91 371.40,128.69" fill="#e6c79a" stroke="#333" stroke-width="0.4" />
+<polygon points="371.40,128.69 378.47,121.62 343.12,86.26 336.05,93.33" fill="rgba(31,111,235,0.12)"  stroke-width="0.4" stroke-dasharray="1.5 1" stroke="#1f6feb"/>
+<polygon points="373.52,130.81 381.30,123.03 339.58,81.31 331.81,89.09" fill="rgba(230,199,154,0.35)" stroke="#333" stroke-width="0.4" stroke-dasharray="3 1"/>
+<polygon points="340.29,101.82 350.19,111.72 321.91,140.00 312.01,130.10" fill="#e6c79a" stroke="#333" stroke-width="0.4" />
+<polygon points="342.41,103.94 348.07,109.59 356.55,101.11 350.90,95.45" fill="#e6c79a" stroke="#333" stroke-width="0.4" />
+<polygon points="344.53,101.82 350.19,107.47 354.43,103.23 348.78,97.57" fill="#c0392b" stroke="#333" stroke-width="0.4" />
+<text x="288" y="156" font-family="Helvetica, Arial, sans-serif" font-size="5" fill="#222" font-weight="bold">45 deg from vertical</text>
+<polygon points="518.82,140.00 408.35,140.00 408.35,143.00 518.82,143.00" fill="#e6c79a" stroke="#333" stroke-width="0.4" />
+<polygon points="514.82,140.00 511.82,140.00 511.82,131.00 514.82,131.00" fill="#e6c79a" stroke="#333" stroke-width="0.4" />
+<polygon points="508.47,140.00 509.97,137.40 435.25,94.26 433.75,96.86" fill="#e6c79a" stroke="#333" stroke-width="0.4" />
+<polygon points="501.31,132.40 506.81,122.88 504.22,121.38 498.72,130.90" fill="#e6c79a" stroke="#333" stroke-width="0.4" />
+<polygon points="498.72,130.90 503.72,122.24 460.41,97.24 455.41,105.90" fill="rgba(31,111,235,0.12)"  stroke-width="0.4" stroke-dasharray="1.5 1" stroke="#1f6feb"/>
+<polygon points="501.31,132.40 506.81,122.88 455.72,93.38 450.22,102.90" fill="rgba(230,199,154,0.35)" stroke="#333" stroke-width="0.4" stroke-dasharray="3 1"/>
+<polygon points="436.35,98.36 448.47,105.36 428.47,140.00 416.35,133.00" fill="#e6c79a" stroke="#333" stroke-width="0.4" />
+<polygon points="438.95,99.86 445.88,103.86 451.88,93.47 444.95,89.47" fill="#e6c79a" stroke="#333" stroke-width="0.4" />
+<polygon points="440.45,97.26 447.38,101.26 450.38,96.06 443.45,92.06" fill="#c0392b" stroke="#333" stroke-width="0.4" />
+<text x="418" y="156" font-family="Helvetica, Arial, sans-serif" font-size="5" fill="#222" font-weight="bold">60 deg from vertical</text>
+<text x="10" y="176" font-family="Helvetica, Arial, sans-serif" font-size="4" fill="#222" >Exploded view at 45 degrees (slide each part along its arrow; the wedge key slides across the tab hole, thin end first):</text>
+<polygon points="150.00,285.00 152.12,282.88 91.11,221.87 88.99,223.99" fill="#e6c79a" stroke="#333" stroke-width="0.4" />
+<polygon points="154.95,265.91 162.73,258.13 160.61,256.01 152.83,263.79" fill="#e6c79a" stroke="#333" stroke-width="0.4" />
+<polygon points="182.53,234.09 189.60,227.02 154.24,191.66 147.17,198.73" fill="rgba(31,111,235,0.12)"  stroke-width="0.4" stroke-dasharray="1.5 1" stroke="#1f6feb"/>
+<polygon points="166.26,254.59 174.04,246.82 132.32,205.10 124.54,212.88" fill="rgba(230,199,154,0.35)" stroke="#333" stroke-width="0.4" stroke-dasharray="3 1"/>
+<polygon points="93.43,265.20 103.33,275.10 75.05,303.38 65.15,293.49" fill="#e6c79a" stroke="#333" stroke-width="0.4" />
+<polygon points="95.55,267.32 101.21,272.98 109.69,264.49 104.04,258.84" fill="#e6c79a" stroke="#333" stroke-width="0.4" />
+<polygon points="165.56,197.32 171.21,202.98 175.46,198.73 169.80,193.08" fill="#c0392b" stroke="#333" stroke-width="0.4" />
+<line x1="147.9" y1="270.9" x2="157.8" y2="261.0" stroke="#555" stroke-width="0.5" stroke-dasharray="1.5 1"/>
+<text x="159.77817459305203" y="258.95836943965736" font-family="Helvetica, Arial, sans-serif" font-size="4" fill="#222" >2 ledge</text>
+<line x1="111.1" y1="226.3" x2="132.3" y2="205.1" stroke="#555" stroke-width="0.5" stroke-dasharray="1.5 1"/>
+<text x="134.3223304703363" y="203.0969337259201" font-family="Helvetica, Arial, sans-serif" font-size="4" fill="#222" >3 rails (both sides)</text>
+<line x1="114.6" y1="231.3" x2="154.2" y2="191.7" stroke="#555" stroke-width="0.5" stroke-dasharray="1.5 1"/>
+<text x="156.2426406871193" y="189.6619048833757" font-family="Helvetica, Arial, sans-serif" font-size="4" fill="#222" >4 board</text>
+<line x1="88.5" y1="280.1" x2="70.1" y2="298.4" stroke="#555" stroke-width="0.5" stroke-dasharray="1.5 1"/>
+<text x="72.09693372592014" y="296.4350288425444" font-family="Helvetica, Arial, sans-serif" font-size="4" fill="#222" >1 strut, from behind</text>
+<line x1="121.0" y1="247.5" x2="170.5" y2="198.0" stroke="#555" stroke-width="0.5" stroke-dasharray="1.5 1"/>
+<text x="172.50609665440987" y="196.02586591405463" font-family="Helvetica, Arial, sans-serif" font-size="4" fill="#222" >5 wedge keys</text>
+<text x="300" y="215" font-family="Helvetica, Arial, sans-serif" font-size="4" fill="#222" >Order: strut into plate, ledge, both rails, board, wedge keys.</text>
+<text x="300" y="222" font-family="Helvetica, Arial, sans-serif" font-size="4" fill="#222" >Measure and confirm: board 86 x 50 mm, stack 10 mm (see README).</text>
+</svg>
