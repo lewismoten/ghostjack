@@ -958,19 +958,30 @@ async function travel(dx, dy, me) {
     });
     if (!r.ok) throw new Error((await r.json()).error);
     const { ms } = await r.json();
+    const sentAt = Date.now();
     lastMove = Date.now() + ms - 1100;
+    const k = degPer(),
+      units = tripUnits(dx, dy);
+    scene?.travel(
+      Math.max(-175, Math.min(175, (pan + dx) * k)),
+      Math.max(-60, Math.min(60, (tilt + dy) * k)),
+      units * msPerUnit + 250,
+    );
     foley.servo(Math.min(4, ms / 1000));
     pan += dx;
     tilt += dy;
     blocked.l = blocked.r = blocked.u = blocked.d = false;
     showPose();
-    await waitArrival(ms, me);
-    if (me !== aimRun) return;
+    const settledAt = await waitArrival(ms, me);
+    if (me !== aimRun) return; // a newer trip owns the model now
+    scene?.arrive();
+    learnSpeed(units, settledAt ? settledAt - sentAt : 0);
     lastMove = Date.now();
     api('/api/travel/done', { method: 'POST' }).catch(() => {});
     if (!liveOn) await snapshot(true);
     setStatus(glass.line('moveDone'));
   } catch (e) {
+    if (me === aimRun) scene?.arrive();
     setStatus(`Lost the angle. Move failed: ${e.message}`, true);
   } finally {
     if (me === aimRun) {
@@ -1001,13 +1012,30 @@ async function waitArrival(ms, me) {
   const end = Date.now() + ms;
   const nap = (t) => new Promise((r) => setTimeout(r, t));
   await nap(500);
-  let prev = await probeFrame();
+  let prevAt = Date.now(),
+    prev = await probeFrame();
   while (Date.now() < end && me === aimRun) {
     await nap(liveOn ? 300 : 150);
-    const cur = await probeFrame();
-    if (prev && cur && lim.same(lim.diff(prev, cur), liveNoise)) return;
+    const at = Date.now(),
+      cur = await probeFrame();
+    if (prev && cur && lim.same(lim.diff(prev, cur), liveNoise)) return prevAt;
     prev = cur;
+    prevAt = at;
   }
+  return 0; // not seen: no picture, or the estimate ran out
+}
+// How fast the neck really travels, learned from trips that were seen to
+// settle (milliseconds per move unit), so the model and its target ring
+// predict the arrival. Remembered in this browser.
+const tripUnits = (dx, dy) =>
+  Math.max(Math.abs(dx), Math.abs(dy)) +
+  Math.min(Math.abs(dx), Math.abs(dy)) / 2;
+let msPerUnit = Number(store.get('gm-travel-mspu', 20)) || 20;
+function learnSpeed(units, took) {
+  if (!took || units < 30) return;
+  const m = Math.min(100, Math.max(3, (took - 250) / units));
+  msPerUnit = Math.round((msPerUnit * 0.6 + m * 0.4) * 10) / 10;
+  store.set('gm-travel-mspu', msPerUnit);
 }
 
 // Saved shots: nine numbered slots like a camera controller's preset keypad.

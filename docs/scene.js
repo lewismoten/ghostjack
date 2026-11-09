@@ -148,6 +148,60 @@ export async function start({ bg, model, reduced, onPulse, canPulse }) {
   head.add(eye);
   mS.add(head);
 
+  // Travel target: a reticle where the camera is headed, a thin line to it
+  // from the lens, and a ring that fills as the trip goes (the predicted time).
+  const ringPts = (n, r) =>
+    Array.from({ length: n + 1 }, (_, i) => {
+      const a = Math.PI / 2 - (i / n) * Math.PI * 2;
+      return new THREE.Vector3(Math.cos(a) * r, Math.sin(a) * r, 0);
+    });
+  const lineOf = (pts, color, opacity = 1) =>
+    new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(pts),
+      new THREE.LineBasicMaterial({ color, transparent: true, opacity }),
+    );
+  const reticle = new THREE.Group();
+  const RING_N = 48;
+  reticle.add(lineOf(ringPts(RING_N, 0.26), magenta, 0.35));
+  const fill = lineOf(ringPts(RING_N, 0.33), amber);
+  reticle.add(fill);
+  reticle.add(
+    new THREE.LineSegments(
+      new THREE.BufferGeometry().setFromPoints(
+        [
+          [-0.4, 0, -0.12, 0],
+          [0.12, 0, 0.4, 0],
+          [0, -0.4, 0, -0.12],
+          [0, 0.12, 0, 0.4],
+        ].flatMap(([a, b, c, d]) => [
+          new THREE.Vector3(a, b, 0),
+          new THREE.Vector3(c, d, 0),
+        ]),
+      ),
+      new THREE.LineBasicMaterial({ color: magenta }),
+    ),
+  );
+  reticle.scale.setScalar(0.75);
+  // always drawn on top, so a target behind the camera still shows
+  const onTop = (o) => {
+    o.renderOrder = 10;
+    o.material.depthTest = false;
+  };
+  reticle.children.forEach(onTop);
+  reticle.visible = false;
+  mS.add(reticle);
+  const tether = lineOf(
+    [new THREE.Vector3(), new THREE.Vector3()],
+    magenta,
+    0.6,
+  );
+  tether.visible = false;
+  onTop(tether);
+  mS.add(tether);
+  const dirOf = (p, t) =>
+    new THREE.Vector3(0, 0, 1).applyEuler(new THREE.Euler(-t, p, 0, 'YXZ'));
+  let trip = null; // { p0, t0, p1, t1, start, ms }
+
   let pan = 0,
     tilt = 0,
     tp = 0,
@@ -164,6 +218,26 @@ export async function start({ bg, model, reduced, onPulse, canPulse }) {
     // while live video plays, drop to about 15 fps so the picture never competes for the main thread
     setLive(on) {
       minGap = on ? 66 : 33;
+    },
+    // a travel move: glide from where the model is to (p, t) degrees over the
+    // predicted ms, with the target reticle showing; arrive() ends it
+    travel(p, t, ms) {
+      trip = {
+        p0: pan,
+        t0: tilt,
+        p1: p * DEG,
+        t1: t * DEG,
+        start: performance.now(),
+        ms: Math.max(200, ms),
+      };
+      tp = trip.p1;
+      tt = trip.t1;
+      dirty = true;
+    },
+    arrive() {
+      trip = null;
+      reticle.visible = tether.visible = false;
+      dirty = true;
     },
     setPose(p, t, instant) {
       tp = p * DEG;
@@ -196,7 +270,27 @@ export async function start({ bg, model, reduced, onPulse, canPulse }) {
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     const moving = Math.abs(tp - pan) + Math.abs(tt - tilt) > 0.002;
-    if (moving) {
+    if (trip) {
+      const f = Math.min(1, (now - trip.start) / trip.ms);
+      const e = reduced ? 1 : f < 0.5 ? 2 * f * f : 1 - (2 - 2 * f) ** 2 / 2;
+      pan = trip.p0 + (trip.p1 - trip.p0) * e;
+      tilt = trip.t0 + (trip.t1 - trip.t0) * e;
+      const d = dirOf(trip.p1, trip.t1);
+      reticle.position.copy(head.position).addScaledVector(d, 1.4);
+      reticle.quaternion.copy(mC.quaternion);
+      fill.geometry.setDrawRange(0, Math.max(1, Math.round(f * RING_N) + 1));
+      // past the prediction and not there yet: the ring blinks
+      fill.visible = f < 1 || Math.floor(now / 300) % 2 === 0;
+      const a = tether.geometry.attributes.position;
+      const from = head.position
+        .clone()
+        .addScaledVector(dirOf(pan, tilt), 1.21);
+      a.setXYZ(0, from.x, from.y, from.z);
+      a.setXYZ(1, reticle.position.x, reticle.position.y, reticle.position.z);
+      a.needsUpdate = true;
+      reticle.visible = tether.visible = true;
+      dirty = true;
+    } else if (moving) {
       const k = 1 - Math.exp(-6 * dt);
       pan += (tp - pan) * k;
       tilt += (tt - tilt) * k;

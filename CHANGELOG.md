@@ -44,7 +44,10 @@ follow [SemVer](https://semver.org/).
 - Going to a saved shot or re-centering moves in one fast trip instead of small
   steps a second apart (`POST /api/travel`). The page watches quick small frames
   for the picture to settle, then takes the snapshot and frees the controls,
-  instead of waiting out the trip estimate.
+  instead of waiting out the trip estimate. During the trip the 3D camera model
+  turns along the path at the learned speed, toward a magenta reticle at the
+  target whose amber ring fills as the trip goes (and blinks if the camera is
+  late).
 - Jack out (disconnect) and Forget the ICE (remove the saved token from this
   browser) in the Uplink tab.
 - When not live, the Eye refreshes itself: a quiet snapshot after jacking in and
