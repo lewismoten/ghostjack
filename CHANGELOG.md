@@ -7,6 +7,9 @@ follow [SemVer](https://semver.org/).
 
 ### Fixed
 
+- Stopping the bridge signs out of the camera first instead of dropping its
+  session (suspected cause of a sound from the camera until the bridge starts
+  again; not yet confirmed).
 - Buttons over the picture (grid tiles, question keys) are clickable: the
   drag-to-zoom box no longer captures their clicks.
 - Speech through the camera works again: since 0.1.1 the bridge sent each line
@@ -42,6 +45,16 @@ follow [SemVer](https://semver.org/).
 
 ### Added
 
+- Photo sphere: Find limits now measures the lens (field of view and tilt
+  degrees per step, from how far the picture slides each step; a fake room with
+  a 62-degree lens measured 60.7) and paints every small picture onto a sphere
+  as it arrives, so the room assembles live. Later snapshots, Stills frames and
+  grid tiles keep it current; older areas dim. The SPH key (O) opens the view:
+  drag to look, double-click or Enter on the crosshair to send the camera there
+  in one trip, Sweep to fill it, and download it as a cropped panorama or a full
+  360-degree image.
+- The page works with no internet: three.js 0.170.0 is bundled (web/vendor)
+  instead of loaded from a CDN.
 - An agent API (docs/agent-api.md): `POST /api/goto` (absolute pan, tilt and
   zoom, or a saved shot, in one fast trip; returns a picture of the asked width
   once the picture settles), `width=` on snapshots, `POST /api/clip` (a video
