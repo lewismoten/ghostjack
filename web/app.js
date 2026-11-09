@@ -81,6 +81,7 @@ function setStatus(t, bad) {
 function setConnected(on) {
   const was = connected;
   connected = on;
+  $('device').hidden = !on; // the header shows the camera only when one is jacked in
   for (const id of controls) $(id).disabled = !on;
   for (const b of pads) b.disabled = !on;
   $('sayGo').disabled = !on;
@@ -694,8 +695,7 @@ $('conn').addEventListener('submit', connect);
 setConnected(false);
 if (store.get('token', '')) connect();
 else {
-  $('demo').hidden = false;
-  setStatus('Flatlined. Open Uplink, enter the token, Jack in.');
+  $('demo').hidden = false; // the demo strip already says it; no second status line
 }
 
 // The 3D extras load last, so the page works without them; any failure leaves the plain CSS look.
