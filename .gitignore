@@ -12,3 +12,4 @@ page-text.txt
 *.m4a
 node_modules/
 captures/
+!docs/images/preview.jpg
