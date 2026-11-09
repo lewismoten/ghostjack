@@ -964,8 +964,11 @@ async function travel(dx, dy, me) {
     tilt += dy;
     blocked.l = blocked.r = blocked.u = blocked.d = false;
     showPose();
-    await new Promise((res) => setTimeout(res, ms));
-    if (!liveOn) autoSnapSoon(300);
+    await waitArrival(ms, me);
+    if (me !== aimRun) return;
+    lastMove = Date.now();
+    api('/api/travel/done', { method: 'POST' }).catch(() => {});
+    if (!liveOn) await snapshot(true);
     setStatus(glass.line('moveDone'));
   } catch (e) {
     setStatus(`Lost the angle. Move failed: ${e.message}`, true);
@@ -975,6 +978,35 @@ async function travel(dx, dy, me) {
       scene?.setMoving(false);
     }
     showPose();
+  }
+}
+
+// The trip estimate is only a ceiling. Watch for arrival instead: small
+// frames (the live picture, or the camera's quick sub-stream snapshot) until
+// two in a row match, which means the neck has stopped.
+async function probeFrame() {
+  if (liveOn) return liveFrame();
+  try {
+    const r = await api('/api/snapshot.jpg?profile=p1');
+    if (!r.ok) return null;
+    const bmp = await createImageBitmap(await r.blob());
+    const g = lim.gray(bmp);
+    bmp.close();
+    return g;
+  } catch {
+    return null;
+  }
+}
+async function waitArrival(ms, me) {
+  const end = Date.now() + ms;
+  const nap = (t) => new Promise((r) => setTimeout(r, t));
+  await nap(500);
+  let prev = await probeFrame();
+  while (Date.now() < end && me === aimRun) {
+    await nap(liveOn ? 300 : 150);
+    const cur = await probeFrame();
+    if (prev && cur && lim.same(lim.diff(prev, cur), liveNoise)) return;
+    prev = cur;
   }
 }
 

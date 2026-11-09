@@ -344,6 +344,11 @@ const server = createServer(async (req, res) => {
       await camera.move(dx, dy, 100);
       return json(res, 200, { ok: true, dx, dy, ms });
     }
+    if (route === 'POST /api/travel/done') {
+      // the page saw the picture settle: the trip is over, nudges may follow
+      lastMove = Math.min(lastMove, Date.now());
+      return json(res, 200, { ok: true });
+    }
     if (route === 'GET /api/shots') return json(res, 200, shots);
     if (route === 'POST /api/shots') {
       try {
