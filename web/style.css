@@ -373,8 +373,8 @@ button[aria-pressed='true'] {
   background: rgba(0, 0, 0, 0.55);
 }
 #hClock {
-  top: 6px;
-  left: 6px;
+  bottom: 6px;
+  left: 86px;
 }
 #hConn {
   top: 6px;
@@ -1166,42 +1166,68 @@ code {
   color: var(--amber, #ffb000);
 }
 
-/* Saved shots: a strip of numbered, named buttons right under the picture,
-   like a camera controller's preset keys, with SET at the end. */
+/* Saved shots: a strip of keys right under the picture and exactly as wide
+   (app.js sets the width), like a camera controller's preset keys. Labels:
+   numbers (compact, one row even on a phone), names, or pictures. */
 .keys {
   display: grid;
-  grid-template-columns: repeat(9, minmax(0, 1fr)) auto auto;
-  gap: 4px;
-  margin-top: 6px;
+  grid-template-columns: repeat(11, minmax(0, 1fr));
+  gap: 3px;
+  max-width: 100%;
+  margin: 4px auto 0;
 }
 .keys button {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   min-width: 0;
-  min-height: 40px;
-  padding: 3px 4px;
+  min-height: 28px;
+  padding: 1px 2px;
+  overflow: hidden;
   line-height: 1.1;
 }
 .keys b {
-  font: 700 0.9rem var(--mono);
+  font: 700 0.85rem var(--mono);
 }
 .keys span {
+  display: none;
   max-width: 100%;
   overflow: hidden;
-  font-size: 0.68rem;
+  font-size: 0.66rem;
   text-overflow: ellipsis;
   white-space: nowrap;
   opacity: 0.85;
 }
-.keys button:not(.has):not(.set) span {
+.keys.names span {
+  display: block;
+}
+.keys.names button {
+  min-height: 38px;
+}
+.keys.names button:not(.has):not(.set):not(.all) span {
   color: var(--dim);
   font-style: italic;
+}
+.keys.pics button[data-slot] {
+  aspect-ratio: 16/9;
+  min-height: 0;
+  background-size: cover;
+  background-position: center;
+}
+.keys.pics button[data-slot] b {
+  position: absolute;
+  left: 2px;
+  top: 1px;
+  padding: 0 3px;
+  font-size: 0.7rem;
+  background: rgba(0, 0, 0, 0.6);
 }
 .keys button.at {
   box-shadow: var(--glow);
   border-color: var(--cyan);
-  background: rgba(25, 227, 255, 0.18);
+  background-color: rgba(25, 227, 255, 0.18);
 }
 .keys .set[aria-pressed='true'],
 .keys.setting button {
@@ -1209,7 +1235,8 @@ code {
   border-color: var(--amber);
 }
 @media (max-width: 640px) {
-  .keys {
+  .keys.names,
+  .keys.pics {
     grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 }
@@ -1217,6 +1244,8 @@ code {
 /* Naming a saved shot: takes the strip's place, so the eyes stay put. */
 .shotform {
   display: flex;
+  max-width: 100%;
+  margin-inline: auto;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
@@ -1292,4 +1321,44 @@ code {
   width: 28px;
   height: 28px;
   padding: 0;
+}
+
+/* Night vision tint: the camera's infrared picture is gray; a color layer
+   over it (blend mode color keeps the brightness) shows at a glance that the
+   view is infrared. Chosen in Deck: red, green, blue, custom or none. */
+.tint {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: color;
+  background: var(--tint, transparent);
+  display: none;
+}
+.stage.ir:not(.flat) .tint {
+  display: block;
+}
+.shotgrid > button.ir.fresh::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: color;
+  background: var(--tint, transparent);
+}
+/* Remembered pictures wait in gray until the fresh ones arrive in color. */
+.shotgrid > button:not(.fresh) img {
+  filter: grayscale(1) brightness(0.7);
+}
+.shotgrid > button.fresh img {
+  animation: gj-fresh 0.5s ease;
+}
+@keyframes gj-fresh {
+  from {
+    filter: grayscale(1) brightness(1.6);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shotgrid > button.fresh img {
+    animation: none;
+  }
 }

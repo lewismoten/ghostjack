@@ -40,6 +40,15 @@ follow [SemVer](https://semver.org/).
 
 ### Added
 
+- A small picture of each saved shot is kept in this browser and refreshed
+  whenever a snapshot is taken at that shot's pan, tilt and zoom. ALL shows them
+  at once, dimmed in gray, and replaces each with the fresh one in color as it
+  arrives.
+- Night vision tint (Deck): the infrared picture, and grid tiles taken in
+  infrared, get a red, green, blue or custom color, or none. Automatic mode is
+  checked every 20 seconds.
+- Shot keys show numbers (default, compact: one row even on a phone), names, or
+  pictures of the shots (Deck).
 - ALL (key A): a small picture of every saved shot in a 3 by 3 grid over the
   picture. The page visits the distinct shots on the shortest route from where
   the camera is (empty slots share one picture of the center), fast trips
@@ -87,6 +96,9 @@ follow [SemVer](https://semver.org/).
 
 ### Changed
 
+- The shot strip is exactly as wide as the picture, and the page's clock moved
+  to the bottom left, beside the night vision label, so it no longer covers the
+  camera's own timestamp.
 - Find limits crosses back over the ground it already covered in one fast trip
   after the first wall, and returns to the middle in one trip, taking small
   steps only where it hasn't looked yet (a simulated camera: 75 small steps

@@ -116,6 +116,7 @@
                 hidden
                 draggable="false"
               />
+              <div class="tint" aria-hidden="true"></div>
               <div id="lastBar" class="lastbar" hidden role="note">
                 <strong>SIGNAL LOST</strong> &middot; last known frame
                 <span id="lastAge"></span>
@@ -775,10 +776,50 @@
                 second.
               </p>
             </fieldset>
+            <fieldset class="sound">
+              <legend>Shot keys show</legend>
+              <label class="check"
+                ><input type="radio" name="keylabel" value="numbers" checked />
+                Numbers</label
+              >
+              <label class="check"
+                ><input type="radio" name="keylabel" value="names" />
+                Names</label
+              >
+              <label class="check"
+                ><input type="radio" name="keylabel" value="pics" />
+                Pictures</label
+              >
+            </fieldset>
+            <fieldset class="sound">
+              <legend>Night vision tint</legend>
+              <label class="check"
+                ><input type="radio" name="tint" value="red" checked />
+                Red</label
+              >
+              <label class="check"
+                ><input type="radio" name="tint" value="green" /> Green</label
+              >
+              <label class="check"
+                ><input type="radio" name="tint" value="blue" /> Blue</label
+              >
+              <label class="check"
+                ><input type="radio" name="tint" value="custom" /> Custom
+                <input
+                  id="tintColor"
+                  type="color"
+                  value="#ff2bd6"
+                  aria-label="Custom night vision tint color"
+              /></label>
+              <label class="check"
+                ><input type="radio" name="tint" value="none" /> None</label
+              >
+            </fieldset>
             <p class="hint">
-              Only the uplink address, token, theme, sound and last-tab choices
-              are stored, in this browser . 3D by three.js (MIT). Voice:
-              Glassmouth. No camera pictures are stored.
+              Stored in this browser only: the uplink address, token, theme,
+              sound, tab and these choices, the last frame, the Tape gallery and
+              a small picture of each saved shot. 3D by three.js (MIT). Voice:
+              Glassmouth.
             </p>
           </div>
         </section>

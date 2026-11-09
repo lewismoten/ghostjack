@@ -197,12 +197,14 @@ async function connect(e) {
       if (first && tabNow() === 'uplink') selectTab('rig');
       $('night').checked = s.night === 'night';
       showNight(s.night);
+      setIR(s.inNightVision);
       setStatus(
         `${lost ? 'Back in sight. ' : ''}${first ? glass.line('jackIn') : 'Jacked in.'} Night vision: ${s.night}${s.inNightVision ? ' (infrared on now)' : ''}.`,
       );
       lost = false;
       loadDevice();
       loadAim().then(showLimitsInfo);
+      loadShotPics();
       loadShots();
       if (first && !liveOn) autoSnapSoon(300);
     } catch (err) {
@@ -242,7 +244,26 @@ async function loadDevice() {
 }
 const showNight = (m) => {
   $('hNight').textContent = m === 'night' ? 'NV IR ON' : 'NV AUTO';
+  if (m === 'night') setIR(true);
+  else setTimeout(pollIR, 3000); // automatic: ask the camera what it chose
 };
+// Is the picture infrared right now? The camera says so in its status;
+// automatic mode switches on its own, so it is asked again every 20 s.
+var ir = false;
+function setIR(on) {
+  ir = !!on;
+  $('stage').classList.toggle('ir', ir);
+}
+async function pollIR() {
+  if (!connected) return;
+  try {
+    const r = await api('/api/status');
+    if (r.ok) setIR((await r.json()).inNightVision);
+  } catch {
+    /* next time */
+  }
+}
+setInterval(pollIR, 20000);
 
 // HUD clock (local time of this computer).
 setInterval(() => {
@@ -275,6 +296,7 @@ async function snapshot(auto = false) {
     if (!r.ok) throw new Error((await r.json()).error);
     lastShot = await r.blob();
     rememberFrame(lastShot);
+    rememberPose(lastShot);
     $('shotSave').disabled = $('shotDl').disabled = false;
     showImage(URL.createObjectURL(lastShot));
     setStatus(
@@ -1051,6 +1073,8 @@ function renderKeys() {
   const box = $('keys');
   if (!box) return;
   box.classList.toggle('setting', setting);
+  box.classList.toggle('names', keyLabel === 'names');
+  box.classList.toggle('pics', keyLabel === 'pics');
   $('keySet').setAttribute('aria-pressed', String(setting));
   $('keySet').disabled = !connected;
   $('keyAll').disabled = !connected;
@@ -1059,6 +1083,8 @@ function renderKeys() {
       s = shots?.[n - 1];
     b.disabled = !connected;
     b.classList.toggle('has', !!s);
+    b.style.backgroundImage =
+      keyLabel === 'pics' && shotPics?.[n] ? `url(${shotPics[n].u})` : '';
     b.classList.toggle('at', n === atSlot);
     const what = s ? s.name : 'center (empty)';
     b.querySelector('span').textContent = setting
@@ -1166,10 +1192,10 @@ function closeGrid() {
   $('grid').hidden = true;
   for (const b of document.querySelectorAll('#grid [data-cell]')) {
     const img = b.querySelector('img');
-    if (img.src) URL.revokeObjectURL(img.src);
+    if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
     img.removeAttribute('src');
     img.hidden = true;
-    b.classList.remove('now');
+    b.classList.remove('now', 'fresh', 'ir');
   }
 }
 async function survey() {
@@ -1200,6 +1226,14 @@ async function survey() {
       `Go to shot ${n}: ${shots[n - 1]?.name ?? 'center'}`,
     );
   }
+  for (let n = 1; n <= 9; n++) {
+    const pic = shotPics[n],
+      img = gridCell(n).querySelector('img');
+    if (pic) {
+      img.src = pic.u;
+      img.hidden = false;
+    }
+  }
   $('grid').hidden = false;
   const route = shortestRoute({ pan, tilt }, stops);
   setStatus(`All shots: ${route.length} stops on the shortest route.`);
@@ -1220,10 +1254,15 @@ async function survey() {
       if (!r.ok) throw new Error((await r.json()).error);
       const blob = await r.blob();
       for (const n of st.slots) {
-        const img = gridCell(n).querySelector('img');
+        const b = gridCell(n),
+          img = b.querySelector('img');
+        if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
         img.src = URL.createObjectURL(blob);
         img.hidden = false;
+        b.classList.add('fresh');
+        b.classList.toggle('ir', ir);
       }
+      rememberShotPic(st.slots, blob);
     } catch (e) {
       setStatus(`Lost the angle. Picture failed: ${e.message}`, true);
     }
@@ -1249,6 +1288,102 @@ $('gridClose').onclick = () => {
   setStatus('Grid closed.');
 };
 
+// A small picture of each saved shot, kept in this browser per bridge, so the
+// grid and the picture keys always have something to show. Refreshed whenever
+// a snapshot is taken at a shot's pan, tilt and zoom, and by ALL.
+var shotPics = {};
+const picsKey = () => `gm-shotpics:${base}`;
+function loadShotPics() {
+  try {
+    shotPics = JSON.parse(store.get(picsKey(), '{}')) || {};
+  } catch {
+    shotPics = {};
+  }
+}
+function saveShotPics() {
+  try {
+    localStorage.setItem(picsKey(), JSON.stringify(shotPics));
+  } catch {
+    /* full or blocked: they stay in memory */
+  }
+}
+async function thumbOf(blob) {
+  const bmp = await createImageBitmap(blob);
+  const w = 320,
+    h = Math.round((bmp.height / bmp.width) * w);
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  c.getContext('2d').drawImage(bmp, 0, 0, w, h);
+  bmp.close();
+  return c.toDataURL('image/jpeg', 0.7);
+}
+async function rememberShotPic(slots, blob) {
+  try {
+    const u = await thumbOf(blob);
+    for (const n of slots) shotPics[n] = { u, at: Date.now(), ir };
+    saveShotPics();
+    renderKeys();
+  } catch {
+    /* not a picture the browser can read */
+  }
+}
+const sameCrop = (a, b) =>
+  (!a && !b) || (a && b && a.every((v, i) => Math.abs(v - b[i]) < 0.002));
+// After a snapshot: if the camera is at one or more shots, refresh them.
+function rememberPose(blob) {
+  if (aim) return; // still on its way
+  const slots = [];
+  for (let n = 1; n <= 9; n++) {
+    const s = shots[n - 1] ?? CENTER;
+    if (
+      Math.abs(s.pan - pan) < 2 &&
+      Math.abs(s.tilt - tilt) < 2 &&
+      sameCrop(s.crop, crop)
+    )
+      slots.push(n);
+  }
+  if (slots.length) rememberShotPic(slots, blob);
+}
+// What the shot keys show: numbers (compact), names, or pictures.
+var keyLabel = store.get('gm-keylabel', 'numbers');
+for (const r of document.querySelectorAll('input[name="keylabel"]')) {
+  r.checked = r.value === keyLabel;
+  r.onchange = () => {
+    keyLabel = r.value;
+    store.set('gm-keylabel', keyLabel);
+    renderKeys();
+  };
+}
+// Night vision tint.
+const TINTS = { red: '#ff2a2a', green: '#36ff6b', blue: '#2a8cff' };
+function applyTint() {
+  const t = store.get('gm-tint', 'red'),
+    c = t === 'custom' ? store.get('gm-tint-color', '#ff2bd6') : TINTS[t];
+  document.documentElement.style.setProperty('--tint', c || 'transparent');
+}
+for (const r of document.querySelectorAll('input[name="tint"]')) {
+  r.checked = r.value === store.get('gm-tint', 'red');
+  r.onchange = () => {
+    store.set('gm-tint', r.value);
+    applyTint();
+  };
+}
+$('tintColor').value = store.get('gm-tint-color', '#ff2bd6');
+$('tintColor').oninput = () => {
+  store.set('gm-tint-color', $('tintColor').value);
+  store.set('gm-tint', 'custom');
+  document.querySelector('input[name="tint"][value="custom"]').checked = true;
+  applyTint();
+};
+applyTint();
+// The strip and the naming form are exactly as wide as the picture.
+new ResizeObserver(() => {
+  const w = `${$('stage').offsetWidth}px`;
+  $('keys').style.width = w;
+  $('shotForm').style.width = w;
+}).observe($('stage'));
+
 // Name the shot in a small form that takes the strip's place (no pop-up).
 var naming = 0;
 function askName(n) {
@@ -1272,6 +1407,9 @@ async function storeShot(n, shot) {
   shots[n - 1] = shot;
   try {
     await saveShots();
+    delete shotPics[n];
+    if (shot && lastShot) rememberShotPic([n], lastShot);
+    else saveShotPics();
     atSlot = shot ? n : 0;
     setStatus(shot ? `Shot ${n} saved: ${shot.name}.` : `Shot ${n} cleared.`);
   } catch (e) {
