@@ -1002,8 +1002,73 @@ code {
   .controls button {
     padding: 2px 8px;
   }
-  [role='tabpanel'] {
-    overflow: visible;
+  /* Phones: the page never scrolls. The Eye column keeps the top, the tabbed panel
+     takes the rest and scrolls only inside itself. */
+  body {
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+  }
+  .top .lede {
+    display: none;
+  }
+  main {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  .deckgrid {
+    flex: 1 1 auto;
+    min-height: 0;
+    grid-template-rows: max-content minmax(0, 1fr);
+    gap: 6px;
+    margin: 4px 0 8px;
+  }
+  .top {
+    padding-top: 4px;
+  }
+  .strip {
+    margin: 0;
+  }
+  .eyepanel {
+    padding: 6px 10px;
+  }
+  .eyepanel .head h2 {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .eyepanel .head .eye {
+    display: none;
+  }
+  .stage {
+    width: min(100%, 250px);
+    margin-inline: auto;
+  }
+  .eyepanel button,
+  .eyepanel select {
+    min-height: 28px;
+  }
+  .controls {
+    margin: 4px 0 2px;
+    gap: 4px 8px;
+  }
+  .controls .zoom input {
+    width: 90px;
+  }
+  .lvl input {
+    width: 100px;
+  }
+  .strip {
+    flex: 0 0 auto;
   }
 }
 .tabs .sliders label {
@@ -1545,4 +1610,53 @@ code {
   .stripview {
     height: 78%;
   }
+}
+
+/* Dials tab: compact, two columns; help sits behind the "?" */
+.dialtop {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  align-items: start;
+}
+#p-dials fieldset {
+  margin: 0;
+  padding: 4px 8px 6px;
+}
+#p-dials h2 {
+  margin-bottom: 4px;
+}
+#p-dials .row {
+  margin: 4px 0;
+}
+#p-dials .tabs .sliders,
+#p-dials .sliders {
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 14px;
+}
+#p-dials .sliders label {
+  flex-wrap: wrap;
+  gap: 0 6px;
+  font-size: 0.82rem;
+}
+#p-dials .sliders label output {
+  order: 1;
+  margin-left: auto;
+}
+#p-dials .sliders label input {
+  order: 2;
+  flex: 1 0 100%;
+}
+.help summary {
+  cursor: pointer;
+  display: inline-block;
+  min-width: 24px;
+  min-height: 24px;
+  text-align: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--cyan);
+}
+.help .hint {
+  margin: 4px 0 0;
 }

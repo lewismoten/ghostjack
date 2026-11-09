@@ -603,37 +603,43 @@
             hidden
           >
             <h2>Dials <small>camera adjustments</small></h2>
-            <fieldset class="sound" id="neck">
-              <legend>Neck range</legend>
-              <div class="row">
-                <button id="limitsGo" type="button" disabled>
-                  Find limits
-                </button>
-                <button id="limitsStop" type="button" class="ghost" hidden>
-                  Cancel
-                </button>
-              </div>
-              <label class="check"
-                ><input id="limitsSweep" type="checkbox" checked /> Then fill
-                the sphere (Sweep)</label
-              >
-              <progress id="limitsBar" max="1" value="0" hidden></progress>
-              <p id="limitsInfo" class="hint" role="status">
-                Range not measured. Find limits steps the neck to each end in
-                small steps and looks at the picture to see where it stops.
-              </p>
-            </fieldset>
-            <fieldset class="sound">
-              <legend>Live quality</legend>
-              <label class="check"
-                ><input type="radio" name="lq" value="hd" checked />
-                1080p</label
-              >
-              <label class="check"
-                ><input type="radio" name="lq" value="fast" /> Fast (sub-stream,
-                smaller picture)</label
-              >
-            </fieldset>
+            <div class="dialtop">
+              <fieldset class="sound" id="neck">
+                <legend>Neck range</legend>
+                <div class="row">
+                  <button id="limitsGo" type="button" disabled>
+                    Find limits
+                  </button>
+                  <button id="limitsStop" type="button" class="ghost" hidden>
+                    Cancel
+                  </button>
+                </div>
+                <label class="check" title="Then fill the sphere (Sweep)"
+                  ><input id="limitsSweep" type="checkbox" checked /> Then
+                  Sweep</label
+                >
+                <progress id="limitsBar" max="1" value="0" hidden></progress>
+                <p id="limitsInfo" class="hint" role="status">
+                  Range not measured.
+                </p>
+              </fieldset>
+              <fieldset class="sound">
+                <legend>Live quality</legend>
+                <label class="check"
+                  ><input type="radio" name="lq" value="hd" checked />
+                  1080p</label
+                >
+                <label class="check"
+                  ><input
+                    type="radio"
+                    name="lq"
+                    value="fast"
+                    title="Fast: the sub-stream, a smaller picture"
+                  />
+                  Fast</label
+                >
+              </fieldset>
+            </div>
             <div id="adjust">
               <div class="sliders">
                 <label
@@ -697,16 +703,27 @@
                 >
               </div>
               <div class="row">
-                <button id="clock" type="button" disabled>
-                  Set clock from this computer
+                <button
+                  id="clock"
+                  type="button"
+                  disabled
+                  title="Set the camera's clock from this computer"
+                >
+                  Set clock
                 </button>
               </div>
             </div>
-            <p class="hint">
-              Wide range keeps bright and dark areas readable together;
-              backlight fix lifts a face against a window. Night vision is on
-              the Eye controls. Read the rig first to see the current values.
-            </p>
+            <details class="help">
+              <summary aria-label="Help for the Dials">?</summary>
+              <p class="hint">
+                Find limits steps the neck to each end in small steps and looks
+                at the picture to see where it stops; Sweep then fills the
+                sphere. Fast uses the smaller sub-stream picture. Wide range
+                keeps bright and dark areas readable together; backlight fix
+                lifts a face against a window. Night vision is on the Eye
+                controls. Read the rig first to see the current values.
+              </p>
+            </details>
           </div>
           <div
             role="tabpanel"
