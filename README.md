@@ -25,12 +25,9 @@ Open `http://localhost:8787/`, paste the token and Jack in (Connect). Flatline m
 - [Glassmouth](docs/glassmouth.md), [voice relay plan](docs/voice-relay-plan.md), [room map plan](docs/room-map-plan.md).
 - `tools/`: the original probes (`snapshot.mjs` saves one snapshot; `web-login-probe.mjs` records the web app's requests after sign-in). They read the same Keychain item `tethys-camera` (the name stays: it is this camera's credential) and need Playwright (`PLAYWRIGHT=<path>/playwright-core/index.mjs`).
 
-## Ground rules
+## Privacy
 
-- The camera stays on an isolated cable (straight into the computer) unless I decide otherwise. No cloud account, no internet access.
-- Look before touching: no logins, resets or firmware changes until the camera is identified and backed up.
-- Never commit passwords, serial numbers, device IDs or full hardware addresses. The serial doubles as the camera's cloud ID.
-- Never commit pictures, video or audio from the camera. They show my home and me; test captures stay local and get deleted after testing (`.gitignore` blocks the usual image, audio and video files).
+The camera stays on a private cable with no cloud account, and no pictures, video, audio or camera credentials from it are ever committed here. Rules for anyone (or any agent) working on the code are in [AGENTS.md](AGENTS.md).
 
 ## What's known about the camera
 
