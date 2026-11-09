@@ -11,6 +11,11 @@ export default [
     languageOptions: { globals: globals.node },
   },
   {
+    // the sphere test's page.evaluate callbacks run in the browser
+    files: ['tools/fake-room-test.mjs'],
+    languageOptions: { globals: { ...globals.node, ...globals.browser } },
+  },
+  {
     // three.js is vendored in web/vendor/ (not linted) and imported as a module at run time.
     files: ['web/**/*.js'],
     languageOptions: { sourceType: 'module', globals: globals.browser },
