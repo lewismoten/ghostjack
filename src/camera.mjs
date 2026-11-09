@@ -31,6 +31,25 @@ function credentials() {
 }
 
 async function close() {
+  // Sign out the way the camera's own page does (its logout sends
+  // cacs_logout_req) before closing, instead of dropping the session. Owner
+  // report 2026-11-09: a sound from the camera after the bridge stops, until
+  // it starts again; an abandoned session is the suspect (unconfirmed).
+  try {
+    await page?.evaluate(
+      () =>
+        new Promise((done) => {
+          try {
+            acs.ctrl({ type: 'logout', data: {} });
+          } catch {
+            /* not signed in */
+          }
+          setTimeout(done, 800);
+        }),
+    );
+  } catch {
+    /* page already gone */
+  }
   try {
     await browser?.close();
   } catch {
