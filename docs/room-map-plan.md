@@ -38,6 +38,24 @@ Depth has to come from software, so the map is approximate.
    bridge can notice changes (a moved chair, someone walking in) and refresh
    just that area.
 
+## Aiming in 3D: drag the view itself
+
+Once the room map exists, aiming stops being "press left four times" and becomes
+"look there":
+
+- **Drag the video to aim.** Dragging the live picture shows a wireframe outline
+  (the camera's view frustum) of where it will look next, drawn over the room
+  map and over the edges of the current picture, so I can see the new view
+  before the camera moves. On release, the camera steps toward it, and the
+  outline stays until the estimate arrives.
+- **Click a spot or an object** in the map or the picture to center the camera
+  on it ("look at the left monitor").
+- **The limits** found by "Find limits" bound the outline, so it can't be
+  dragged past a wall the camera can't turn through.
+- **Before the full map:** the panorama from a single sweep (step 1) is enough
+  to show the outline over the stitched room picture, without depth, so this can
+  start early.
+
 ## Limits to keep in mind
 
 - Depth from one picture is a good guess at shape and order, not a measurement.
