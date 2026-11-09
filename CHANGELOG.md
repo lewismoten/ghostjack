@@ -34,6 +34,10 @@ follow [SemVer](https://semver.org/).
 
 - Jack out (disconnect) and Forget the ICE (remove the saved token from this
   browser) in the Uplink tab.
+- When not live, the Eye refreshes itself: a quiet snapshot after jacking in and
+  after each move settles (held arrows snap once, at the end).
+- Jacking out (or losing the line) leaves the last frame on screen in grayscale,
+  like a dead feed; color returns on Jack in.
 
 - Find limits (Dials tab, only when you press it): the page steps the neck to
   each end in steps of 10, comparing small pictures, and records the range
