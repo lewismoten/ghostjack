@@ -66,6 +66,7 @@ export const canUse = (base) => {
 // whose .unsupported is true when the browser cannot play this stream by MSE (the caller then falls
 // back to <video src>). onError(message) is called if the stream dies later.
 export async function start(video, url, token, onError) {
+  // url may carry ?profile=p1 (the sub-stream) for the Fast live quality.
   const ac = new AbortController();
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
@@ -124,14 +125,14 @@ export async function start(video, url, token, onError) {
   let stopped = false;
   const pump = () => {
     if (stopped || sb.updating || ms.readyState !== 'open') return;
-    // Keep about 30 s behind the playhead at most, and stay close to the live edge.
+    // Memory: drop picture older than 30 s behind the playhead.
     if (
-      video.currentTime > 30 &&
+      video.currentTime > 35 &&
       sb.buffered.length &&
-      sb.buffered.start(0) < video.currentTime - 20
+      sb.buffered.start(0) < video.currentTime - 35
     ) {
       try {
-        sb.remove(0, video.currentTime - 10);
+        sb.remove(0, video.currentTime - 30);
         return;
       } catch {
         /* try again on the next update */
@@ -148,14 +149,26 @@ export async function start(video, url, token, onError) {
       } else fail(`the player refused the stream (${e.name})`);
     }
   };
+  const edge = () =>
+    sb.buffered.length ? sb.buffered.end(sb.buffered.length - 1) : 0;
+  let primed = false;
   sb.addEventListener('updateend', () => {
-    // Skip ahead if playback has fallen well behind the newest picture.
-    if (sb.buffered.length) {
-      const end = sb.buffered.end(sb.buffered.length - 1);
-      if (end - video.currentTime > 4) video.currentTime = end - 0.5;
+    // After the first data, start 0.3 s behind the newest picture (the live edge).
+    if (!primed && sb.buffered.length) {
+      primed = true;
+      video.currentTime = Math.max(sb.buffered.start(0), edge() - 0.3);
     }
     pump();
   });
+  // Stay at the live edge: over 4 s behind, jump to it; over 1.5 s, play 10 percent fast until under
+  // 0.5 s, then normal speed. (The camera's own delay and the bridge's 0.5 s fragments remain.)
+  const catchUp = setInterval(() => {
+    if (stopped || !primed || video.paused) return;
+    const lag = edge() - video.currentTime;
+    if (lag > 4) video.currentTime = edge() - 0.3;
+    else if (lag > 1.5) video.playbackRate = 1.1;
+    else if (lag < 0.5 && video.playbackRate !== 1) video.playbackRate = 1;
+  }, 250);
   const add = (b) => {
     // A fragment is moof + mdat; append them together.
     queue.push(b.bytes);
@@ -177,6 +190,8 @@ export async function start(video, url, token, onError) {
   return {
     stop() {
       stopped = true;
+      clearInterval(catchUp);
+      video.playbackRate = 1;
       ac.abort();
       video.removeAttribute('src');
       video.load();
