@@ -1,8 +1,7 @@
-// Decorative 3D (three.js, loaded lazily from a CDN): a neon grid-floor background and a wireframe model of
+// Decorative 3D (three.js, vendored in web/vendor, loaded lazily): a neon grid-floor background and a wireframe model of
 // the camera (ball on a pedestal) that turns to the estimated pan/tilt. Renders at most ~30 fps and stops
 // when the tab is hidden or the model is off screen. Any failure leaves the CSS-only look in place.
-const THREE_URL =
-  'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js';
+const THREE_URL = './vendor/three.module.js';
 
 export async function start({ bg, model, reduced, onPulse, canPulse }) {
   const THREE = await import(THREE_URL);
