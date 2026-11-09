@@ -421,6 +421,35 @@ README for the steps after that.
   (checked: h264 and aac, a 4-second take). Recording while the live view is
   playing was not tested.
 
+## 15. Live delay, the wake pulse and the neck's range (2026-11-09)
+
+- **Keyframes come about every 4.8 s** (ffprobe on a 28 s capture of the main
+  stream: keyframes at 0.0, 4.0, 8.9, 13.7, 18.5 and 23.3 s; 1920x1080 Main
+  profile, about 12.5 fps). With a fragment cut only at each keyframe, a
+  fragment arrived with its oldest picture 4.8 to 5.0 s old, and the player
+  added to that: the ~10 s delay. With `-frag_duration 500000`,
+  `-fflags nobuffer -flags low_delay -probesize 32k -analyzeduration 0` and
+  `-flush_packets 1` the oldest picture in a fragment was 0.2 to 0.7 s old on
+  arrival. Method: wall-clock arrival of each fragment against the camera's
+  burned-in clock (OCR of the top-left text, the camera's clock offset taken
+  from `/api/info`); the clock has whole seconds, so plus or minus 1 s. The
+  sub-stream (`p1`) is 640x360 at about 7 fps with a keyframe much less often
+  sampled; it plays, its delay was not measured.
+- **The first words were lost** when the chime became quiet: the camera's amp
+  wakes on sound above some level and spends the first syllables doing it. A
+  wake pulse as loud as the speech, 130 ms, then 0.5 s of silence, then the
+  quiet chime restores them. Levels per segment (offline): wake -33.5 dBFS,
+  chime -42.6, speech -33.4. One real test line was played on 2026-11-09 at
+  21:29:26 EST through the test bridge.
+- **The neck's range** (Find limits, steps of 10 at speed 100, one every 1.3 s,
+  small pictures to see when it stops): **pan 48 steps across, tilt 19 steps
+  across** (480 and 190 units). If the pan travel is the camera's 350 degrees, a
+  step of 10 is about 7.3 degrees. Tilt is then about 139 degrees if a step is
+  the same size on both axes (not checked). The whole search took 200 s (122
+  moves). What it cannot see: a featureless view looks the same moving or not,
+  so it can stop early; a hand on the neck. Wall detection during normal use, on
+  the live picture, was not exercised on the real camera.
+
 ---
 
 Note (2026-11-08): this project became **Ghost Jack** (voice: Glassmouth). The

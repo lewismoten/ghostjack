@@ -6,6 +6,7 @@ import * as live from './live.js';
 import { netpath } from './netpath.js';
 import * as tape from './tape.js';
 import { createRecorder } from './record.js';
+import * as lim from './limits.js';
 
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -74,6 +75,7 @@ let lost = false,
   connected = false,
   crop = null,
   lastMove = 0;
+const updateArrowsSoon = () => queueMicrotask(() => updateArrows());
 const controls = [
   'live',
   'sound',
@@ -95,8 +97,9 @@ function setConnected(on) {
   connected = on;
   $('device').hidden = !on; // the header shows the camera only when one is jacked in
   for (const id of controls) $(id).disabled = !on;
-  for (const b of pads) b.disabled = !on;
+  updateArrowsSoon();
   $('sayGo').disabled = !on;
+  $('limitsGo').disabled = !on || finding;
   for (const id of [
     's-brightness',
     's-contrast',
@@ -190,6 +193,7 @@ async function connect(e) {
       );
       lost = false;
       loadDevice();
+      loadAim().then(showLimitsInfo);
     } catch (err) {
       setConnected(false);
       lost = true;
@@ -306,6 +310,14 @@ function stopLive() {
 // The picture is really playing: settle the loop sound, then Glassmouth says so.
 function liveStarted() {
   if (!liveOn) return;
+  setTimeout(() => {
+    // the picture's noise with nothing aimed: two frames apart, for wall detection
+    const a = liveFrame();
+    setTimeout(() => {
+      const b = liveFrame();
+      if (a && b) liveNoise = lim.diff(a, b);
+    }, 500);
+  }, 2500);
   setTimeout(() => liveLoop?.stop(1.5), 1200);
   setStatus(
     `${glass.line('liveOpen')} Sound is ${$('video').muted ? 'off' : 'on'}.`,
@@ -516,21 +528,122 @@ let pan = +store.get('gm-pan', 0) || 0,
   scene = null;
 const sgn = (n) => (n > 0 ? '+' : '') + n;
 const DEG_PER_STEP = 1.5; // illustration only
-let aim = null; // while the camera is being sent to a dragged target: { p, t } in steps
+let aim = null; // while the camera is being sent to a dragged target: { p, t } in units
+// The neck's measured range (units, centered on 0) once "Find limits" has run, and any wall the page ran
+// into since (blocked directions). Both are estimates; Find limits again if someone turned the neck by hand.
+let limits = null; // { panMin, panMax, tiltMin, tiltMax }
+const blocked = { l: false, r: false, u: false, d: false };
+const PAN_DEGREES = 350; // the camera's pan travel (about), from its specification
+const degPer = () =>
+  limits ? PAN_DEGREES / (limits.panMax - limits.panMin) : DEG_PER_STEP; // tilt assumed the same (unchecked)
+// How much of a wanted move fits before a wall: returns [dx, dy] (zero where blocked).
+function room(dx, dy) {
+  let rx = dx,
+    ry = dy;
+  if (limits) {
+    if (dx > 0) rx = Math.min(dx, limits.panMax - pan);
+    if (dx < 0) rx = Math.max(dx, limits.panMin - pan);
+    if (dy > 0) ry = Math.min(dy, limits.tiltMax - tilt);
+    if (dy < 0) ry = Math.max(dy, limits.tiltMin - tilt);
+  }
+  if ((dx > 0 && blocked.r) || (dx < 0 && blocked.l)) rx = 0;
+  if ((dy > 0 && blocked.u) || (dy < 0 && blocked.d)) ry = 0;
+  // under 2 units is not worth a move
+  return [
+    Math.abs(rx) < 2 ? 0 : Math.round(rx),
+    Math.abs(ry) < 2 ? 0 : Math.round(ry),
+  ];
+}
+function updateArrows() {
+  for (const b of pads) {
+    const [rx, ry] = room(
+      Math.sign(+b.dataset.dx) * 2,
+      Math.sign(+b.dataset.dy) * 2,
+    );
+    const wall = !connected ? false : !rx && !ry;
+    b.disabled = !connected || wall;
+    b.title = wall ? 'At the wall (estimated)' : '';
+  }
+}
+// Range indicator in the Eye header: where the estimate sits between the walls.
+function showRange() {
+  const el = $('range');
+  el.hidden = !limits;
+  if (!limits) return;
+  const f = (v, lo, hi) =>
+    `${Math.max(0, Math.min(100, ((v - lo) / (hi - lo)) * 100))}%`;
+  $('rangePan').style.setProperty('--at', f(pan, limits.panMin, limits.panMax));
+  $('rangeTilt').style.setProperty(
+    '--at',
+    f(tilt, limits.tiltMin, limits.tiltMax),
+  );
+  el.setAttribute(
+    'aria-label',
+    `Pan range about ${PAN_DEGREES} degrees, estimated. Estimated pan ${Math.round(((pan - limits.panMin) / (limits.panMax - limits.panMin)) * 100)} percent across.`,
+  );
+}
+// The state is kept per bridge address in this browser, and on the bridge for agents and other browsers.
+const aimKey = () => `gm-aim:${base}`;
+let aimSaveTimer = 0;
+function saveAim(now) {
+  clearTimeout(aimSaveTimer);
+  aimSaveTimer = setTimeout(
+    () => {
+      store.set(aimKey(), JSON.stringify({ pan, tilt, limits }));
+      if (connected)
+        api('/api/aim', {
+          method: 'POST',
+          body: JSON.stringify({ pan, tilt, ...limits }),
+        }).catch(() => {});
+    },
+    now ? 0 : 800,
+  );
+}
+async function loadAim() {
+  try {
+    const mine = JSON.parse(store.get(aimKey(), 'null'));
+    const r = await api('/api/aim');
+    const theirs = r.ok ? await r.json() : null;
+    // The bridge's copy wins when it has a range (shared), else this browser's.
+    if (theirs && theirs.panMax !== undefined) {
+      limits = {
+        panMin: theirs.panMin,
+        panMax: theirs.panMax,
+        tiltMin: theirs.tiltMin,
+        tiltMax: theirs.tiltMax,
+      };
+      pan = theirs.pan ?? 0;
+      tilt = theirs.tilt ?? 0;
+    } else if (mine) {
+      limits = mine.limits;
+      pan = mine.pan ?? pan;
+      tilt = mine.tilt ?? tilt;
+    }
+    showPose(true);
+  } catch {
+    /* keep the estimate as it is */
+  }
+}
 function showPose(instant) {
   const t = `Pan ${sgn(pan)} \u00b7 Tilt ${sgn(tilt)} (estimated${aim ? ', moving' : ''})`;
   $('pose').textContent = t;
   store.set('gm-pan', pan);
   store.set('gm-tilt', tilt);
   const mp = aim ? aim.p : pan,
-    mt = aim ? aim.t : tilt;
+    mt = aim ? aim.t : tilt,
+    k = degPer();
   scene?.setPose(
-    Math.max(-90, Math.min(90, mp * DEG_PER_STEP)),
-    Math.max(-60, Math.min(60, mt * DEG_PER_STEP)),
+    Math.max(-175, Math.min(175, mp * k)),
+    Math.max(-60, Math.min(60, mt * k)),
     instant,
   );
+  showRange();
+  updateArrows();
+  if (base) saveAim();
 }
+// Re-center: with a known range, move to the middle of it; otherwise just zero the estimate.
 $('recenter').onclick = () => {
+  if (limits && connected) return aimTo(0, 0);
   pan = tilt = 0;
   showPose();
 };
@@ -549,12 +662,19 @@ for (const r of document.querySelectorAll('input[name="aim"]')) {
     setStatus(`Aim speed: ${aimSens} (${stepSize()} a step).`);
   };
 }
+let finding = false; // Find limits is running: no other moves
 const STEP_MS = 1150; // the bridge allows one move a second
 const TRAVEL_MS = 700; // a guess at how long one queued step takes to run
 
 async function move(dx, dy, quiet) {
-  if (!connected || Date.now() - lastMove < 1100) return false;
+  if (!connected || finding || Date.now() - lastMove < 1100) return false;
+  [dx, dy] = room(dx, dy);
+  if (!dx && !dy) {
+    if (!quiet) setStatus("That's the wall. The neck stops there (estimated).");
+    return false;
+  }
   lastMove = Date.now();
+  const before = liveFrame();
   if (!quiet) setStatus('Nudging...');
   try {
     const r = await api('/api/move', {
@@ -565,7 +685,16 @@ async function move(dx, dy, quiet) {
     foley.servo(TRAVEL_MS / 1000);
     pan += dx;
     tilt += dy;
+    if (dx) {
+      blocked.l = blocked.l && dx > 0 ? false : blocked.l;
+      blocked.r = blocked.r && dx < 0 ? false : blocked.r;
+    }
+    if (dy) {
+      blocked.d = blocked.d && dy > 0 ? false : blocked.d;
+      blocked.u = blocked.u && dy < 0 ? false : blocked.u;
+    }
     showPose();
+    wallCheck(dx, dy, before);
     if (!quiet) setStatus('Nudged one small step.');
     return true;
   } catch (e) {
@@ -573,13 +702,44 @@ async function move(dx, dy, quiet) {
     return false;
   }
 }
+// Reading the picture cheaply: a 32 x 18 gray copy of the live video, when it is playing and readable.
+const liveFrame = () =>
+  liveOn && $('video').readyState >= 2 ? lim.gray($('video')) : null;
+let liveNoise = 1;
+// Edge detection in normal use: a real step that leaves the live picture unchanged hit the wall.
+function wallCheck(dx, dy, before) {
+  if (!before || Math.max(Math.abs(dx), Math.abs(dy)) < 4) return;
+  setTimeout(() => {
+    const after = liveFrame();
+    if (!after || !lim.same(lim.diff(before, after), liveNoise)) return;
+    if (dx > 0) blocked.r = true;
+    if (dx < 0) blocked.l = true;
+    if (dy > 0) blocked.u = true;
+    if (dy < 0) blocked.d = true;
+    if (limits) {
+      if (dx > 0) pan = limits.panMax;
+      if (dx < 0) pan = limits.panMin;
+      if (dy > 0) tilt = limits.tiltMax;
+      if (dy < 0) tilt = limits.tiltMin;
+    }
+    showPose();
+    setStatus(
+      `${glass.line('wall')} The picture stopped changing (estimated).`,
+    );
+  }, TRAVEL_MS + 800);
+}
+
 // Hold a control: one step now, then one more every STEP_MS until released. Moves queue in the camera
 // and a stop does not cancel them, so steps stay small and nothing is sent after the release.
 let holdTimer = 0;
 function holdStart(dx, dy) {
   holdStop();
   move(dx, dy);
-  holdTimer = setInterval(() => move(dx, dy, true), STEP_MS);
+  holdTimer = setInterval(() => {
+    const [rx, ry] = room(dx, dy);
+    if (!rx && !ry) return holdStop(); // at the wall: stop sending
+    move(dx, dy, true);
+  }, STEP_MS);
 }
 function holdStop() {
   clearInterval(holdTimer);
@@ -640,6 +800,10 @@ addEventListener('blur', () => {
 let aimRun = 0; // a new drag cancels the steps still waiting to be sent
 async function aimTo(tp, tt) {
   const me = ++aimRun;
+  if (limits) {
+    tp = Math.max(limits.panMin, Math.min(limits.panMax, tp));
+    tt = Math.max(limits.tiltMin, Math.min(limits.tiltMax, tt));
+  }
   let rx = tp - pan,
     ry = tt - tilt;
   const st = stepSize();
@@ -677,7 +841,13 @@ async function aimTo(tp, tt) {
   let from = null;
   const m = $('model'),
     PX_PER_STEP = 3; // pixels of drag for one step of aim
-  const lim = (n, l) => Math.max(-l, Math.min(l, n));
+  const clampTo = (n, axis) =>
+    limits
+      ? Math.max(limits[axis + 'Min'], Math.min(limits[axis + 'Max'], n))
+      : Math.max(
+          axis === 'pan' ? -60 : -40,
+          Math.min(axis === 'pan' ? 60 : 40, n),
+        );
   m.addEventListener('pointerdown', (e) => {
     e.stopPropagation();
     if (!connected) return;
@@ -691,13 +861,13 @@ async function aimTo(tp, tt) {
     m.setPointerCapture(e.pointerId);
   });
   const target = (e) => ({
-    p: lim(Math.round(from.p + (e.clientX - from.x) / PX_PER_STEP), 60),
-    t: lim(Math.round(from.t - (e.clientY - from.y) / PX_PER_STEP), 40),
+    p: clampTo(Math.round(from.p + (e.clientX - from.x) / PX_PER_STEP), 'pan'),
+    t: clampTo(Math.round(from.t - (e.clientY - from.y) / PX_PER_STEP), 'tilt'),
   });
   m.addEventListener('pointermove', (e) => {
     if (!from) return;
     const t = target(e);
-    scene?.setPose(t.p * DEG_PER_STEP, t.t * DEG_PER_STEP, true);
+    scene?.setPose(t.p * degPer(), t.t * degPer(), true);
   });
   m.addEventListener('pointerup', (e) => {
     if (!from) return;
@@ -1039,6 +1209,103 @@ $('sayForm').addEventListener('submit', async (e) => {
     $('sayGo').disabled = !connected;
   }
 });
+
+// Find limits: only on the button; steps to each end and back to the middle (limits.js).
+const limitsText = () =>
+  limits
+    ? `Range measured (estimated): pan ${(limits.panMax - limits.panMin) / lim.STEP} steps of ${lim.STEP} (about ${PAN_DEGREES} degrees), tilt ${(limits.tiltMax - limits.tiltMin) / lim.STEP} steps. Find limits again if someone turned the neck by hand.`
+    : 'Range not measured. Find limits steps the neck to each end in small steps and looks at the picture to see where it stops.';
+function showLimitsInfo() {
+  $('limitsInfo').textContent = limitsText();
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function grabSmall() {
+  const r = await api('/api/snapshot.jpg?profile=p1');
+  if (!r.ok) throw new Error((await r.json()).error);
+  const bmp = await createImageBitmap(await r.blob());
+  const g = lim.gray(bmp);
+  bmp.close();
+  if (!g) throw new Error('the browser would not give the picture pixels');
+  return g;
+}
+async function sendStep(axis, dir) {
+  for (let tries = 0; tries < 5; tries++) {
+    const r = await api('/api/move', {
+      method: 'POST',
+      body: JSON.stringify({
+        dx: axis === 'pan' ? dir * lim.STEP : 0,
+        dy: axis === 'tilt' ? dir * lim.STEP : 0,
+        speed: 100,
+      }),
+    });
+    if (r.status !== 429) {
+      if (!r.ok) throw new Error((await r.json()).error);
+      return;
+    }
+    await sleep(400); // one move a second
+  }
+  throw new Error('the bridge kept refusing moves');
+}
+let cancelFind = false;
+$('limitsStop').onclick = () => {
+  cancelFind = true;
+};
+$('limitsGo').onclick = async () => {
+  if (!connected || finding) return;
+  finding = true;
+  cancelFind = false;
+  holdStop();
+  stopLive(); // the picture comes from small snapshots; the live view would only get in the way
+  $('limitsGo').disabled = true;
+  $('limitsStop').hidden = false;
+  $('limitsBar').hidden = false;
+  $('limitsBar').value = 0;
+  setStatus(glass.line('limitsStart'));
+  let res = null;
+  try {
+    res = await lim.findLimits({
+      grab: grabSmall,
+      send: sendStep,
+      cancelled: () => cancelFind,
+      wait: sleep,
+      line: (e) => glass.line(e),
+      progress: (t, f) => {
+        $('limitsInfo').textContent = t;
+        $('limitsBar').value = f;
+      },
+    });
+  } catch (e) {
+    setStatus(`Lost the angle. Mapping failed: ${e.message}`, true);
+  }
+  finding = false;
+  $('limitsGo').disabled = !connected;
+  $('limitsStop').hidden = true;
+  $('limitsBar').hidden = true;
+  if (res) {
+    limits = {
+      panMin: res.pan.min,
+      panMax: res.pan.max,
+      tiltMin: res.tilt.min,
+      tiltMax: res.tilt.max,
+    };
+    pan = tilt = 0;
+    blocked.l = blocked.r = blocked.u = blocked.d = false;
+    setStatus(`${glass.line('limitsDone')} Estimated range saved.`);
+  } else if (cancelFind || !connected) {
+    setStatus(
+      `${glass.line('limitsStop')} The neck could be anywhere; the estimate is unchanged.`,
+    );
+  } else {
+    setStatus(
+      'Mapping gave up (a step or time cap, or it could not tell the ends). The estimate is unchanged.',
+      true,
+    );
+  }
+  showLimitsInfo();
+  showPose(true);
+  saveAim(true);
+};
+showLimitsInfo();
 
 $('conn').addEventListener('submit', connect);
 setConnected(false);

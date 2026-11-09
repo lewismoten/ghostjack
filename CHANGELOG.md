@@ -3,6 +3,53 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions
 follow [SemVer](https://semver.org/).
 
+## [0.1.2] - 2026-11-09
+
+### Fixed
+
+- Live video was 5 to 10 seconds late. The camera sends a keyframe about every
+  4.8 s and the bridge only cut a fragment at each one, so the player always
+  held at least a whole group of pictures. The bridge now cuts a fragment every
+  0.5 s, reads the camera with no input buffering and a short probe, and flushes
+  each fragment at once. Measured (camera's burned-in clock, read with OCR,
+  against the computer's clock): the oldest picture in each fragment was 4.8 to
+  5.0 s old when it arrived, now 0.2 to 0.7 s (the clock only has whole seconds,
+  so plus or minus 1 s).
+- The player stays at the live edge: it starts 0.3 s behind the newest picture,
+  plays at 1.1x when more than 1.5 s behind until under 0.5 s, jumps to the edge
+  when more than 4 s behind, and drops picture older than 30 s. Measured buffer
+  lag in a 20 s run: 0.1 to 1.1 s.
+- Speech: the first words were lost ("Words to wonder" played as "...onder")
+  because the quiet chime (9 dB under speech) no longer woke the camera's
+  amplifier. A separate wake pulse (130 ms, as loud as the speech peak, soft
+  edges) now comes first, then half a second of silence, then the quiet chime,
+  then the speech. It is sent with the chime off too.
+- Glassmouth's browser line "Shift starts now. Line is live." sounded like a
+  curse word, and "live" was read as the verb. All spoken lines were rewritten
+  with no two-way words, no ellipses and nothing that can run together into
+  something rude (docs/glassmouth.md has the rules and the lines), plus a small
+  pronunciation map for spoken text.
+
+### Added
+
+- Find limits (Dials tab, only when you press it): the page steps the neck to
+  each end in steps of 10, comparing small pictures, and records the range
+  (measured here: pan 48 steps, tilt 19 steps; 480 and 190 units). It shows
+  progress and a Cancel button, and has step and time caps. With a range known,
+  the arrows, arrow keys, hold-to-aim and 3D drag stop at each end, a small
+  range indicator in the Eye header shows where the estimate sits (labeled
+  estimated), and Re-center moves to the middle. While the live picture is
+  playing, a step that changes nothing is treated as hitting a wall ("That's the
+  wall."). The range and estimate are kept per bridge address in the browser and
+  on the bridge (`GET` and `POST /api/aim`) so agents and other browsers share
+  them.
+- Live quality in Dials: 1080p, or Fast (the camera's smaller sub-stream,
+  `GET /api/stream?profile=p1`). Recording and snapshots stay at full size.
+
+### Changed
+
+- The bridge's stream uses low-latency ffmpeg options (see Fixed).
+
 ## [0.1.1] - 2026-11-08
 
 Fixes from using the published page, then recording, Glassmouth's browser voice

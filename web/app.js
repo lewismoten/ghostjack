@@ -556,7 +556,10 @@ function room(dx, dy) {
 }
 function updateArrows() {
   for (const b of pads) {
-    const [rx, ry] = room(Math.sign(+b.dataset.dx), Math.sign(+b.dataset.dy));
+    const [rx, ry] = room(
+      Math.sign(+b.dataset.dx) * 2,
+      Math.sign(+b.dataset.dy) * 2,
+    );
     const wall = !connected ? false : !rx && !ry;
     b.disabled = !connected || wall;
     b.title = wall ? 'At the wall (estimated)' : '';
@@ -582,16 +585,19 @@ function showRange() {
 // The state is kept per bridge address in this browser, and on the bridge for agents and other browsers.
 const aimKey = () => `gm-aim:${base}`;
 let aimSaveTimer = 0;
-function saveAim() {
+function saveAim(now) {
   clearTimeout(aimSaveTimer);
-  aimSaveTimer = setTimeout(() => {
-    store.set(aimKey(), JSON.stringify({ pan, tilt, limits }));
-    if (connected)
-      api('/api/aim', {
-        method: 'POST',
-        body: JSON.stringify({ pan, tilt, ...limits }),
-      }).catch(() => {});
-  }, 800);
+  aimSaveTimer = setTimeout(
+    () => {
+      store.set(aimKey(), JSON.stringify({ pan, tilt, limits }));
+      if (connected)
+        api('/api/aim', {
+          method: 'POST',
+          body: JSON.stringify({ pan, tilt, ...limits }),
+        }).catch(() => {});
+    },
+    now ? 0 : 800,
+  );
 }
 async function loadAim() {
   try {
@@ -1297,6 +1303,7 @@ $('limitsGo').onclick = async () => {
   }
   showLimitsInfo();
   showPose(true);
+  saveAim(true);
 };
 showLimitsInfo();
 

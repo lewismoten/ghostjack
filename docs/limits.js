@@ -42,7 +42,6 @@ export const CAP_MS = 20 * 60 * 1000; // most time for the whole search
 // { min, max }, centered on 0) or null if cancelled or capped. The camera ends at the center of each range.
 export async function findLimits(deps) {
   const t0 = Date.now();
-  let total = 0;
   const over = () => deps.cancelled() || Date.now() - t0 > CAP_MS;
   deps.progress('Calibrating the noise.', 0);
   const a = await deps.grab();
@@ -58,7 +57,6 @@ export async function findLimits(deps) {
       await deps.send(axis, dir);
       await deps.wait(STEP_MS);
       const cur = await deps.grab();
-      total++;
       if (same(diff(prev, cur), noise)) {
         if (++still >= 2) return moved;
       } else {
@@ -66,7 +64,10 @@ export async function findLimits(deps) {
         still = 0;
       }
       prev = cur;
-      deps.progress(`${label}: ${moved} steps.`, from + Math.min(0.2, moved / 600));
+      deps.progress(
+        `${label}: ${moved} steps.`,
+        from + Math.min(0.2, moved / 600),
+      );
     }
     return null; // capped or cancelled
   }
@@ -75,12 +76,16 @@ export async function findLimits(deps) {
   for (const axis of ['pan', 'tilt']) {
     const name = axis === 'pan' ? 'Pan' : 'Tilt';
     deps.progress(`${name}: finding the first wall.`, base);
-    if ((await walk(axis, -1, `${name} to the first wall`, base)) === null) return null;
+    if ((await walk(axis, -1, `${name} to the first wall`, base)) === null)
+      return null;
     deps.line('wall');
     deps.progress(`${name}: crossing to the other wall.`, base + 0.25);
     const n = await walk(axis, 1, `${name} across`, base + 0.25);
     if (n === null || n < 2) return null;
-    deps.progress(`${name}: ${n} steps across. Back to the middle.`, base + 0.45);
+    deps.progress(
+      `${name}: ${n} steps across. Back to the middle.`,
+      base + 0.45,
+    );
     for (let i = 0; i < Math.floor(n / 2) && !over(); i++) {
       await deps.send(axis, -1);
       await deps.wait(STEP_MS);

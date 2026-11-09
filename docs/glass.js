@@ -31,6 +31,13 @@ export const LINES = {
   recStart: ["Tape's rolling.", 'Rolling tape.'],
   recStop: ["Tape's in the can.", "That's a wrap. Tape's in the can."],
   recCap: ['Out of tape.', 'Out of tape. The reel is full.'],
+  wall: ["That's the wall.", "That's the end of the neck."],
+  limitsStart: ['Mapping the walls.', 'Walking the walls. Hold still.'],
+  limitsDone: [
+    'Walls mapped. Back to center.',
+    'Got the walls. Back to center.',
+  ],
+  limitsStop: ['Mapping stopped.', 'Standing down. Mapping stopped.'],
   say: ['Patching you through.', 'Opening the speaker line.'],
 };
 // Safety net: spoken text only (the status line keeps the original). Lines should not need it.
