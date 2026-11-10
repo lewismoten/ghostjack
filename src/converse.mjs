@@ -357,7 +357,7 @@ async function handleOne(s, u) {
   const viaBarge = s.bargeActive;
   // After the camera has spoken, Lewis may just answer: an utterance that starts within FOLLOW_MS of the
   // end of speech is kept without a wake word (GJ_FOLLOW_MS, default 20 s; 0 turns it off).
-  const follow = !m && !viaBarge && s.lastSpokeAt && (u.endedAt && u.durationMs ? u.endedAt - u.durationMs : Date.now()) - s.lastSpokeAt <= FOLLOW_MS();
+  const follow = !m && !viaBarge && s.lastSpokeAt && (u.endedAt && u.durationMs ? Date.parse(u.endedAt) - u.durationMs : Date.now()) - s.lastSpokeAt <= FOLLOW_MS();
   if (!m && !viaBarge && !follow) return;
   s.lastWake = Date.now();
   s.partial = null;
