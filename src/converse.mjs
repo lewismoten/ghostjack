@@ -144,7 +144,11 @@ export function start({ wake, idleSeconds, tones, endSilenceMs, chime } = {}) {
     lastWake: Date.now(),
     seg: new Segmenter(segOpts),
     guard: new SelfGuard(num('GJ_CONVERSE_GUARD_MS', 2500)),
-    gate: new EchoGate(),
+    gate: new EchoGate({
+      margin: num('GJ_ECHO_MARGIN', 1.6),
+      floor: num('GJ_ECHO_FLOOR', 400),
+      holdMs: num('GJ_ECHO_HOLD_MS', 200),
+    }),
     ring: [], // the last 1.5 s of microphone frames, kept while the camera speaks
     muted: false,
     partial: null,
