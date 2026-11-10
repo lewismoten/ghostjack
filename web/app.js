@@ -1524,14 +1524,28 @@ async function pollConverse() {
         ? `Listening: on, ${j.state}. Open the Relay tab to turn it off`
         : 'Listening: off. Open the Relay tab to turn conversation on',
     );
-    cvText(
-      'cvState',
-      on
-        ? `Listening. ${j.state}. Off in ${Math.ceil(j.idleLeftSeconds / 60)} min without a wake word.`
-        : j.lastStop
-          ? `Off (${j.lastStop.reason}).`
-          : 'Off',
-    );
+    // one short line of icons instead of changing sentences (Lewis: "it would just be like icons")
+    const st = String(j.state || '');
+    const icons = !on
+      ? '\u23fb Off'
+      : [
+          j.playing
+            ? '\ud83d\udd0a Speaking'
+            : st.includes('muted')
+              ? '\ud83d\udd07 Muted'
+              : '\ud83c\udf99\ufe0f Listening',
+          j.partial ? '\ud83d\udcac Hearing you' : '',
+          j.bargeActive ? '\u270b Cut in' : '',
+          `\u23f1 ${Math.ceil(j.idleLeftSeconds / 60)} min`,
+        ]
+          .filter(Boolean)
+          .join('  \u00b7  ');
+    cvText('cvState', icons);
+    $('cvState').title = on
+      ? st
+      : j.lastStop
+        ? `Off (${j.lastStop.reason})`
+        : 'Off';
     cvText('cvPartial', j.partial ? `Hearing: ${j.partial.text}` : '\u00a0');
     cvText('cvPlaying', j.playing ? `Speaking: ${j.playing.text}` : '\u00a0');
     cvList(
