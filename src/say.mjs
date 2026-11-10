@@ -158,7 +158,9 @@ export async function speechArgs(
       sil(CUE_GAP),
     );
   const speechIdx = seg.length;
-  seg.push(sil(fast ? 0.4 : 1.5)); // the tail: the camera finishes its buffer before the publish closes
+  // the tail: the camera finishes its buffer before the publish closes. 0.4 s after a fast line cut its last
+  // word on the real camera (2026-11-10: "...without stopping" lost "stopping"), so it is 0.9 s by default.
+  seg.push(sil(fast ? Number(process.env.GJ_FAST_TAIL_SEC) || 0.9 : 1.5));
   const args = ['-loglevel', 'error', ...out.pre];
   for (const [src] of seg) args.push('-f', 'lavfi', '-i', src);
   args.push('-i', file);
