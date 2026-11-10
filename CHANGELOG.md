@@ -9,6 +9,8 @@ follow [SemVer](https://semver.org/).
 
 - `GET /api/picture` and `POST /api/picture` (wide dynamic range and backlight
   fix on or off, with the four sliders); Dials tab checkboxes.
+- Night vision "Color" (forced day mode) on the Dials tab and `POST /api/night`;
+  experimental: unconfirmed to work in the dark.
 - Discovery notes: stills from the stream do not beat the snapshot; the camera
   exposes no encoder settings.
 

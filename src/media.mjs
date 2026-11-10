@@ -32,7 +32,7 @@ export function parseCrop(c) {
 }
 
 // Run ffmpeg with a buffer on stdin and collect stdout.
-function pipeFfmpeg(args, input) {
+function pipeFfmpeg(args, input, strict = false) {
   return new Promise((resolve, reject) => {
     const p = spawn(FFMPEG, ['-hide_banner', '-loglevel', 'error', ...args], {
       stdio: ['pipe', 'pipe', 'ignore'],
@@ -40,9 +40,19 @@ function pipeFfmpeg(args, input) {
     children.add(p);
     const out = [];
     p.stdout.on('data', (d) => out.push(d));
-    p.on('error', reject);
-    p.on('close', () => {
+    const timer = setTimeout(() => p.kill('SIGKILL'), 30000);
+    p.on('error', (e) => {
+      clearTimeout(timer);
       children.delete(p);
+      reject(e);
+    });
+    p.on('close', (code) => {
+      clearTimeout(timer);
+      children.delete(p);
+      if (code !== 0 && strict)
+        return reject(
+          Object.assign(new Error('ffmpeg failed or timed out'), { code: 502 }),
+        );
       resolve(Buffer.concat(out));
     });
     p.stdin.on('error', () => {});
@@ -76,8 +86,11 @@ export async function reshapeJpeg(jpg, { crop, width } = {}) {
       'pipe:1',
     ],
     jpg,
+    true,
   );
-  return out.length ? out : jpg;
+  if (!out.length)
+    throw Object.assign(new Error('ffmpeg made no picture'), { code: 502 });
+  return out;
 }
 
 // A 64x36 grayscale thumbnail of a JPEG (2304 bytes), to compare pictures cheaply.
@@ -136,7 +149,7 @@ let busy = false;
 // Record `seconds` from a fresh stream address into a temp file. Returns { done, cancel }: `done`
 // resolves to the file path (the caller deletes it) and rejects with code 409/499/502.
 function capture(seconds, ext, outArgs) {
-  if (busy || rec.active())
+  if (busy || rec.active() || rec.gate.starting)
     throw Object.assign(new Error('the camera is already recording'), {
       code: 409,
     });

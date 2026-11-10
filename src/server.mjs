@@ -1,7 +1,6 @@
 // Ghost Jack bridge: a small HTTP API in front of the camera session, plus the control page in web/.
 // Binds 127.0.0.1 by default. Every /api route except /api/hello needs the bearer token.
 import { createServer } from 'node:http';
-import { spawn } from 'node:child_process';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import {
   existsSync,
@@ -21,6 +20,7 @@ import * as speech from './say.mjs';
 import * as rec from './record.mjs';
 import * as media from './media.mjs';
 import * as asker from './ask.mjs';
+import { streamVideo } from './stream.mjs';
 
 const PORT = Number(process.env.PORT) || 8787;
 const HOST = process.env.HOST || '127.0.0.1';
@@ -85,13 +85,32 @@ const json = (res, code, obj) => {
   res.end(JSON.stringify(obj));
 };
 
-async function readBody(req) {
+async function readBody(req, allowArray = false) {
   let s = '';
   for await (const c of req) {
     s += c;
-    if (s.length > 4096) throw new Error('body too large');
+    if (s.length > 4096)
+      throw Object.assign(new Error('body too large'), { code: 413 });
   }
-  return s ? JSON.parse(s) : {};
+  if (!s) return {};
+  let v;
+  try {
+    v = JSON.parse(s);
+  } catch {
+    throw Object.assign(new Error('body is not valid JSON'), { code: 400 });
+  }
+  if (!v || typeof v !== 'object' || (Array.isArray(v) && !allowArray))
+    throw Object.assign(new Error('body must be a JSON object'), {
+      code: 400,
+    });
+  return v;
+}
+
+// A number from a JSON value: a finite number or a non-empty numeric string; null, "", [] and
+// booleans are not numbers (Number() would turn them into 0 or 1).
+function num(v) {
+  if (typeof v === 'string' && v.trim() === '') return NaN;
+  return typeof v === 'number' || typeof v === 'string' ? Number(v) : NaN;
 }
 
 // A raw request body (uploaded audio), at most `max` bytes.
@@ -272,55 +291,8 @@ function sayAllowed() {
 }
 const children = media.children;
 
-async function stream(req, res, profile) {
-  const url = await camera.streamUrl(profile); // never logged or sent to the client
-  // Fragmented MP4: H.264 copied as-is (no re-encode), AAC copied. Low latency (0.1.2): no input
-  // buffering, a short probe, and a fragment every 0.5 s (not only at keyframes: the camera sends one
-  // about every 4.8 s, which made the picture 5 to 10 s late), each flushed as soon as it is written.
-  const p = spawn(
-    FFMPEG,
-    [
-      '-hide_banner',
-      '-loglevel',
-      'error',
-      '-fflags',
-      'nobuffer',
-      '-flags',
-      'low_delay',
-      '-probesize',
-      '32k',
-      '-analyzeduration',
-      '0',
-      '-rtsp_transport',
-      'tcp',
-      '-i',
-      url,
-      '-c',
-      'copy',
-      '-movflags',
-      'frag_keyframe+empty_moov+default_base_moof',
-      '-frag_duration',
-      '500000',
-      '-flush_packets',
-      '1',
-      '-f',
-      'mp4',
-      'pipe:1',
-    ],
-    { stdio: ['ignore', 'pipe', 'ignore'] },
-  );
-  children.add(p);
-  res.writeHead(200, {
-    'Content-Type': 'video/mp4',
-    'Cache-Control': 'no-store',
-  });
-  p.stdout.pipe(res);
-  p.on('exit', () => {
-    children.delete(p);
-    res.end();
-  });
-  res.on('close', () => p.kill('SIGKILL'));
-}
+const stream = (req, res, profile) =>
+  streamVideo({ camera, ffmpeg: FFMPEG, children, req, res, profile });
 
 // Go to an absolute pan/tilt (or a saved shot) in one travel move, wait for the picture to settle and
 // answer with a snapshot. Headers: X-GJ-Pan, X-GJ-Tilt, X-GJ-Settled.
@@ -335,7 +307,7 @@ async function goto(req, res) {
     if (!s) return json(res, 404, { error: `shot ${n} is empty` });
     [tp, tt, crop] = [s.pan, s.tilt, media.parseCrop(s.crop)];
   } else {
-    [tp, tt] = [Number(b.pan), Number(b.tilt)];
+    [tp, tt] = [num(b.pan), num(b.tilt)];
     if (!Number.isFinite(tp) || !Number.isFinite(tt))
       return json(res, 400, { error: 'pan and tilt (or shot) needed' });
   }
@@ -355,17 +327,22 @@ async function goto(req, res) {
   const now = Date.now();
   if (now - lastMove < 1000) return json(res, 429, { error: 'still moving' });
   const ms = travelMs(dx, dy);
-  if (dx || dy) {
-    lastMove = now + ms - 1000;
-    await camera.move(dx, dy, 100);
-    setAim({ ...aim, pan: cur.pan + dx, tilt: cur.tilt + dy });
+  let settled = true; // nothing moved: the picture is as settled as it will be
+  let jpg;
+  try {
+    if (dx || dy) {
+      lastMove = now + ms - 1000;
+      await camera.move(dx, dy, 100);
+      setAim({ ...aim, pan: cur.pan + dx, tilt: cur.tilt + dy });
+      settled = await media.waitSettled(ms);
+    }
+    jpg = await media.reshapeJpeg(await camera.snapshot('p0'), {
+      crop,
+      width,
+    });
+  } finally {
+    lastMove = Math.min(lastMove, Date.now());
   }
-  const settled = dx || dy ? await media.waitSettled(ms) : true; // nothing moved: the picture is as settled as it will be
-  lastMove = Math.min(lastMove, Date.now());
-  const jpg = await media.reshapeJpeg(await camera.snapshot('p0'), {
-    crop,
-    width,
-  });
   res.writeHead(200, {
     'Content-Type': 'image/jpeg',
     'Cache-Control': 'no-store',
@@ -563,7 +540,12 @@ const server = createServer(async (req, res) => {
       if (now - lastMove < 1000)
         return json(res, 429, { error: 'one move per second' });
       lastMove = now;
-      await camera.move(dx, dy, speed);
+      try {
+        await camera.move(dx, dy, speed);
+      } catch (e) {
+        lastMove = 0;
+        throw e;
+      }
       return json(res, 200, { ok: true, dx, dy, speed });
     }
     if (route === 'POST /api/travel') {
@@ -576,7 +558,12 @@ const server = createServer(async (req, res) => {
         return json(res, 429, { error: 'still moving' });
       const ms = travelMs(dx, dy);
       lastMove = now + ms - 1000; // other moves wait until it arrives
-      await camera.move(dx, dy, 100);
+      try {
+        await camera.move(dx, dy, 100);
+      } catch (e) {
+        lastMove = Math.min(lastMove, Date.now());
+        throw e;
+      }
       return json(res, 200, { ok: true, dx, dy, ms });
     }
     if (route === 'POST /api/travel/done') {
@@ -587,7 +574,7 @@ const server = createServer(async (req, res) => {
     if (route === 'GET /api/shots') return json(res, 200, shots);
     if (route === 'POST /api/shots') {
       try {
-        return json(res, 200, setShots(await readBody(req)));
+        return json(res, 200, setShots(await readBody(req, true)));
       } catch (e) {
         if (e.code === 400) return json(res, 400, { error: e.message });
         throw e;
@@ -618,8 +605,7 @@ const server = createServer(async (req, res) => {
       const b = await readBody(req);
       const p = {};
       for (const k of ['brightness', 'contrast', 'saturation', 'sharpness'])
-        if (b[k] !== undefined && Number.isFinite(Number(b[k])))
-          p[k] = Number(b[k]);
+        if (Number.isFinite(num(b[k]))) p[k] = num(b[k]);
       for (const k of ['wdr', 'backlight']) {
         if (b[k] === undefined) continue;
         const on = onOff(b[k]);
@@ -732,7 +718,9 @@ const server = createServer(async (req, res) => {
         'Content-Disposition': `attachment; filename="${name}"`,
         'Cache-Control': 'no-store',
       });
-      return createReadStream(r.file).pipe(res);
+      const rs = createReadStream(r.file);
+      res.on('close', () => rs.destroy());
+      return rs.pipe(res);
     }
     json(res, 404, { error: 'no such route' });
   } catch (e) {
