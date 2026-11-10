@@ -113,8 +113,20 @@ export function append({ id, text, end, voice, level, rate }) {
   }
   if (end === true) {
     r.closed = true;
+    // the done tone rides at the end of the reply's own stream, right after the last word: a separate
+    // publish came 5.5 s late and muted the mic while Lewis started answering (2026-11-10)
+    if (r.segments.length && tones.done && r.stream?.open) {
+      mkdirSync(TMP, { recursive: true });
+      const file = join(TMP, `tone-${randomBytes(6).toString('hex')}.wav`);
+      writeFileSync(file, toneWav('done'));
+      r.stream.add({
+        file,
+        chime: false,
+        band: false,
+        level: speech.capLevel(Number(process.env.GJ_REPLY_LEVEL) || 0.03),
+      });
+    } else if (r.segments.length) playTone('done');
     r.stream?.end();
-    if (r.segments.length) playTone('done');
   }
   return view(r);
 }
