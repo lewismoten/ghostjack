@@ -21,6 +21,7 @@ import * as rec from './record.mjs';
 import * as media from './media.mjs';
 import * as asker from './ask.mjs';
 import * as converse from './converse.mjs';
+import * as reply from './reply.mjs';
 import { splitLines } from './converse-core.mjs';
 import { streamVideo } from './stream.mjs';
 
@@ -650,7 +651,7 @@ const server = createServer(async (req, res) => {
         90,
         Math.min(220, Math.round(Number(b.rate ?? 140) || 140)),
       );
-      converse.noteReply(text);
+      reply.noteReply(text);
       return json(res, 202, {
         level,
         chimeLevel: b.chime === false ? null : chimeLevel,
@@ -700,7 +701,7 @@ const server = createServer(async (req, res) => {
         Math.min(220, Math.round(Number(b.rate ?? 140) || 140)),
       );
       const ids = lines.map((text, i) => {
-        converse.noteReply(text);
+        reply.noteReply(text);
         return speech.say({
           text,
           voice,
@@ -716,6 +717,66 @@ const server = createServer(async (req, res) => {
         ids,
         status: 'queued',
       });
+    }
+    if (route === 'POST /api/reply') {
+      // The agent's words in pieces: each finished sentence or clause is spoken at once. Send {text}; the
+      // answer has the reply's id; send {id, text, end: true} to add more and close it.
+      const b = await readBody(req);
+      if (b.id === undefined && !sayAllowed())
+        return json(res, 429, {
+          error: 'ten says a minute (a reply counts as one)',
+        });
+      const voice = b.voice ? String(b.voice) : '';
+      if (voice && !(await speech.voices()).includes(voice))
+        return json(res, 400, { error: 'unknown voice' });
+      const level = speech.capLevel(b.level);
+      const rate = Math.max(
+        90,
+        Math.min(220, Math.round(Number(b.rate ?? 140) || 140)),
+      );
+      try {
+        return json(
+          res,
+          202,
+          reply.append({
+            id: b.id,
+            text: b.text,
+            end: b.end,
+            voice,
+            level,
+            rate,
+          }),
+        );
+      } catch (e) {
+        if (e.interrupted)
+          return json(res, 409, { error: e.message, interrupted: true });
+        throw e;
+      }
+    }
+    const rpm = /^GET \/api\/reply\/([0-9a-f]{12})$/.exec(route);
+    if (rpm) {
+      const r = reply.get(rpm[1]);
+      return r
+        ? json(res, 200, reply.view(r))
+        : json(res, 404, { error: 'no such reply' });
+    }
+    if (route === 'POST /api/converse/interrupt') {
+      const b = await readBody(req);
+      const text = String(b.text ?? '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (!text || text.length > 300)
+        return json(res, 400, { error: 'text is 1 to 300 characters' });
+      if (!sayAllowed()) return json(res, 429, { error: 'ten says a minute' });
+      return json(
+        res,
+        202,
+        converse.interrupt({ text, level: speech.capLevel(b.level) }),
+      );
+    }
+    if (route === 'POST /api/converse/tones') {
+      const b = await readBody(req);
+      return json(res, 200, { tones: reply.setTones(b.tones ?? b) });
     }
     if (route === 'GET /api/converse') return json(res, 200, converse.status());
     if (route === 'POST /api/converse/start') {

@@ -64,13 +64,13 @@ export function mapAnswer(transcript, choices, other) {
 
 // Transcribe a WAV with whisper-cli. Resolves to the text, or null when whisper or its model is missing
 // or fails.
-export function transcribe(wav) {
-  if (!existsSync(WHISPER()) || !existsSync(MODEL()))
+export function transcribe(wav, model = MODEL()) {
+  if (!existsSync(WHISPER()) || !existsSync(model))
     return Promise.resolve(null);
   return new Promise((resolve) => {
     const p = spawn(
       WHISPER(),
-      ['-m', MODEL(), '-f', wav, '-l', 'en', '-nt', '-np'],
+      ['-m', model, '-f', wav, '-l', 'en', '-nt', '-np'],
       { stdio: ['ignore', 'pipe', 'ignore'] },
     );
     media.children.add(p);

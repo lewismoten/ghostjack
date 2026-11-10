@@ -195,11 +195,17 @@ test('inbox writes one small JSON line per utterance, private, with cursors', ()
   const file = join(dir, 'sub', 'inbox.jsonl');
   const box = new Inbox(file);
   const a = box.add({
+    type: 'final',
     text: 'hey patchwork hello',
     wake: 'patchwork',
     durationMs: 1800,
   });
-  box.add({ text: 'glass eye again', wake: 'glasseye', durationMs: 900 });
+  box.add({
+    type: 'final',
+    text: 'glass eye again',
+    wake: 'glasseye',
+    durationMs: 900,
+  });
   const lines = readFileSync(file, 'utf8')
     .trim()
     .split('\n')
@@ -210,6 +216,7 @@ test('inbox writes one small JSON line per utterance, private, with cursors', ()
     'durationMs',
     'n',
     'text',
+    'type',
     'wake',
   ]);
   assert.equal(lines[0].text, a.text);

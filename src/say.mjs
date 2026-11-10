@@ -4,6 +4,7 @@
 import { spawn, execFile } from 'node:child_process';
 import {
   mkdirSync,
+  readFileSync,
   rmSync,
   existsSync,
   writeFileSync,
@@ -64,12 +65,13 @@ async function synthesize(text, { voice, rate }) {
   return file;
 }
 
-const run = (args, capture) =>
+const run = (args, capture, onProc) =>
   new Promise((resolve, reject) => {
     const p = spawn(FFMPEG, ['-hide_banner', ...args], {
       stdio: ['ignore', 'ignore', capture ? 'pipe' : 'ignore'],
     });
     let err = '';
+    onProc?.(p);
     p.stderr?.on('data', (d) => {
       err += d;
     });
@@ -121,6 +123,7 @@ export async function speechArgs(
   chime = true,
   rawChime = 0.008,
   band = true,
+  fast = false,
 ) {
   const level = capLevel(rawLevel),
     chimeLevel = chimeFor(level, rawChime);
@@ -136,23 +139,26 @@ export async function speechArgs(
     `,volume=${(peak / 0.125).toFixed(4)},afade=t=in:st=0:d=${fade},afade=t=out:st=${(d - fade).toFixed(3)}:d=${fade}`,
   ];
   const speechPeak = 0.7079 * level; // speech is normalized to -3 dBFS, then scaled by level
-  const seg = [
-    sil(1), // lead-in: the link settles
-    // The wake pulse (0.1.2): the camera's amp wakes on sound, and until it has, the first words are
-    // lost ("Words to wonder" played as "...onder"). A short pulse as loud as the speech peak (never
-    // louder; the limiter and level cap still apply) with soft edges so it is not a click, then half a
-    // second of silence while the amp stays awake. The quiet chime alone (9 dB under speech) did not wake it.
-    pulse(WAKE_HZ, WAKE_SEC, speechPeak, 0.02),
-    sil(WAKE_GAP),
-  ];
-  if (chime)
+  // fast: a short cue right after the speaker was in use (the amp is awake): no wake pulse, tiny lead and tail.
+  const seg = fast
+    ? [sil(0.1)]
+    : [
+        sil(1), // lead-in: the link settles
+        // The wake pulse (0.1.2): the camera's amp wakes on sound, and until it has, the first words are
+        // lost ("Words to wonder" played as "...onder"). A short pulse as loud as the speech peak (never
+        // louder; the limiter and level cap still apply) with soft edges so it is not a click, then half a
+        // second of silence while the amp stays awake. The quiet chime alone (9 dB under speech) did not wake it.
+        pulse(WAKE_HZ, WAKE_SEC, speechPeak, 0.02),
+        sil(WAKE_GAP),
+      ];
+  if (chime && !fast)
     seg.push(
       pulse(880, 0.1, chimeLevel, 0.01),
       pulse(1320, 0.1, chimeLevel, 0.01),
       sil(CUE_GAP),
     );
   const speechIdx = seg.length;
-  seg.push(sil(1.5)); // the tail: the camera finishes its buffer before the publish closes
+  seg.push(sil(fast ? 0.4 : 1.5)); // the tail: the camera finishes its buffer before the publish closes
   const args = ['-loglevel', 'error', ...out.pre];
   for (const [src] of seg) args.push('-f', 'lavfi', '-i', src);
   args.push('-i', file);
@@ -221,57 +227,128 @@ const silentPublish = (url) =>
     url,
   ]);
 
-async function speak(job) {
+// Phase 1 (can run while the previous line plays): synthesize and mix into one finished file. Resolves to
+// { file, mixed, ref } where ref is the mix's 20 ms loudness envelope and where the speech sits in it.
+async function prepare(job) {
   mkdirSync(TMP, { recursive: true });
-  let file = null,
-    mixed = null;
+  // Both sources end up as one audio file; the mixer below is the same for speech and uploads.
+  const file = job.file || (await synthesize(job.text, job));
+  job.file = file;
+  // Mix first, then send the one finished file at the pace. (0.1.2 fix: the
+  // pacing options only govern the input right after them, so sending the
+  // mix straight from its pieces paced only the lead-in silence and pushed
+  // the rest in a few milliseconds; the camera played a blip and dropped it.)
+  const mixed = file + '.mix.wav';
+  await run(
+    await speechArgs(
+      file,
+      job.level,
+      toFile(mixed),
+      job.chime,
+      job.chimeLevel,
+      job.band,
+      job.fast,
+    ),
+  );
+  const pcm = readFileSync(mixed).subarray(44);
+  const env = [];
+  for (let i = 0; i + 640 <= pcm.length; i += 640) {
+    let sum = 0;
+    for (let j = 0; j < 640; j += 2) sum += pcm.readInt16LE(i + j) ** 2;
+    env.push(Math.sqrt(sum / 320));
+  }
+  const totalMs = (pcm.length / 32000) * 1000;
+  const leadMs = job.fast
+    ? 100
+    : (1 + WAKE_SEC + WAKE_GAP + (job.chime ? 0.2 + CUE_GAP : 0)) * 1000;
+  const tailMs = job.fast ? 400 : 1500;
+  return {
+    file,
+    mixed,
+    ref: { env, leadMs, speechMs: totalMs - leadMs - tailMs },
+  };
+}
+
+let current = null; // { job, proc } while a line is being published
+async function speak(job) {
+  let prep = null;
   try {
-    // Both sources end up as one audio file; the mixer below is the same for speech and uploads.
-    file = job.file || (await synthesize(job.text, job));
+    prep = await job.prep;
+    if (job.status === 'cancelled') return;
     job.status = 'speaking';
-    // Mix first, then send the one finished file at the pace. (0.1.2 fix: the
-    // pacing options only govern the input right after them, so sending the
-    // mix straight from its pieces paced only the lead-in silence and pushed
-    // the rest in a few milliseconds; the camera played a blip and dropped it.)
-    mixed = file + '.mix.wav';
-    await run(
-      await speechArgs(
-        file,
-        job.level,
-        toFile(mixed),
-        job.chime,
-        job.chimeLevel,
-        job.band,
-      ),
-    );
     const url = await camera.talkUrl();
     try {
-      await run(sendArgs(mixed, url));
+      job.publishAt = Date.now();
+      job.ref = prep.ref;
+      await run(sendArgs(prep.mixed, url), false, (p) => {
+        current = { job, proc: p };
+      });
     } catch (e) {
       // Free the slot with a short silent publish to the same address.
       await silentPublish(url).catch(() => {});
-      throw e;
+      if (job.status !== 'cancelled') throw e;
     }
-    job.status = 'done';
+    if (job.status !== 'cancelled') job.status = 'done';
   } catch (e) {
-    job.status = 'failed';
-    job.error = String(e.message || e).slice(0, 120);
+    if (job.status !== 'cancelled') {
+      job.status = 'failed';
+      job.error = String(e.message || e).slice(0, 120);
+    }
   } finally {
-    if (file && existsSync(file)) rmSync(file, { force: true });
-    if (mixed && existsSync(mixed)) rmSync(mixed, { force: true });
+    current = null;
+    job.endedAt = Date.now();
+    if (prep) {
+      rmSync(prep.mixed, { force: true });
+      if (existsSync(prep.file)) rmSync(prep.file, { force: true });
+    }
   }
 }
+
+const start = (job) => {
+  job.prep ||= prepare(job);
+  job.prep.catch(() => {}); // a failure is reported by speak(), not as an unhandled rejection
+};
 
 async function pump() {
   if (busy) return;
   busy = true;
-  while (queue.length) await speak(queue.shift());
+  while (queue.length) {
+    const job = queue.shift();
+    start(job);
+    if (queue[0]) start(queue[0]); // synthesize the next line while this one plays
+    await speak(job);
+  }
   busy = false;
   endedAt = Date.now();
 }
 let endedAt = 0;
-// Is the speaker busy (or about to be), and when it last finished: converse mode mutes the microphone then.
-export const activity = () => ({ speaking: busy || queue.length > 0, endedAt });
+// Is the speaker busy (or about to be), when it last finished, and the job now on air (its loudness
+// envelope, for converse mode's echo handling).
+export const activity = () => ({
+  speaking: busy || queue.length > 0,
+  endedAt,
+  playing: current?.job ?? null,
+});
+// Barge-in: drop everything queued and cut the line on air. Returns the cut job (or null).
+export function stopAll() {
+  const cut = current?.job ?? null;
+  for (const j of queue.splice(0)) {
+    j.status = 'cancelled';
+    j.prep
+      ?.then((p) => {
+        rmSync(p.mixed, { force: true });
+        rmSync(p.file, { force: true });
+      })
+      .catch(() => {});
+  }
+  if (cut) {
+    cut.status = 'cancelled';
+    cut.stoppedAt = Date.now();
+    current.proc?.kill('SIGKILL');
+  }
+  return cut;
+}
+export const jobInfo = (id) => jobs.get(id) || null;
 
 export function say({
   text,
@@ -282,6 +359,7 @@ export function say({
   chimeLevel = 0.008,
   file = null, // an audio file to play instead of synthesizing text (deleted afterward)
   band = true,
+  fast = false,
 }) {
   const id = randomBytes(6).toString('hex');
   const job = {
@@ -295,6 +373,7 @@ export function say({
     chimeLevel,
     file,
     band,
+    fast,
   };
   jobs.set(id, job);
   if (jobs.size > 50) jobs.delete(jobs.keys().next().value);

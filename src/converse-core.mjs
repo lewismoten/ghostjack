@@ -48,7 +48,15 @@ export class Segmenter {
     this.floor = null;
     this.ring = [];
     this.loudRun = 0;
-    this.utter = null; // { frames, quiet, voiced }
+    this.utter = null; // { id, frames, quiet, voiced }
+  }
+  count = 0;
+  // The audio of the utterance in progress so far (for a partial transcript), or null.
+  snapshot() {
+    return this.utter ? Buffer.concat(this.utter.frames) : null;
+  }
+  get currentId() {
+    return this.utter ? this.utter.id : null;
   }
   get threshold() {
     return Math.max(this.o.minRms, (this.floor ?? 0) * this.o.factor);
@@ -83,7 +91,12 @@ export class Segmenter {
         this.ring.shift();
       this.loudRun = loud ? this.loudRun + 1 : 0;
       if (this.loudRun >= this.startFrames) {
-        this.utter = { frames: [...this.ring], quiet: 0, voiced: this.loudRun };
+        this.utter = {
+          id: ++this.count,
+          frames: [...this.ring],
+          quiet: 0,
+          voiced: this.loudRun,
+        };
         this.ring = [];
         this.loudRun = 0;
       }
@@ -113,6 +126,7 @@ export class Segmenter {
     const voicedMs = u.voiced * this.o.frameMs;
     if (voicedMs < this.o.minVoicedMs) return null;
     return {
+      id: u.id,
       pcm: Buffer.concat(frames),
       durationMs: frames.length * this.o.frameMs,
       voicedMs,
@@ -291,8 +305,9 @@ export class Inbox {
     this.ring = [];
     this.n = 0;
   }
-  add({ text, wake, durationMs, at = new Date().toISOString() }) {
-    const entry = { n: ++this.n, at, text, wake, durationMs };
+  // Any event: { type, ...fields }. Adds the cursor `n` and the time `at`.
+  add(fields) {
+    const entry = { n: ++this.n, at: new Date().toISOString(), ...fields };
     this.ring.push(entry);
     if (this.ring.length > this.max) this.ring.shift();
     if (this.file) {
