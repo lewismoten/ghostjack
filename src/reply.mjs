@@ -55,7 +55,7 @@ export function playTone(kind, { force = false } = {}) {
     file,
     chime: false,
     band: false,
-    level: speech.capLevel(0.02),
+    level: speech.capLevel(Number(process.env.GJ_REPLY_LEVEL) || 0.03),
   });
 }
 

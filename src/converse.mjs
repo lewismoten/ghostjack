@@ -146,7 +146,7 @@ export function start({ wake, idleSeconds, tones, endSilenceMs, chime } = {}) {
     since: Date.now(),
     lastWake: Date.now(),
     seg: new Segmenter(segOpts),
-    guard: new SelfGuard(num('GJ_CONVERSE_GUARD_MS', 2500)),
+    guard: new SelfGuard(num('GJ_CONVERSE_GUARD_MS', 1000)),
     gate: new EchoGate({
       margin: num('GJ_ECHO_MARGIN', 1.6),
       floor: num('GJ_ECHO_FLOOR', 400),
@@ -470,6 +470,6 @@ export function readyChime() {
     file,
     chime: false,
     band: false,
-    level: speech.capLevel(0.02),
+    level: speech.capLevel(Number(process.env.GJ_REPLY_LEVEL) || 0.03),
   });
 }

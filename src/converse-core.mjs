@@ -14,7 +14,7 @@ export const SEGMENTER_DEFAULTS = {
   minRms: 250, // of 32768; about -42 dBFS
   factor: 3, // speech must be this many times the noise floor
   startMs: 80, // loud this long in a row starts an utterance
-  preRollMs: 300,
+  preRollMs: 700, // 300 lost the first words when Lewis answered right away (2026-11-10)
   hangoverMs: 900,
   trailMs: 250, // quiet kept after the last loud frame
   minVoicedMs: 300, // shorter bursts (a door, a cough) are dropped
