@@ -9,10 +9,6 @@ import { takeSegments, toneWav, TONE_KINDS } from './converse-turns.mjs';
 import { TMP } from './paths.mjs';
 import { note } from './history.mjs';
 
-// The camera's amp sleeps soon after sound stops: only a line that starts within AWAKE_MS of the last one
-// skips the wake pulse (10 s lost the first word of the next reply on the real camera, 2026-11-10).
-const AWAKE_MS = speech.AWAKE_MS;
-
 export const MAX_REPLY_CHARS = 2400;
 // Tones, each on or off. Only the interruption tone is on by default; all are quiet and short.
 export const tones = {
@@ -49,26 +45,31 @@ export function noteReply(text) {
 }
 export const recentLines = () => recent.slice(-5);
 
-// Play a named tone through the speaker. After recent use of the speaker the amp is awake, so it goes
-// out as a short cue (no wake pulse); otherwise it takes the normal path.
+// Play a named tone through the speaker (its own short stream; the lead-in is chosen when it opens).
 export function playTone(kind, { force = false } = {}) {
   if (!force && !tones[kind]) return null;
   mkdirSync(TMP, { recursive: true });
   const file = join(TMP, `tone-${randomBytes(6).toString('hex')}.wav`);
   writeFileSync(file, toneWav(kind));
-  const a = speech.activity();
   return speech.say({
     file,
     chime: false,
     band: false,
     level: speech.capLevel(0.02),
-    fast: a.speaking || Date.now() - a.endedAt < AWAKE_MS,
   });
 }
 
 const newReply = () => {
   const id = randomBytes(6).toString('hex');
-  const r = { id, buf: '', segments: [], closed: false, cut: false, chars: 0 };
+  const r = {
+    id,
+    buf: '',
+    segments: [],
+    closed: false,
+    cut: false,
+    chars: 0,
+    stream: null,
+  };
   replies.set(id, r);
   if (replies.size > 10) replies.delete(replies.keys().next().value);
   return r;
@@ -96,23 +97,23 @@ export function append({ id, text, end, voice, level, rate }) {
   r.buf = rest;
   for (const text of segments) {
     if (!r.segments.length) playTone('start');
-    const a = speech.activity();
-    const job = speech.say({
+    // the whole reply is one continuous publish; a new one only if the last closed itself (the agent paused
+    // longer than the stream's idle limit) or was cut
+    if (!r.stream?.open) r.stream = speech.openStream({ label: 'reply' });
+    const job = r.stream.add({
       text,
       voice,
       level,
       rate,
       chime: false,
       chimeLevel: 0.008,
-      fast:
-        r.segments.length > 0 &&
-        (a.speaking || Date.now() - a.endedAt < AWAKE_MS),
     });
     r.segments.push({ id: job.id, text });
     noteReply(text);
   }
   if (end === true) {
     r.closed = true;
+    r.stream?.end();
     if (r.segments.length) playTone('done');
   }
   return view(r);

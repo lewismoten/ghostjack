@@ -14,6 +14,7 @@ import { randomBytes } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { camera } from './camera-select.mjs';
+import { SpeechStream, silence, sine } from './speech-stream.mjs';
 
 const FFMPEG = process.env.FFMPEG || '/opt/homebrew/bin/ffmpeg';
 const TMP = join(dirname(fileURLToPath(import.meta.url)), '..', 'captures');
@@ -22,17 +23,8 @@ const TMP = join(dirname(fileURLToPath(import.meta.url)), '..', 'captures');
 const BAND =
   'highpass=f=300,lowpass=f=3000,acompressor=threshold=-20dB:ratio=3:attack=5:release=100';
 const LIMIT = (level) => `volume=${level},alimiter=limit=0.5:level=disabled`;
-// How fast to send: 'ahead' = a little faster than playback with a 2 s head start (the camera's buffer
-// stays full), 'fast' = no limit, 're' = exactly real time (underran in testing; see docs/discovery.md).
-const PACE = {
-  ahead: ['-readrate', '1.05', '-readrate_initial_burst', '2'],
-  fast: [],
-  re: ['-re'],
-};
-const pace = () => PACE[process.env.GJ_SAY_PACE] || PACE.ahead;
+const AAC = ['-c:a', 'aac', '-ar', '16000', '-ac', '1', '-b:a', '64k'];
 const jobs = new Map(); // id -> { status, text, error? }
-const queue = [];
-let busy = false;
 
 export function voices() {
   return new Promise((resolve) => {
@@ -116,102 +108,6 @@ export const capChime = (v) =>
 export const chimeFor = (level, chime) =>
   Math.min(capChime(chime), 0.7079 * capLevel(level) * CHIME_BELOW);
 
-export async function speechArgs(
-  file,
-  rawLevel,
-  out,
-  chime = true,
-  rawChime = 0.008,
-  band = true,
-  fast = false,
-) {
-  const level = capLevel(rawLevel),
-    chimeLevel = chimeFor(level, rawChime);
-  const filter = band ? BAND : 'anull';
-  const banded = file + '.band.wav';
-  await run(['-loglevel', 'error', '-i', file, '-af', filter, '-y', banded]);
-  const gain = (-3 - (await peakDb(banded))).toFixed(2);
-  rmSync(banded, { force: true });
-  // Segments, in order. Each is [lavfi source, filter after it, or null for silence].
-  const sil = (t) => [`anullsrc=r=16000:cl=mono:d=${t}`, ''];
-  const pulse = (f, d, peak, fade) => [
-    `sine=f=${f}:r=16000:d=${d}`,
-    `,volume=${(peak / 0.125).toFixed(4)},afade=t=in:st=0:d=${fade},afade=t=out:st=${(d - fade).toFixed(3)}:d=${fade}`,
-  ];
-  const speechPeak = 0.7079 * level; // speech is normalized to -3 dBFS, then scaled by level
-  // fast: a short cue right after the speaker was in use (the amp is awake): no wake pulse, tiny lead and tail.
-  const seg = fast
-    ? [sil(0.35)]
-    : [
-        sil(1), // lead-in: the link settles
-        // The wake pulse (0.1.2): the camera's amp wakes on sound, and until it has, the first words are
-        // lost ("Words to wonder" played as "...onder"). A short pulse as loud as the speech peak (never
-        // louder; the limiter and level cap still apply) with soft edges so it is not a click, then half a
-        // second of silence while the amp stays awake. The quiet chime alone (9 dB under speech) did not wake it.
-        pulse(WAKE_HZ, WAKE_SEC, speechPeak, 0.02),
-        sil(WAKE_GAP),
-      ];
-  if (chime && !fast)
-    seg.push(
-      pulse(880, 0.1, chimeLevel, 0.01),
-      pulse(1320, 0.1, chimeLevel, 0.01),
-      sil(CUE_GAP),
-    );
-  const speechIdx = seg.length;
-  // the tail: the camera finishes its buffer before the publish closes. 0.4 s after a fast line cut its last
-  // word on the real camera (2026-11-10: "...without stopping" lost "stopping"), so it is 0.9 s by default.
-  seg.push(sil(fast ? Number(process.env.GJ_FAST_TAIL_SEC) || 0.9 : 1.5));
-  const args = ['-loglevel', 'error', ...out.pre];
-  for (const [src] of seg) args.push('-f', 'lavfi', '-i', src);
-  args.push('-i', file);
-  const fileIdx = seg.length;
-  const parts = [],
-    order = [];
-  seg.forEach(([, f], i) => {
-    if (i === speechIdx) return;
-    parts.push(`[${i}:a]aresample=16000${f}[g${i}]`);
-    order.push(`[g${i}]`);
-  });
-  parts.push(
-    `[${fileIdx}:a]aresample=16000,${filter},volume=${gain}dB,${LIMIT(level)}[sp]`,
-    `[${speechIdx}:a]aresample=16000[tl]`,
-  );
-  order.push('[sp]', '[tl]');
-  parts.push(`${order.join('')}concat=n=${order.length}:v=0:a=1[o]`);
-  return [
-    ...args,
-    '-filter_complex',
-    parts.join(';'),
-    '-map',
-    '[o]',
-    ...out.post,
-  ];
-}
-const AAC = ['-c:a', 'aac', '-ar', '16000', '-ac', '1', '-b:a', '64k'];
-const toCamera = (url) => ({
-  pre: pace(),
-  post: [
-    ...AAC,
-    '-flush_packets',
-    '1',
-    '-flvflags',
-    'no_duration_filesize',
-    '-f',
-    'flv',
-    url,
-  ],
-});
-// Send a finished mix to the camera, paced (the options sit right before
-// the only input, so they apply to it).
-export const sendArgs = (wav, url) => {
-  const t = toCamera(url);
-  return ['-loglevel', 'error', ...t.pre, '-i', wav, ...t.post];
-};
-export const toFile = (path) => ({
-  pre: [],
-  post: ['-c:a', 'pcm_s16le', '-ar', '16000', '-y', path],
-});
-
 const silentPublish = (url) =>
   run([
     '-loglevel',
@@ -229,158 +125,298 @@ const silentPublish = (url) =>
     url,
   ]);
 
-// Phase 1 (can run while the previous line plays): synthesize and mix into one finished file. Resolves to
-// { file, mixed, ref } where ref is the mix's 20 ms loudness envelope and where the speech sits in it.
-async function prepare(job) {
+// Phase 1 (runs while earlier sentences play): synthesize and condition one sentence to raw PCM: the phone band
+// and compressor, normalized to -3 dBFS, then scaled by level and held under the limiter. No lead-in or tail:
+// the stream (speech-stream.mjs) adds those once per reply.
+async function prepareSpeech(job) {
   mkdirSync(TMP, { recursive: true });
-  // Both sources end up as one audio file; the mixer below is the same for speech and uploads.
   const file = job.file || (await synthesize(job.text, job));
   job.file = file;
-  // Mix first, then send the one finished file at the pace. (0.1.2 fix: the
-  // pacing options only govern the input right after them, so sending the
-  // mix straight from its pieces paced only the lead-in silence and pushed
-  // the rest in a few milliseconds; the camera played a blip and dropped it.)
-  const mixed = file + '.mix.wav';
-  await run(
-    await speechArgs(
-      file,
-      job.level,
-      toFile(mixed),
-      job.chime,
-      job.chimeLevel,
-      job.band,
-      job.fast,
-    ),
-  );
-  const pcm = readFileSync(mixed).subarray(44);
-  const env = [];
-  for (let i = 0; i + 640 <= pcm.length; i += 640) {
-    let sum = 0;
-    for (let j = 0; j < 640; j += 2) sum += pcm.readInt16LE(i + j) ** 2;
-    env.push(Math.sqrt(sum / 320));
-  }
-  const totalMs = (pcm.length / 32000) * 1000;
-  const leadMs = job.fast
-    ? 350
-    : (1 + WAKE_SEC + WAKE_GAP + (job.chime ? 0.2 + CUE_GAP : 0)) * 1000;
-  const tailMs = job.fast
-    ? (Number(process.env.GJ_FAST_TAIL_SEC) || 0.9) * 1000
-    : 1500;
-  return {
+  const level = capLevel(job.level);
+  const filter = job.band ? BAND : 'anull';
+  const banded = file + '.band.wav';
+  await run(['-loglevel', 'error', '-i', file, '-af', filter, '-y', banded]);
+  const gain = (-3 - (await peakDb(banded))).toFixed(2);
+  rmSync(banded, { force: true });
+  const raw = file + '.pcm';
+  await run([
+    '-loglevel',
+    'error',
+    '-i',
     file,
-    mixed,
-    ref: { env, leadMs, speechMs: totalMs - leadMs - tailMs },
+    '-af',
+    `aresample=16000,${filter},volume=${gain}dB,${LIMIT(level)}`,
+    '-ac',
+    '1',
+    '-f',
+    's16le',
+    '-y',
+    raw,
+  ]);
+  const pcm = readFileSync(raw);
+  rmSync(raw, { force: true });
+  return pcm;
+}
+// Two sentences are prepared at a time, started in order, so a short sentence is ready before the last ends.
+const PREP_PARALLEL = Number(process.env.GJ_PREP_PARALLEL) || 2;
+let preparing = 0;
+const prepWaiting = [];
+const prepare = (job) =>
+  new Promise((resolve) => {
+    prepWaiting.push({ job, resolve });
+    nextPrep();
+  });
+function nextPrep() {
+  while (preparing < PREP_PARALLEL && prepWaiting.length) {
+    const { job, resolve } = prepWaiting.shift();
+    preparing++;
+    (async () => {
+      if (job.status === 'cancelled') return;
+      try {
+        job.pcm = await prepareSpeech(job);
+      } catch (e) {
+        job.failed = true;
+        job.error = String(e.message || e).slice(0, 120);
+        if (job.status !== 'cancelled') job.status = 'failed';
+      } finally {
+        if (job.file && existsSync(job.file)) rmSync(job.file, { force: true });
+      }
+    })().finally(() => {
+      preparing--;
+      resolve();
+      nextPrep();
+    });
+  }
+}
+
+// The camera's amp sleeps soon after sound stops: a stream that opens within AWAKE_MS of the last publish
+// ending skips the wake pulse (the camera link takes up to 5 s to set up, so this is judged after the talk
+// address arrives, just before the publish starts).
+export const AWAKE_MS = Number(process.env.GJ_AWAKE_MS) || 2500;
+export const isAwake = (lastEnd, now = Date.now()) => now - lastEnd < AWAKE_MS;
+let lastPublishEnd = 0;
+
+// The lead-in, written once at the start of a reply: a short lead when the amp is awake; otherwise a second of
+// quiet while the link settles, the wake pulse (as loud as the speech peak, soft edges) and half a second of
+// quiet, then Glassmouth's chime when asked (a 880 then 1320 Hz two-tone, see MAX_CHIME).
+export function leadIn({ awake, level, chime, chimeLevel }) {
+  if (awake) return silence(350);
+  const peak = 0.7079 * capLevel(level);
+  const parts = [
+    silence(1000),
+    sine(WAKE_HZ, WAKE_SEC * 1000, peak, 20),
+    silence(WAKE_GAP * 1000),
+  ];
+  if (chime) {
+    const c = chimeFor(level, chimeLevel);
+    parts.push(
+      sine(880, 100, c, 10),
+      sine(1320, 100, c, 10),
+      silence(CUE_GAP * 1000),
+    );
+  }
+  return Buffer.concat(parts);
+}
+
+// Real publisher: ffmpeg reads raw PCM on stdin (paced by the stream, not by ffmpeg) and publishes AAC in FLV.
+// Its -progress output tells the stream when the publish really began.
+function openPublish(url, onProgress) {
+  const p = spawn(
+    FFMPEG,
+    [
+      '-hide_banner',
+      '-loglevel',
+      'error',
+      '-y',
+      '-nostats',
+      '-progress',
+      'pipe:1',
+      '-stats_period',
+      '0.1',
+      '-f',
+      's16le',
+      '-ar',
+      '16000',
+      '-ac',
+      '1',
+      '-i',
+      'pipe:0',
+      ...AAC,
+      '-flush_packets',
+      '1',
+      '-flvflags',
+      'no_duration_filesize',
+      '-f',
+      'flv',
+      url,
+    ],
+    { stdio: ['pipe', 'pipe', 'ignore'] },
+  );
+  p.stdin.on('error', () => {}); // a killed or refused publish: writes just stop
+  let buf = '';
+  let seen = false;
+  p.stdout.on('data', (d) => {
+    buf += d;
+    const lines = buf.split('\n');
+    buf = lines.pop();
+    for (const l of lines) {
+      const m = /^out_time_us=(\d+)/.exec(l);
+      if (m && !seen && Number(m[1]) > 0) {
+        seen = true;
+        onProgress(100, Date.now()); // the first report comes one stats period after byte 0
+      }
+    }
+  });
+  const exited = new Promise((resolve) => {
+    p.on('error', () => resolve(-1));
+    p.on('close', (c, sig) => resolve(sig ? -1 : (c ?? -1)));
+  });
+  return {
+    canWrite: () => !p.stdin.destroyed && p.stdin.writableLength < 32768,
+    write: (b) => p.stdin.write(b),
+    end: () => p.stdin.end(),
+    kill: () => p.kill('SIGKILL'),
+    exited,
   };
 }
 
-// The camera's amp sleeps soon after sound stops: a line mixed without the wake pulse ("fast") may only
-// start within AWAKE_MS of the last publish ending (reply.mjs asks the same question when it queues a line).
-export const AWAKE_MS = Number(process.env.GJ_AWAKE_MS) || 2500;
-// A fast line was decided when it was queued; a slow camera link can delay its publish past that window
-// (2026-11-10: gaps of 5 s between lines of one reply, then the next line lost its start). True when it must
-// be mixed again with the wake pulse.
-export const staleFast = (job, lastEnd, now = Date.now()) =>
-  !!job.fast && now - lastEnd >= AWAKE_MS;
-let lastPublishEnd = 0;
+const streamConfig = () => ({
+  ...(Number(process.env.GJ_STREAM_AHEAD_MS) && {
+    aheadMs: Number(process.env.GJ_STREAM_AHEAD_MS),
+  }),
+  ...(Number(process.env.GJ_STREAM_PAUSE_MS) && {
+    pauseMs: Number(process.env.GJ_STREAM_PAUSE_MS),
+  }),
+  ...(Number(process.env.GJ_STREAM_TAIL_MS) && {
+    tailMs: Number(process.env.GJ_STREAM_TAIL_MS),
+  }),
+  ...(Number(process.env.GJ_STREAM_IDLE_MS) && {
+    idleEndMs: Number(process.env.GJ_STREAM_IDLE_MS),
+  }),
+  // what plays between sentences when the next is not ready: 'silence' (default) or 'tone' (barely audible)
+  keepalive: process.env.GJ_STREAM_KEEPALIVE === 'tone' ? 'tone' : 'silence',
+});
+// One line per event in the bridge log (stdout), so a filmed test can be aligned exactly.
+const logLine = (o) =>
+  console.log(`[say] ${JSON.stringify({ t: new Date().toISOString(), ...o })}`);
 
-let current = null; // { job, proc } while a line is being published
-async function speak(job) {
-  let prep = null;
+let current = null; // the stream being published
+async function runStream(st) {
+  let url = null;
+  let error = null;
+  let timer = null;
   try {
-    prep = await job.prep;
-    if (staleFast(job, lastPublishEnd)) {
-      job.fast = false;
-      job.prep = prepare(job); // the speech is already synthesized (job.file); only the mix is redone
-      prep = await job.prep;
-    }
-    if (job.status === 'cancelled') return;
-    job.status = 'speaking';
-    const url = await camera.talkUrl();
-    try {
-      job.publishAt = Date.now();
-      job.ref = prep.ref;
-      await run(sendArgs(prep.mixed, url), false, (p) => {
-        current = { job, proc: p };
-      });
-    } catch (e) {
-      // Free the slot with a short silent publish to the same address.
-      await silentPublish(url).catch(() => {});
-      if (job.status !== 'cancelled') throw e;
-    }
-    if (job.status !== 'cancelled') job.status = 'done';
+    if (st.stopped || (st.ended && !st.jobs.length)) return;
+    const asked = Date.now();
+    url = await camera.talkUrl();
+    st.log({ ev: 'talk', stream: st.id, talkMs: Date.now() - asked });
+    if (st.stopped) return;
+    const first = st.jobs[0];
+    const now = Date.now();
+    current = st;
+    st.begin(
+      url,
+      leadIn({
+        awake: isAwake(lastPublishEnd, now),
+        level: first.level,
+        chime: first.chime,
+        chimeLevel: first.chimeLevel,
+      }),
+      now,
+    );
+    timer = setInterval(() => st.tick(Date.now()), 20);
+    const code = await st.handle.exited;
+    if (!st.stopped && (code !== 0 || !st.closing))
+      error = new Error('the publish ended early');
   } catch (e) {
-    if (job.status !== 'cancelled') {
-      job.status = 'failed';
-      job.error = String(e.message || e).slice(0, 120);
-    }
+    error = e;
   } finally {
+    clearInterval(timer);
     current = null;
-    job.endedAt = Date.now();
-    lastPublishEnd = job.endedAt;
-    if (prep) {
-      rmSync(prep.mixed, { force: true });
-      if (existsSync(prep.file)) rmSync(prep.file, { force: true });
+    // an unfinished publish can jam the speaker: after a cut or a failure, free it with a short silent one
+    if (url && (st.stopped || error)) await silentPublish(url).catch(() => {});
+    const t = Date.now();
+    if (!st.stopped && !error) st.finish(t);
+    else st.finish(t, error);
+    lastPublishEnd = t;
+    for (const j of st.jobs) {
+      j.endedAt = t;
+      if (j.file && existsSync(j.file)) rmSync(j.file, { force: true });
     }
   }
 }
 
-const start = (job) => {
-  job.prep ||= prepare(job);
-  job.prep.catch(() => {}); // a failure is reported by speak(), not as an unhandled rejection
-};
-
+const streams = [];
+let busy = false;
 async function pump() {
   if (busy) return;
   busy = true;
-  while (queue.length) {
-    const job = queue.shift();
-    start(job);
-    if (queue[0]) start(queue[0]); // synthesize the next line while this one plays
-    await speak(job);
+  while (streams.length) {
+    const st = streams.shift();
+    await runStream(st);
   }
   busy = false;
   endedAt = Date.now();
 }
 let endedAt = 0;
-// Is the speaker busy (or about to be), when it last finished, and the job now on air (its loudness
+// Is the speaker busy (or about to be), when it last finished, and the sentence now on air (its loudness
 // envelope, for converse mode's echo handling).
 export const activity = () => ({
-  speaking: busy || queue.length > 0,
+  speaking: busy || streams.length > 0,
   endedAt,
-  playing: current?.job ?? null,
+  playing: current?.handle ? current.currentJob(Date.now()) : null,
 });
-// Barge-in: drop everything queued and cut the line on air. Returns the cut job (or null).
+// Barge-in: cut the stream on air and drop everything queued. Returns the sentence that was on air (or null).
 export function stopAll() {
-  const cut = current?.job ?? null;
-  for (const j of queue.splice(0)) {
-    j.status = 'cancelled';
-    j.prep
-      ?.then((p) => {
-        rmSync(p.mixed, { force: true });
-        rmSync(p.file, { force: true });
-      })
-      .catch(() => {});
+  let cut = null;
+  const now = Date.now();
+  for (const st of streams.splice(0)) {
+    st.stopped = true;
+    for (const j of st.jobs) {
+      j.status = 'cancelled';
+      if (j.file && existsSync(j.file)) rmSync(j.file, { force: true });
+    }
   }
-  if (cut) {
-    cut.status = 'cancelled';
-    cut.stoppedAt = Date.now();
-    current.proc?.kill('SIGKILL');
-  }
+  if (current) cut = current.stop(now);
   return cut;
 }
 export const jobInfo = (id) => jobs.get(id) || null;
 
-export function say({
-  text,
-  voice,
-  level,
-  rate,
-  chime = true,
-  chimeLevel = 0.008,
-  file = null, // an audio file to play instead of synthesizing text (deleted afterward)
-  band = true,
-  fast = false,
-}) {
+// A stream: the pieces of one reply (or one say) played as a single continuous publish. add() a sentence as
+// soon as it exists; end() when there is no more. The first sentence's level and chime set the lead-in.
+export function openStream({ label = 'say' } = {}) {
+  const id = randomBytes(6).toString('hex');
+  const st = new SpeechStream({
+    openPublish,
+    log: (o) => logLine({ kind: label, ...o }),
+    cfg: streamConfig(),
+    id,
+  });
+  streams.push(st);
+  pump();
+  return {
+    id,
+    stream: st,
+    end: () => st.end(),
+    add: (spec) => addJob(st, spec),
+    get open() {
+      return !st.ended && !st.stopped && !st.finished;
+    },
+  };
+}
+function addJob(
+  st,
+  {
+    text,
+    voice,
+    level,
+    rate,
+    chime = true,
+    chimeLevel = 0.008,
+    file = null, // an audio file to play instead of synthesizing text (deleted afterward)
+    band = true,
+  },
+) {
   const id = randomBytes(6).toString('hex');
   const job = {
     id,
@@ -393,13 +429,21 @@ export function say({
     chimeLevel,
     file,
     band,
-    fast,
   };
   jobs.set(id, job);
   if (jobs.size > 50) jobs.delete(jobs.keys().next().value);
-  queue.push(job);
-  pump();
+  st.add(job);
+  prepare(job);
   return { id, status: job.status };
+}
+
+// One line, as its own short stream. (`fast` is gone: whether the amp is awake is judged when the publish
+// opens.)
+export function say(spec) {
+  const s = openStream({ label: 'say' });
+  const r = s.add(spec);
+  s.end();
+  return r;
 }
 
 export const sayStatus = (id) => {
@@ -408,7 +452,10 @@ export const sayStatus = (id) => {
     j && {
       id,
       status: j.status,
-      ahead: queue.indexOf(j),
+      ahead: Math.max(
+        0,
+        streams.findIndex((st) => st.jobs.includes(j)),
+      ),
       ...(j.error ? { error: j.error } : {}),
     }
   );

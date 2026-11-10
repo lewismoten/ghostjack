@@ -701,9 +701,10 @@ const server = createServer(async (req, res) => {
         90,
         Math.min(220, Math.round(Number(b.rate ?? 140) || 140)),
       );
+      const stream = speech.openStream({ label: 'say-many' });
       const ids = lines.map((text, i) => {
         reply.noteReply(text);
-        return speech.say({
+        return stream.add({
           text,
           voice,
           level,
@@ -712,6 +713,7 @@ const server = createServer(async (req, res) => {
           chimeLevel,
         }).id;
       });
+      stream.end();
       return json(res, 202, {
         level,
         lines: lines.length,

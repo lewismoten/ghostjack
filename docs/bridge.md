@@ -84,17 +84,19 @@ enabled in this build").
 ## Say (Glassmouth's mouth)
 
 Says wait in one queue in `src/say.mjs`, because the camera's speaker takes one
-talker at a time. For each line the bridge renders speech with macOS `say` into
-`captures/` (git-ignored, deleted afterward), asks the camera for a talk address
-(`ccm_talk`, RTMP) and immediately publishes to it with ffmpeg: 1 s of silence,
-the attention chime (the camera's amp wakes on sound), 0.4 s of quiet, the
-speech normalized to -3 dBFS, 1.5 s of silence. Filter chain:
+talker at a time. A reply (or say/many) plays as ONE publish (see
+converse-design.md, "One live publish"); the description below is the
+single-line recipe it is built from. For each line the bridge renders speech
+with macOS `say` into `captures/` (git-ignored, deleted afterward), asks the
+camera for a talk address (`ccm_talk`, RTMP) and immediately publishes to it
+with ffmpeg: 1 s of silence, the attention chime (the camera's amp wakes on
+sound), 0.4 s of quiet, the speech normalized to -3 dBFS, 1.5 s of silence.
+Filter chain:
 `highpass=f=300,lowpass=f=3000,acompressor=threshold=-20dB:ratio=3:attack=5:release=100,volume=<level>,alimiter=limit=0.5:level=disabled`;
 AAC 16 kHz mono 64k. An address that is requested but never published to jams
 the speaker until the camera is power-cycled, so the bridge never requests one
 without publishing, and if the publish fails it still sends a short silent
-publish to free the slot. `GJ_SAY_PACE=ahead|fast|re` picks how fast ffmpeg
-sends (default `ahead`, a little faster than real time; see discovery.md).
+publish to free the slot. (`GJ_SAY_PACE` is gone: the stream paces its own PCM.)
 Voices: the one function `synthesize()` in `say.mjs` is the boundary where local
 voices (Pocket TTS, Kokoro) can be added later; it only has to write an audio
 file ffmpeg can read.

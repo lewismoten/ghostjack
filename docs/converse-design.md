@@ -63,11 +63,21 @@ delay and echo ratio to put in `GJ_ECHO_DELAY_MS`.
   decision. `GJ_WHISPER_PARTIAL_MODEL` can name a smaller ggml model for
   partials (`ggml-base.en` is a 140 MB download, MIT) so partials land in under
   a second.
-- **One live publish for a whole reply.** Replies are one publish per line.
-  Streaming PCM into a single paced publish would remove the gaps and make
-  playback position exact (bytes fed against the clock), so barge-in reports
-  would stop being estimates. It must be tested against the real camera because
-  an unfinished publish jams the speaker, so it was not attempted unattended.
+- **One live publish for a whole reply (built 2026-11-10, needs a live test).**
+  A reply is one talk session and one publish (`src/speech-stream.mjs`): a wake
+  pulse and lead once, then each sentence's PCM as soon as it is synthesized, a
+  350 ms pause between sentences, quiet filler when the next one is late, and a
+  tail. The stream feeds PCM to ffmpeg's stdin against its own clock, so each
+  sentence's start is an exact byte offset; `publishAt` and the loudness
+  envelope per sentence come from that. The bridge log gets one `[say] {...}`
+  line per event: `talk` (request latency), `stream-open`, `first-byte`
+  (publishAt, setupMs), one `sentence` each (offsetMs, leadMs, speechMs) and
+  `stream-end`. Settings (environment): `GJ_STREAM_AHEAD_MS` (1500),
+  `GJ_STREAM_PAUSE_MS` (350), `GJ_STREAM_TAIL_MS` (1200), `GJ_STREAM_IDLE_MS`
+  (8000: a reply nobody closed ends itself), `GJ_STREAM_KEEPALIVE=silence|tone`
+  (default silence; `tone` is a barely audible 1 kHz between sentences, in case
+  silence lets the amp sleep), `GJ_PREP_PARALLEL` (2 sentences prepared at
+  once). A cut kills ffmpeg and sends the short silent publish, as before.
 - **Synthesizer word marks.** macOS `say` gives none, so word times are spread
   by letters.
 - **Own-voice transcription inside barge-in** (see Echo handling).
