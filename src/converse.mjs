@@ -15,12 +15,16 @@ import * as speech from './say.mjs';
 import * as reply from './reply.mjs';
 import { TMP } from './paths.mjs';
 import { transcribe, whisperReady } from './ask.mjs';
+import { personas } from './personas.mjs';
 import {
   Segmenter,
   SelfGuard,
   Inbox,
   chimeWav,
   cleanWake,
+  isWakeOnly,
+  WakeAck,
+  BleepFilter,
   matchWake,
   rms,
   wavFromPcm,
@@ -50,6 +54,8 @@ const FRAME = 640; // bytes of a 20 ms frame
 const ECHO_DELAY_MS = () => num('GJ_ECHO_DELAY_MS', 1200);
 const PLAY_LATENCY_MS = () => num('GJ_PLAY_LATENCY_MS', 600);
 const PARTIAL_EVERY_MS = () => num('GJ_PARTIAL_EVERY_MS', 1500);
+// the first look for a wake word comes this long after speech starts (later partials keep PARTIAL_EVERY_MS)
+const WAKE_FIRST_MS = () => num('GJ_WAKE_FIRST_MS', 700);
 
 let inbox = null;
 let sess = null; // the running session, or null
@@ -105,7 +111,14 @@ export function status() {
 export const heard = (after) =>
   inbox ? inbox.since(after) : { cursor: 0, heard: [] };
 
-export function start({ wake, idleSeconds, tones, endSilenceMs, chime } = {}) {
+export function start({
+  wake,
+  idleSeconds,
+  tones,
+  endSilenceMs,
+  chime,
+  persona,
+} = {}) {
   if (sess) return status();
   if (!whisperReady())
     throw Object.assign(
@@ -163,6 +176,9 @@ export function start({ wake, idleSeconds, tones, endSilenceMs, chime } = {}) {
     partialAt: 0,
     partialBusy: false,
     addressed: new Set(), // utterance ids that have shown a wake word
+    wakeAck: new WakeAck(), // one bleep per utterance
+    bleep: new BleepFilter(),
+    persona: persona?.name ?? null,
     ended: new Set(), // ids whose end was reported
     finals: new Set(), // ids already finished (a late partial is dropped)
     handle: null,
@@ -253,9 +269,50 @@ function bargeCheck(s, chunk, job, now) {
   return hit;
 }
 
-function feed(s, chunk) {
+// The wake bleep is the camera speaking, but it must not mute the microphone or count as a reply: Lewis is
+// talking over it on purpose. Only while it is expected is the speaker's activity ignored.
+const bleeping = (s, now) => {
+  if (!s.bleepJob) return false;
+  const st = speech.sayStatus(s.bleepJob)?.status;
+  if (st === 'queued' || st === 'speaking') {
+    // armed when the sound actually starts, so the filter follows the camera's real delay
+    if (st === 'speaking' && !s.bleepArmed) {
+      s.bleepArmed = true;
+      s.bleep.arm(now, ECHO_DELAY_MS());
+    }
+    s.bleepSeen = now;
+    return true;
+  }
+  return now - (s.bleepSeen || 0) < ECHO_DELAY_MS() + 300; // its tail is still coming back from the room
+};
+const speakingNow = (s, now = Date.now()) =>
+  speech.activity().speaking && !bleeping(s, now);
+
+// A wake word was recognized in utterance `id`: play the bleep (once, only when the camera is quiet).
+function wakeBleep(s, id, via, speechStartedAt) {
+  if (!reply.tones.wake || !s.wakeAck.ack(id)) return;
+  if (speech.activity().speaking) return; // a reply is on air: barge-in covers it
+  const at = Date.now();
+  s.bleepArmed = false;
+  s.bleepSeen = at;
+  s.bleepJob = reply.playTone('wake', { fast: true })?.id ?? null;
+  event({
+    type: 'wake',
+    id,
+    via,
+    afterMs: speechStartedAt ? at - speechStartedAt : null,
+  });
+  dlog(
+    'wake',
+    { id, durationMs: 0 },
+    `${via} bleep after ${speechStartedAt ? at - speechStartedAt : '?'} ms of speech`,
+  );
+}
+
+function feed(s, chunk0) {
   const now = Date.now();
-  const a = speech.activity();
+  const chunk = s.bleep.apply(chunk0, now);
+  const a = { ...speech.activity(), speaking: speakingNow(s, now) };
   const onAir =
     a.playing && a.playing.status === 'speaking' && a.playing.text
       ? a.playing
@@ -314,17 +371,22 @@ function feed(s, chunk) {
     s.pending++;
     s.work = s.work.then(() => handle(s, u)).finally(() => s.pending--);
   }
-  if (!wasIn && s.seg.speaking) s.partialAt = now;
+  if (!wasIn && s.seg.speaking) {
+    s.partialAt = now - (PARTIAL_EVERY_MS() - WAKE_FIRST_MS());
+    s.speechStart = now;
+  }
   if (s.seg.speaking) maybePartial(s, now);
   else s.partial = null;
 }
 
-async function wavText(pcm, model) {
+async function wavText(pcm, model, persona) {
   const file = join(TMP, `converse-${randomBytes(6).toString('hex')}.wav`);
   try {
     mkdirSync(TMP, { recursive: true });
     writeFileSync(file, wavFromPcm(pcm));
-    return cleanTranscript(await transcribe(file, model));
+    return cleanTranscript(
+      await transcribe(file, model, personas.vocabularyPrompt(persona)),
+    );
   } catch {
     return '';
   } finally {
@@ -339,15 +401,19 @@ function maybePartial(s, now) {
   if (s.partialBusy || now - s.partialAt < PARTIAL_EVERY_MS()) return;
   const pcm = s.seg.snapshot();
   const id = s.seg.currentId;
-  if (!pcm || pcm.length < 32000) return; // under a second
+  const min = reply.tones.wake && !s.addressed.has(id) ? 16000 : 32000; // half a second to look for the wake word, else a second
+  if (!pcm || pcm.length < min) return;
   s.partialBusy = true;
   s.partialAt = now;
   const t0 = Date.now();
-  wavText(pcm, process.env.GJ_WHISPER_PARTIAL_MODEL || undefined)
+  wavText(pcm, process.env.GJ_WHISPER_PARTIAL_MODEL || undefined, s.persona)
     .then((text) => {
       if (sess !== s || !text || s.finals.has(id)) return;
       const woke = matchWake(text, s.wake);
-      if (woke) s.addressed.add(id);
+      if (woke) {
+        s.addressed.add(id);
+        wakeBleep(s, id, 'partial', s.speechStart);
+      }
       if (!s.addressed.has(id) && !s.bargeActive) return;
       if (s.partial?.id === id && s.partial.text === text) return;
       s.partial = { id, text, ms: Date.now() - t0 };
@@ -365,13 +431,21 @@ async function handle(s, u) {
 }
 
 async function handleOne(s, u) {
-  const text = await wavText(u.pcm);
+  const text = await wavText(u.pcm, undefined, s.persona);
   if (!text || sess !== s)
     return dlog('drop', u, text ? 'session ended' : 'no text from whisper');
   // The camera started talking while this was transcribed: it may be its own voice.
-  if (!s.bargeActive && s.guard.muted(Date.now(), speech.activity().speaking))
+  if (!s.bargeActive && s.guard.muted(Date.now(), speakingNow(s)))
     return dlog('drop', u, 'camera spoke during transcription', text);
   const m = matchWake(text, s.wake);
+  if (m)
+    wakeBleep(
+      s,
+      u.id,
+      'final',
+      u.endedAt ? Date.parse(u.endedAt) - u.durationMs : null,
+    );
+  const wakeOnly = !!m && isWakeOnly(text, s.wake);
   const viaBarge = s.bargeActive;
   // After the camera has spoken, Lewis may just answer: an utterance that starts within FOLLOW_MS of the
   // end of speech is kept without a wake word (GJ_FOLLOW_MS, default 20 s; 0 turns it off).
@@ -392,7 +466,7 @@ async function handleOne(s, u) {
       text,
     );
   dlog('keep', u, m ? 'wake word' : viaBarge ? 'barge' : 'follow-up', text);
-  // the follow-up window also restarts when Lewis is heard, so a long answer cut at the 20 s utterance
+  // the follow-up window also restarts when Lewis is heard, so a long answer cut at the utterance
   // limit (or several sentences in a row) stays in the conversation (2026-11-10: the rest was dropped)
   s.lastSpokeAt = Date.now();
   s.lastWake = Date.now();
@@ -415,15 +489,18 @@ async function handleOne(s, u) {
     durationMs: u.durationMs,
   };
   if (follow) e.followUp = true;
+  if (wakeOnly) e.wakeOnly = true;
   if (viaBarge) {
     e.interrupted = s.bargeId;
     s.bargeActive = false;
   }
   event(e);
-  note('you', text, {
-    ...(follow ? { followUp: true } : {}),
-    ...(viaBarge ? { interrupted: true } : {}),
-  });
+  if (wakeOnly) note('mark', 'Waiting for Lewis to go on', { partial: text });
+  else
+    note('you', text, {
+      ...(follow ? { followUp: true } : {}),
+      ...(viaBarge ? { interrupted: true } : {}),
+    });
 }
 
 // Lewis talked over the camera: stop the speaker, work out what was heard, tell the agent.

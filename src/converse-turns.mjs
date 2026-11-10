@@ -212,6 +212,14 @@ export const TONES = {
     ],
   },
   heard: { name: 'your interruption was heard', notes: [[1250, 0.08]] },
+  // the wake word was recognized: a quick rising two-note chirp, higher than the others so it is not mistaken
+  wake: {
+    name: 'wake word heard, listening',
+    notes: [
+      [1600, 0.05],
+      [2000, 0.06],
+    ],
+  },
 };
 export function toneWav(kind, peak = 0.5) {
   const parts = [];

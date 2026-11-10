@@ -8,6 +8,7 @@ import * as speech from './say.mjs';
 import { takeSegments, toneWav, TONE_KINDS } from './converse-turns.mjs';
 import { TMP } from './paths.mjs';
 import { note } from './history.mjs';
+import { applySayAs } from './personas.mjs';
 
 // Words the macOS voice says wrong, written the way they should sound (2026-11-10: "Glasseye" came out "glassy").
 const SAY_AS = [
@@ -24,6 +25,7 @@ export const tones = {
   done: false,
   interrupting: true,
   heard: false,
+  wake: false,
 };
 export function setTones(t) {
   if (!t || typeof t !== 'object')
@@ -54,7 +56,7 @@ export function noteReply(text) {
 export const recentLines = () => recent.slice(-5);
 
 // Play a named tone through the speaker (its own short stream; the lead-in is chosen when it opens).
-export function playTone(kind, { force = false } = {}) {
+export function playTone(kind, { force = false, fast = false } = {}) {
   if (!force && !tones[kind]) return null;
   mkdirSync(TMP, { recursive: true });
   const file = join(TMP, `tone-${randomBytes(6).toString('hex')}.wav`);
@@ -63,6 +65,7 @@ export function playTone(kind, { force = false } = {}) {
     file,
     chime: false,
     band: false,
+    fast,
     level: speech.capLevel(Number(process.env.GJ_REPLY_LEVEL) || 0.03),
   });
 }
@@ -85,7 +88,7 @@ const newReply = () => {
 const err = (m, code, extra) => Object.assign(new Error(m), { code, ...extra });
 
 // Append text to a reply (a new one when `id` is missing). `end` closes it. Returns the reply's view.
-export function append({ id, text, end, voice, level, rate }) {
+export function append({ id, text, end, voice, level, rate, persona }) {
   const r = id ? replies.get(id) : newReply();
   if (!r) throw err('no such reply', 404);
   if (r.cut)
@@ -93,7 +96,8 @@ export function append({ id, text, end, voice, level, rate }) {
       interrupted: true,
     });
   if (r.closed) throw err('this reply is closed', 409);
-  const t = sayable(String(text ?? ''));
+  if (persona) r.persona = persona;
+  const t = sayable(applySayAs(String(text ?? ''), r.persona?.sayAs));
   r.chars += t.length;
   if (r.chars > MAX_REPLY_CHARS)
     throw err(`a reply is ${MAX_REPLY_CHARS} characters at most`, 400);

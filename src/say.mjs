@@ -199,7 +199,9 @@ let lastPublishEnd = 0;
 // The lead-in, written once at the start of a reply: a short lead when the amp is awake; otherwise a second of
 // quiet while the link settles, the wake pulse (as loud as the speech peak, soft edges) and half a second of
 // quiet, then Glassmouth's chime when asked (a 880 then 1320 Hz two-tone, see MAX_CHIME).
-export function leadIn({ awake, level, chime, chimeLevel }) {
+export function leadIn({ awake, level, chime, chimeLevel, fast }) {
+  // a fast line (the wake bleep) skips the wake pulse and the settle: it must come out right away
+  if (fast) return silence(awake ? 40 : 250);
   if (awake) return silence(350);
   const peak = 0.7079 * capLevel(level);
   const parts = [
@@ -321,6 +323,7 @@ async function runStream(st) {
         level: first.level,
         chime: first.chime,
         chimeLevel: first.chimeLevel,
+        fast: first.fast,
       }),
       now,
     );
@@ -415,6 +418,7 @@ function addJob(
     chimeLevel = 0.008,
     file = null, // an audio file to play instead of synthesizing text (deleted afterward)
     band = true,
+    fast = false,
   },
 ) {
   const id = randomBytes(6).toString('hex');
@@ -429,6 +433,7 @@ function addJob(
     chimeLevel,
     file,
     band,
+    fast,
   };
   jobs.set(id, job);
   if (jobs.size > 50) jobs.delete(jobs.keys().next().value);

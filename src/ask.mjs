@@ -32,12 +32,13 @@ export const whisperServer = () => {
 export const whisperReady = () =>
   !!whisperServer() || (existsSync(WHISPER()) && existsSync(MODEL()));
 
-async function viaServer(wav, base) {
+async function viaServer(wav, base, prompt) {
   try {
     const fd = new FormData();
     fd.append('file', new Blob([readFileSync(wav)]), 'a.wav');
     fd.append('response_format', 'text');
     fd.append('temperature', '0.0');
+    if (prompt) fd.append('prompt', prompt);
     const r = await fetch(`${base}/inference`, {
       method: 'POST',
       body: fd,
@@ -95,15 +96,27 @@ export function mapAnswer(transcript, choices, other) {
 
 // Transcribe a WAV with whisper-cli. Resolves to the text, or null when whisper or its model is missing
 // or fails.
-export function transcribe(wav, model = MODEL()) {
+// `prompt` is the initial prompt (a word list that helps with names; whisper-cli --prompt, the server's
+// `prompt` field).
+export function transcribe(wav, model = MODEL(), prompt = '') {
   const server = whisperServer();
-  if (server && model === MODEL()) return viaServer(wav, server);
+  if (server && model === MODEL()) return viaServer(wav, server, prompt);
   if (!existsSync(WHISPER()) || !existsSync(model))
     return Promise.resolve(null);
   return new Promise((resolve) => {
     const p = spawn(
       WHISPER(),
-      ['-m', model, '-f', wav, '-l', 'en', '-nt', '-np'],
+      [
+        '-m',
+        model,
+        '-f',
+        wav,
+        '-l',
+        'en',
+        '-nt',
+        '-np',
+        ...(prompt ? ['--prompt', prompt] : []),
+      ],
       { stdio: ['ignore', 'pipe', 'ignore'] },
     );
     media.children.add(p);

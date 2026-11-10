@@ -18,7 +18,7 @@ export const SEGMENTER_DEFAULTS = {
   hangoverMs: 900,
   trailMs: 250, // quiet kept after the last loud frame
   minVoicedMs: 300, // shorter bursts (a door, a cough) are dropped
-  maxMs: 20000,
+  maxMs: 30000, // whisper's window; 4 of 10 kept utterances in the 2026-11-10 log hit the old 20 s cap
 };
 
 export function rms(buf, off = 0, len = buf.length - off) {
@@ -325,5 +325,90 @@ export class Inbox {
   since(after = 0) {
     const a = Number(after) || 0;
     return { cursor: this.n, heard: this.ring.filter((e) => e.n > a) };
+  }
+}
+
+// ---- wake acknowledgment ------------------------------------------------------------------------------
+const FILLER = new Set(['hey', 'hi', 'hello', 'ok', 'okay', 'yo', 'oh']);
+// Is this utterance only the wake word ("Patchwork.", "hey glass eye")? Then Lewis is waiting for the line
+// to be ready and will go on in a moment: it opens the follow-up window and the agent should not answer.
+export function isWakeOnly(text, wake) {
+  const words = normText(text)
+    .split(' ')
+    .filter((w) => w && !FILLER.has(w));
+  return words.length > 0 && words.length <= 2 && !!matchWake(text, wake);
+}
+
+// One bleep per utterance: ack(id) is true the first time only.
+export class WakeAck {
+  constructor(keep = 50) {
+    this.seen = new Set();
+    this.keep = keep;
+  }
+  ack(id) {
+    if (this.seen.has(id)) return false;
+    this.seen.add(id);
+    if (this.seen.size > this.keep)
+      this.seen.delete(this.seen.values().next().value);
+    return true;
+  }
+}
+
+// Takes the bleep's own sound out of the microphone stream without muting it: while the bleep is expected at
+// the microphone (its start plus the camera's delay, for its length), two narrow notch filters at its two
+// pitches remove it and leave the rest of the sound, so Lewis's words go through. Speech has little energy in
+// a band 1/8 as wide as its pitch.
+export const BLEEP_HZ = [1600, 2000];
+export class BleepFilter {
+  constructor({ hz = BLEEP_HZ, q = 8, rate = RATE } = {}) {
+    this.rate = rate;
+    this.window = null;
+    this.f = hz.map((h) => {
+      const w = (2 * Math.PI * h) / rate,
+        a = Math.sin(w) / (2 * q),
+        b0 = 1,
+        a0 = 1 + a;
+      return {
+        b: [b0 / a0, (-2 * Math.cos(w)) / a0, b0 / a0],
+        a: [(-2 * Math.cos(w)) / a0, (1 - a) / a0],
+        x: [0, 0],
+        y: [0, 0],
+      };
+    });
+  }
+  // The bleep was sent at `at`; it reaches the microphone from at + delayMs for lenMs (plus slack).
+  arm(at, delayMs, lenMs = 150, slackMs = 250) {
+    this.window = {
+      from: at + delayMs - slackMs,
+      to: at + delayMs + lenMs + slackMs,
+    };
+  }
+  active(now) {
+    return !!this.window && now >= this.window.from && now <= this.window.to;
+  }
+  // `chunk` is 16-bit mono PCM that ended at `now`; returns it (a new Buffer when filtered).
+  apply(chunk, now) {
+    if (!this.active(now - ((chunk.length / 2 / this.rate) * 1000) / 2))
+      return chunk;
+    const out = Buffer.from(chunk);
+    const n = out.length >> 1;
+    for (let i = 0; i < n; i++) {
+      let v = out.readInt16LE(i * 2);
+      for (const f of this.f) {
+        const y =
+          f.b[0] * v +
+          f.b[1] * f.x[0] +
+          f.b[2] * f.x[1] -
+          f.a[0] * f.y[0] -
+          f.a[1] * f.y[1];
+        f.x[1] = f.x[0];
+        f.x[0] = v;
+        f.y[1] = f.y[0];
+        f.y[0] = y;
+        v = y;
+      }
+      out.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(v))), i * 2);
+    }
+    return out;
   }
 }

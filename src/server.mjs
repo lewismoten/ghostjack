@@ -23,12 +23,14 @@ import * as asker from './ask.mjs';
 import * as converse from './converse.mjs';
 import * as reply from './reply.mjs';
 import { history } from './history.mjs';
+import { personas, applySayAs } from './personas.mjs';
 import { splitLines } from './converse-core.mjs';
 import { streamVideo } from './stream.mjs';
 
 const PORT = Number(process.env.PORT) || 8787;
 const HOST = process.env.HOST || '127.0.0.1';
 const FFMPEG = process.env.FFMPEG || '/opt/homebrew/bin/ffmpeg';
+const GUIDE_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'docs');
 const WEB = join(dirname(fileURLToPath(import.meta.url)), '..', 'web');
 const ALLOWED_ORIGIN = 'https://lewismoten.github.io';
 
@@ -69,7 +71,7 @@ function cors(req, res) {
     res.setHeader('Vary', 'Origin');
     res.setHeader(
       'Access-Control-Allow-Headers',
-      'Authorization, Content-Type',
+      'Authorization, Content-Type, X-GJ-Agent',
     );
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Private-Network', 'true');
@@ -89,11 +91,19 @@ const json = (res, code, obj) => {
   res.end(JSON.stringify(obj));
 };
 
-async function readBody(req, allowArray = false) {
+// Which persona a call uses: the call's `persona`, its `agent` (or the X-GJ-Agent header), then Lewis's
+// assignment and default (src/personas.mjs). Throws a 400 for an unknown persona name.
+const personaFor = (req, b) =>
+  personas.resolve({
+    persona: b.persona,
+    agent: b.agent ?? req.headers['x-gj-agent'],
+  });
+
+async function readBody(req, allowArray = false, max = 4096) {
   let s = '';
   for await (const c of req) {
     s += c;
-    if (s.length > 4096)
+    if (s.length > max)
       throw Object.assign(new Error('body too large'), { code: 413 });
   }
   if (!s) return {};
@@ -632,6 +642,40 @@ const server = createServer(async (req, res) => {
     }
     if (route === 'POST /api/clock')
       return json(res, 200, await camera.setClock());
+    if (route === 'GET /api/agent-guide') {
+      res.writeHead(200, {
+        'Content-Type': 'text/markdown; charset=utf-8',
+        'Cache-Control': 'no-store',
+      });
+      return res.end(readFileSync(join(GUIDE_DIR, 'agent-guide.md')));
+    }
+    if (route === 'GET /api/personas')
+      return json(res, 200, {
+        ...personas.settings(),
+        personas: personas.list(),
+      });
+    if (route === 'POST /api/personas/settings')
+      return json(res, 200, personas.setSettings(await readBody(req)));
+    const pm = /^(GET|PUT|DELETE) \/api\/personas\/([^/]+)$/.exec(route);
+    if (pm) {
+      const name = decodeURIComponent(pm[2]);
+      if (pm[1] === 'GET') {
+        const p = personas.get(name);
+        return p
+          ? json(res, 200, p)
+          : json(res, 404, { error: 'no such persona' });
+      }
+      if (pm[1] === 'DELETE') {
+        personas.remove(name);
+        return json(res, 200, { ok: true, ...personas.settings() });
+      }
+      const b = await readBody(req, false, 16384);
+      if (b.name !== undefined && b.name !== name)
+        return json(res, 400, { error: 'name in the body must match the URL' });
+      if (b.voice && !(await speech.voices()).includes(String(b.voice)))
+        return json(res, 400, { error: 'unknown voice' });
+      return json(res, 200, personas.save({ ...b, name }));
+    }
     if (route === 'GET /api/voices')
       return json(res, 200, { voices: await speech.voices() });
     if (route === 'POST /api/say') {
@@ -643,21 +687,26 @@ const server = createServer(async (req, res) => {
       if (text.length > 300)
         return json(res, 400, { error: 'text is 300 characters at most' });
       if (!sayAllowed()) return json(res, 429, { error: 'ten says a minute' });
-      const voice = b.voice ? String(b.voice) : '';
+      const persona = personaFor(req, b);
+      const voice = b.voice ? String(b.voice) : (persona?.voice ?? '');
       if (voice && !(await speech.voices()).includes(voice))
         return json(res, 400, { error: 'unknown voice' });
-      const level = speech.capLevel(b.level),
+      const level = speech.capLevel(b.level ?? persona?.level),
         chimeLevel = speech.chimeFor(level, b.chimeLevel);
       const rate = Math.max(
         90,
-        Math.min(220, Math.round(Number(b.rate ?? 140) || 140)),
+        Math.min(
+          220,
+          Math.round(Number(b.rate ?? persona?.rate ?? 140) || 140),
+        ),
       );
       reply.noteReply(text);
       return json(res, 202, {
         level,
         chimeLevel: b.chime === false ? null : chimeLevel,
+        persona: persona?.name ?? null,
         ...speech.say({
-          text,
+          text: applySayAs(text, persona?.sayAs),
           voice,
           level,
           rate,
@@ -729,13 +778,22 @@ const server = createServer(async (req, res) => {
         return json(res, 429, {
           error: 'ten says a minute (a reply counts as one)',
         });
-      const voice = b.voice ? String(b.voice) : '';
+      // a continuing reply keeps the persona it began with unless the call names another
+      const cont = b.id !== undefined ? reply.get(b.id) : null;
+      const persona =
+        b.persona || b.agent || req.headers['x-gj-agent'] || !cont?.persona
+          ? personaFor(req, b)
+          : cont.persona;
+      const voice = b.voice ? String(b.voice) : (persona?.voice ?? '');
       if (voice && !(await speech.voices()).includes(voice))
         return json(res, 400, { error: 'unknown voice' });
-      const level = speech.capLevel(b.level);
+      const level = speech.capLevel(b.level ?? persona?.level);
       const rate = Math.max(
         90,
-        Math.min(220, Math.round(Number(b.rate ?? 140) || 140)),
+        Math.min(
+          220,
+          Math.round(Number(b.rate ?? persona?.rate ?? 140) || 140),
+        ),
       );
       try {
         return json(
@@ -748,6 +806,7 @@ const server = createServer(async (req, res) => {
             voice,
             level,
             rate,
+            persona,
           }),
         );
       } catch (e) {
@@ -788,7 +847,16 @@ const server = createServer(async (req, res) => {
     if (route === 'GET /api/converse') return json(res, 200, converse.status());
     if (route === 'POST /api/converse/start') {
       const b = await readBody(req);
-      return json(res, 200, converse.start(b));
+      const persona = personaFor(req, b);
+      const given = { ...b };
+      if (persona) {
+        if (!given.wake && persona.wakeWords.length)
+          given.wake = persona.wakeWords;
+        if (!given.tones && Object.keys(persona.tones).length)
+          given.tones = persona.tones;
+        given.persona = persona;
+      }
+      return json(res, 200, converse.start(given));
     }
     if (route === 'POST /api/converse/stop')
       return json(res, 200, converse.stop());

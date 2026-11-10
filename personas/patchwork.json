@@ -1,0 +1,13 @@
+{
+  "name": "patchwork",
+  "voice": "",
+  "rate": 140,
+  "level": 0.03,
+  "style": "netrunner",
+  "wakeWords": ["patchwork", "glasseye"],
+  "sayAs": [{ "from": "Glasseye", "to": "glass eye" }],
+  "glossary": {},
+  "greeting": "Patchwork here. Line is open.",
+  "signoff": "Patchwork out. Jacking out.",
+  "tones": { "interrupting": true, "wake": true }
+}

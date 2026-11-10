@@ -1,0 +1,16 @@
+{
+  "name": "glassmouth",
+  "voice": "",
+  "rate": 135,
+  "level": 0.03,
+  "style": "netrunner",
+  "wakeWords": ["glassmouth", "glasseye"],
+  "sayAs": [
+    { "from": "Glasseye", "to": "glass eye" },
+    { "from": "Glassmouth", "to": "glass mouth" }
+  ],
+  "glossary": {},
+  "greeting": "Glassmouth on the switchboard. Go ahead.",
+  "signoff": "Glassmouth out. Quiet on the line.",
+  "tones": { "interrupting": true, "wake": true }
+}
