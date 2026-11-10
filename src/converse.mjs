@@ -229,6 +229,7 @@ const event = (fields) => inbox.add(fields);
 
 // Echo gate over a chunk while the camera speaks: true when Lewis is talking over the playback.
 function bargeCheck(s, chunk, job, now) {
+  if (process.env.GJ_BARGE === '0') return false; // barge-in off (until the echo is calibrated)
   const env = job.ref?.env;
   if (!env || !job.publishAt) return false;
   const n = Math.floor(chunk.length / FRAME);
@@ -273,6 +274,12 @@ function feed(s, chunk) {
   }
   s.gate.reset();
   if (s.bargeActive && now - s.bargeAt > 30000) s.bargeActive = false;
+  // right after a cut the speaker still plays out its buffer: don't take that tail for Lewis
+  if (s.bargeActive && now - s.bargeAt < ECHO_DELAY_MS() + 500) {
+    s.ring = [];
+    s.seg.reset();
+    return;
+  }
   if (s.muted && !s.bargeActive) {
     s.ring = [];
     s.seg.reset();
