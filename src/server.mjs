@@ -22,6 +22,7 @@ import * as media from './media.mjs';
 import * as asker from './ask.mjs';
 import * as converse from './converse.mjs';
 import * as reply from './reply.mjs';
+import { history } from './history.mjs';
 import { splitLines } from './converse-core.mjs';
 import { streamVideo } from './stream.mjs';
 
@@ -777,6 +778,10 @@ const server = createServer(async (req, res) => {
     if (route === 'POST /api/converse/tones') {
       const b = await readBody(req);
       return json(res, 200, { tones: reply.setTones(b.tones ?? b) });
+    }
+    if (route === 'GET /api/converse/history') {
+      const q = url.searchParams;
+      return json(res, 200, history().since(q.get('since'), q.get('limit')));
     }
     if (route === 'GET /api/converse') return json(res, 200, converse.status());
     if (route === 'POST /api/converse/start') {

@@ -7,6 +7,7 @@ import { randomBytes } from 'node:crypto';
 import * as speech from './say.mjs';
 import { takeSegments, toneWav, TONE_KINDS } from './converse-turns.mjs';
 import { TMP } from './paths.mjs';
+import { note } from './history.mjs';
 
 // The camera's amp sleeps soon after sound stops: only a line that starts within AWAKE_MS of the last one
 // skips the wake pulse (10 s lost the first word of the next reply on the real camera, 2026-11-10).
@@ -39,6 +40,7 @@ export function setTones(t) {
 const replies = new Map();
 const recent = []; // the last lines said, for the page
 export function noteReply(text) {
+  note('patchwork', text);
   recent.push({
     at: new Date().toISOString(),
     text: String(text).slice(0, 300),
@@ -103,7 +105,8 @@ export function append({ id, text, end, voice, level, rate }) {
       chime: false,
       chimeLevel: 0.008,
       fast:
-        r.segments.length > 0 && (a.speaking || Date.now() - a.endedAt < AWAKE_MS),
+        r.segments.length > 0 &&
+        (a.speaking || Date.now() - a.endedAt < AWAKE_MS),
     });
     r.segments.push({ id: job.id, text });
     noteReply(text);

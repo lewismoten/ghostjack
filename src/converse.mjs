@@ -26,10 +26,12 @@ import {
   wavFromPcm,
 } from './converse-core.mjs';
 import { EchoGate, playbackReport } from './converse-turns.mjs';
+import { note } from './history.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const num = (name, def) => Number(process.env[name]) || def;
-const FOLLOW_MS = () => (process.env.GJ_FOLLOW_MS === '0' ? 0 : num('GJ_FOLLOW_MS', 20000));
+const FOLLOW_MS = () =>
+  process.env.GJ_FOLLOW_MS === '0' ? 0 : num('GJ_FOLLOW_MS', 20000);
 export const INBOX_FILE = () =>
   process.env.GJ_CONVERSE_INBOX ||
   join(homedir(), '.cache', 'ghostjack', 'converse', 'inbox.jsonl');
@@ -364,7 +366,15 @@ async function handleOne(s, u) {
   const viaBarge = s.bargeActive;
   // After the camera has spoken, Lewis may just answer: an utterance that starts within FOLLOW_MS of the
   // end of speech is kept without a wake word (GJ_FOLLOW_MS, default 20 s; 0 turns it off).
-  const follow = !m && !viaBarge && s.lastSpokeAt && (u.endedAt && u.durationMs ? Date.parse(u.endedAt) - u.durationMs : Date.now()) - s.lastSpokeAt <= FOLLOW_MS();
+  const follow =
+    !m &&
+    !viaBarge &&
+    s.lastSpokeAt &&
+    (u.endedAt && u.durationMs
+      ? Date.parse(u.endedAt) - u.durationMs
+      : Date.now()) -
+      s.lastSpokeAt <=
+      FOLLOW_MS();
   if (!m && !viaBarge && !follow) return;
   s.lastWake = Date.now();
   s.partial = null;
@@ -391,6 +401,10 @@ async function handleOne(s, u) {
     s.bargeActive = false;
   }
   event(e);
+  note('you', text, {
+    ...(follow ? { followUp: true } : {}),
+    ...(viaBarge ? { interrupted: true } : {}),
+  });
 }
 
 // Lewis talked over the camera: stop the speaker, work out what was heard, tell the agent.
@@ -413,6 +427,10 @@ function bargeIn(s, now) {
     ...report,
   });
   s.bargeId = e.n;
+  note('mark', 'Lewis talked over Patchwork', {
+    heard: report.heardText || '',
+    unheard: [report.unheardText, report.unsentText].filter(Boolean).join(' '),
+  });
   // His words so far were in the ring while the camera spoke: start the utterance from them.
   const ring = Buffer.concat(s.ring);
   s.ring = [];
@@ -435,6 +453,9 @@ export function interrupt({ text, voice, level, rate }) {
         text,
       })
     : null;
+  note('mark', 'Patchwork cut in on Lewis', {
+    partial: s?.partial?.id === id ? s.partial.text : null,
+  });
   const tone = reply.playTone('interrupting');
   const r = reply.append({ text, end: true, voice, level, rate });
   return { event: e ? e.n : null, utterance: id, tone: !!tone, reply: r };
