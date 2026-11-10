@@ -9,6 +9,14 @@ import { takeSegments, toneWav, TONE_KINDS } from './converse-turns.mjs';
 import { TMP } from './paths.mjs';
 import { note } from './history.mjs';
 
+// Words the macOS voice says wrong, written the way they should sound (2026-11-10: "Glasseye" came out "glassy").
+const SAY_AS = [
+  [/\bglass-?eye\b/gi, 'glass eye'],
+  [/\bghostjack\b/gi, 'Ghost Jack'],
+];
+export const sayable = (t) =>
+  SAY_AS.reduce((s, [re, to]) => s.replace(re, to), t);
+
 export const MAX_REPLY_CHARS = 2400;
 // Tones, each on or off. Only the interruption tone is on by default; all are quiet and short.
 export const tones = {
@@ -85,7 +93,7 @@ export function append({ id, text, end, voice, level, rate }) {
       interrupted: true,
     });
   if (r.closed) throw err('this reply is closed', 409);
-  const t = String(text ?? '');
+  const t = sayable(String(text ?? ''));
   r.chars += t.length;
   if (r.chars > MAX_REPLY_CHARS)
     throw err(`a reply is ${MAX_REPLY_CHARS} characters at most`, 400);
