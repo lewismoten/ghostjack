@@ -110,10 +110,7 @@ test('a tone added to the warm stream starts within the filler ahead, then the s
   for (let t = 1000; t < 3000; t += 20) st.tick(t);
   assert.ok(job.offsetMs != null, 'the tone was written');
   // the tone's start is at most fillAhead (120 ms) + a tick after it was added, from the playing position
-  assert.ok(
-    job.publishAt + job.offsetMs - 0 <= 1000 + 160 + 100,
-    `starts ${job.offsetMs}`,
-  );
+  assert.ok(job.offsetMs <= 1000 + 160, `starts ${job.offsetMs}`);
   assert.equal(h.ended, true);
   assert.ok(peak(Buffer.concat(sent)) >= 0.019);
 });
