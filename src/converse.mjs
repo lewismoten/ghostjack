@@ -29,6 +29,7 @@ import { EchoGate, playbackReport } from './converse-turns.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const num = (name, def) => Number(process.env[name]) || def;
+const FOLLOW_MS = () => (process.env.GJ_FOLLOW_MS === '0' ? 0 : num('GJ_FOLLOW_MS', 20000));
 export const INBOX_FILE = () =>
   process.env.GJ_CONVERSE_INBOX ||
   join(homedir(), '.cache', 'ghostjack', 'converse', 'inbox.jsonl');
@@ -251,6 +252,7 @@ function feed(s, chunk) {
     a.playing && a.playing.status === 'speaking' && a.playing.text
       ? a.playing
       : null;
+  if (a.speaking) s.lastSpokeAt = now; // a follow-up window after the camera speaks (see FOLLOW_MS)
   s.muted = s.guard.muted(now, a.speaking);
   if (!s.state.startsWith('listening')) s.state = 'listening';
 
@@ -353,7 +355,10 @@ async function handleOne(s, u) {
     return;
   const m = matchWake(text, s.wake);
   const viaBarge = s.bargeActive;
-  if (!m && !viaBarge) return;
+  // After the camera has spoken, Lewis may just answer: an utterance that starts within FOLLOW_MS of the
+  // end of speech is kept without a wake word (GJ_FOLLOW_MS, default 20 s; 0 turns it off).
+  const follow = !m && !viaBarge && s.lastSpokeAt && (u.endedAt && u.durationMs ? u.endedAt - u.durationMs : Date.now()) - s.lastSpokeAt <= FOLLOW_MS();
+  if (!m && !viaBarge && !follow) return;
   s.lastWake = Date.now();
   s.partial = null;
   // Words are only known to be addressed now, so the end of the utterance is reported late, with its time.
@@ -373,6 +378,7 @@ async function handleOne(s, u) {
     wake: m ? m.wake : null,
     durationMs: u.durationMs,
   };
+  if (follow) e.followUp = true;
   if (viaBarge) {
     e.interrupted = s.bargeId;
     s.bargeActive = false;
