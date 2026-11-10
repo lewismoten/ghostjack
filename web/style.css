@@ -1745,3 +1745,12 @@ code {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
+/* the switch row holds the changing status: one fixed height whatever it says */
+.cv > .row {
+  min-height: 3.2em;
+  align-items: flex-start;
+}
+.cv > .row #cvState {
+  flex: 1 1 20rem;
+  min-width: 0;
+}

@@ -758,8 +758,26 @@
                   >Off</output
                 >
               </div>
-              <p class="mono-l" id="cvPartial" aria-live="polite"></p>
-              <p class="mono-l" id="cvPlaying"></p>
+              <details class="cvhist" id="cvHist" open>
+                <summary>History <small id="cvHistCount"></small></summary>
+                <div class="row">
+                  <button type="button" id="cvHistCopy">Copy all</button>
+                  <span class="mono-l" id="cvHistNote" aria-live="polite"
+                    >&nbsp;</span
+                  >
+                </div>
+                <div
+                  class="chatlog"
+                  id="cvLog"
+                  role="log"
+                  tabindex="0"
+                  aria-label="Conversation history, newest at the bottom"
+                >
+                  <p class="empty">Nothing yet.</p>
+                </div>
+              </details>
+              <p class="mono-l" id="cvPartial" aria-live="polite">&nbsp;</p>
+              <p class="mono-l" id="cvPlaying">&nbsp;</p>
               <div class="gm">
                 <div>
                   <h3>You said</h3>
@@ -780,24 +798,6 @@
                   </ul>
                 </div>
               </div>
-              <details class="cvhist" id="cvHist">
-                <summary>History <small id="cvHistCount"></small></summary>
-                <div class="row">
-                  <button type="button" id="cvHistCopy">Copy all</button>
-                  <span class="mono-l" id="cvHistNote" aria-live="polite"
-                    >&nbsp;</span
-                  >
-                </div>
-                <div
-                  class="chatlog"
-                  id="cvLog"
-                  role="log"
-                  tabindex="0"
-                  aria-label="Conversation history, newest at the bottom"
-                >
-                  <p class="empty">Nothing yet.</p>
-                </div>
-              </details>
             </section>
             <h2 id="gm-h">Relay <small>agent voice queue</small></h2>
             <p class="hint" id="gmNote">
