@@ -107,3 +107,39 @@ test('the filter removes the bleep pitch inside its window and passes speech pit
     'outside the window nothing changes',
   );
 });
+
+test('whisper silence phrases: dropped over quiet sound or a quick repeat, kept when real and loud', async () => {
+  const { silenceHallucination, medianRms } =
+    await import('../src/converse-core.mjs');
+  const now = 100000;
+  assert.match(
+    silenceHallucination('Thank you.', 120, null, now),
+    /quiet sound/,
+  );
+  assert.match(
+    silenceHallucination('Thanks for watching!', 300, null, now),
+    /quiet sound/,
+  );
+  assert.match(silenceHallucination('you', 0, null, now), /quiet/);
+  // loud, first time: a real thank-you after a reply stays
+  assert.equal(silenceHallucination('Thank you.', 3000, null, now), null);
+  // repeated within 20 s at middling level: dropped; clearly loud: kept; long ago: kept
+  const last = { text: 'thank you', at: now - 10000 };
+  assert.match(
+    silenceHallucination('Thank you.', 900, last, now),
+    /again within 10 s/,
+  );
+  assert.equal(silenceHallucination('Thank you.', 3000, last, now), null);
+  assert.equal(
+    silenceHallucination('Thank you.', 900, { ...last, at: now - 25000 }, now),
+    null,
+  );
+  // a sentence that contains the phrase is never a hallucination
+  assert.equal(
+    silenceHallucination('thank you patchwork', 100, null, now),
+    null,
+  );
+  // the median is of the whole utterance: noise stays low, speech is high
+  assert.ok(medianRms(sine(300, 500, 100)) < 120);
+  assert.ok(medianRms(sine(300, 500, 8000)) > 4000);
+});

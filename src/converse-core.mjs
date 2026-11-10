@@ -412,3 +412,43 @@ export class BleepFilter {
     return out;
   }
 }
+
+// ---- whisper's silence phrases ------------------------------------------------------------------------
+// On near-silence or noise whisper writes stock phrases from its training data ("Thank you." three times in
+// 30 s on 2026-11-10, each restarting the follow-up window). Such a final is dropped when it is the whole text
+// and the sound under it was quiet, or when the same phrase came a moment ago and the sound is not clearly loud.
+export const SILENCE_PHRASES = new Set([
+  'thank you',
+  'thanks',
+  'thanks for watching',
+  'thank you for watching',
+  'bye',
+  'bye bye',
+  'you',
+  'oh',
+]);
+export const HALLU_REPEAT_MS = 20000;
+// Median RMS of an utterance's frames (16-bit PCM): near the noise floor for noise, well above for speech.
+export function medianRms(pcm, frameMs = 20) {
+  const fb = ((RATE * frameMs) / 1000) * 2;
+  const v = [];
+  for (let o = 0; o + fb <= pcm.length; o += fb) v.push(rms(pcm, o, fb));
+  if (!v.length) return 0;
+  v.sort((a, b) => a - b);
+  return v[v.length >> 1];
+}
+// Returns why the final should be dropped, or null. `last` is {text, at} of the previous silence phrase seen.
+export function silenceHallucination(text, med, last, now, gate = 500) {
+  const t = normText(text);
+  if (!SILENCE_PHRASES.has(t)) return null;
+  if (med < gate)
+    return `silence phrase "${t}" over quiet sound (median rms ${Math.round(med)} < ${gate})`;
+  if (
+    last &&
+    last.text === t &&
+    now - last.at < HALLU_REPEAT_MS &&
+    med < gate * 2.5
+  )
+    return `silence phrase "${t}" again within ${Math.round((now - last.at) / 1000)} s (median rms ${Math.round(med)})`;
+  return null;
+}

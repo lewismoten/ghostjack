@@ -23,6 +23,10 @@ import {
   chimeWav,
   cleanWake,
   isWakeOnly,
+  medianRms,
+  silenceHallucination,
+  SILENCE_PHRASES,
+  normText,
   WakeAck,
   BleepFilter,
   matchWake,
@@ -437,6 +441,19 @@ async function handleOne(s, u) {
   // The camera started talking while this was transcribed: it may be its own voice.
   if (!s.bargeActive && s.guard.muted(Date.now(), speakingNow(s)))
     return dlog('drop', u, 'camera spoke during transcription', text);
+  // whisper's stock phrases over silence: dropped before anything (the follow-up window, the wake bleep) reacts
+  if (!s.bargeActive) {
+    const why = silenceHallucination(
+      text,
+      medianRms(u.pcm),
+      s.lastPhrase,
+      Date.now(),
+      num('GJ_HALLU_RMS', 500),
+    );
+    if (SILENCE_PHRASES.has(normText(text)))
+      s.lastPhrase = { text: normText(text), at: Date.now() };
+    if (why) return dlog('drop', u, why, text);
+  }
   const m = matchWake(text, s.wake);
   if (m)
     wakeBleep(

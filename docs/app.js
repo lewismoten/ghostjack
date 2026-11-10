@@ -1482,7 +1482,17 @@ setInterval(pollAsk, 2000);
 // Conversation (POST /api/converse/start and /stop): the switch, a Listening light in the header that is
 // on whenever the microphone is being heard, the live partial transcript, what is playing, what was heard
 // and said, and where interruptions happened.
+// Only touch the page when something changed: rebuilding every second made the panel flash and jump.
+const cvLast = new Map();
+const cvText = (id, text) => {
+  if (cvLast.get(id) === text) return;
+  cvLast.set(id, text);
+  $(id).textContent = text;
+};
 const cvList = (id, rows, empty) => {
+  const key = JSON.stringify(rows);
+  if (cvLast.get(id) === key) return;
+  cvLast.set(id, key);
   const ul = $(id);
   ul.replaceChildren();
   if (!rows.length) {
@@ -1514,13 +1524,30 @@ async function pollConverse() {
         ? `Listening: on, ${j.state}. Open the Relay tab to turn it off`
         : 'Listening: off. Open the Relay tab to turn conversation on',
     );
-    $('cvState').textContent = on
-      ? `Listening. ${j.state}. Off in ${Math.ceil(j.idleLeftSeconds / 60)} min without a wake word.`
+    // one short line of icons instead of changing sentences (Lewis: "it would just be like icons")
+    const st = String(j.state || '');
+    const icons = !on
+      ? '\u23fb Off'
+      : [
+          j.playing
+            ? '\ud83d\udd0a Speaking'
+            : st.includes('muted')
+              ? '\ud83d\udd07 Muted'
+              : '\ud83c\udf99\ufe0f Listening',
+          j.partial ? '\ud83d\udcac Hearing you' : '',
+          j.bargeActive ? '\u270b Cut in' : '',
+          `\u23f1 ${Math.ceil(j.idleLeftSeconds / 60)} min`,
+        ]
+          .filter(Boolean)
+          .join('  \u00b7  ');
+    cvText('cvState', icons);
+    $('cvState').title = on
+      ? st
       : j.lastStop
-        ? `Off (${j.lastStop.reason}).`
+        ? `Off (${j.lastStop.reason})`
         : 'Off';
-    $('cvPartial').textContent = j.partial ? `Hearing: ${j.partial.text}` : '';
-    $('cvPlaying').textContent = j.playing ? `Speaking: ${j.playing.text}` : '';
+    cvText('cvPartial', j.partial ? `Hearing: ${j.partial.text}` : '\u00a0');
+    cvText('cvPlaying', j.playing ? `Speaking: ${j.playing.text}` : '\u00a0');
     cvList(
       'cvHeard',
       j.heard.map((e) => e.text),
@@ -1561,6 +1588,277 @@ $('cvSwitch').onchange = async () => {
   }
 };
 $('listenPill').onclick = () => selectTab('glass', true);
+
+// History: the conversation as a chat log. Entries come from /api/converse/history by cursor; the log is
+// rebuilt only when new ones arrive, and keeps its scroll position unless it was already at the bottom.
+const hist = { cursor: 0, entries: [], busy: false };
+const histName = (e) =>
+  e.who === 'you' ? 'You' : e.who === 'patchwork' ? 'Patchwork' : 'Note';
+const histTime = (e) =>
+  new Date(e.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+function histBody(e) {
+  if (e.who !== 'mark') return e.text;
+  const bits = [e.text];
+  if (e.heard) bits.push(`Heard: "${e.heard}"`);
+  if (e.unheard) bits.push(`Not heard: "${e.unheard}"`);
+  if (e.partial) bits.push(`After: "${e.partial}"`);
+  return bits.join('. ');
+}
+const histLine = (e) => `${histName(e)} ${histTime(e)}: ${histBody(e)}`;
+async function copyText(text, note) {
+  try {
+    await navigator.clipboard.writeText(text);
+    $('cvHistNote').textContent = note;
+  } catch {
+    $('cvHistNote').textContent = 'Copy blocked; select the text and copy it.';
+  }
+  setTimeout(() => ($('cvHistNote').textContent = '\u00a0'), 2500);
+}
+function histRow(e) {
+  const row = document.createElement('div');
+  row.className = `ent ${e.who}`;
+  const p = document.createElement('p');
+  const who = document.createElement('span');
+  who.className = 'who';
+  who.textContent = `${histName(e)} ${histTime(e)}: `;
+  p.append(who, histBody(e));
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.textContent = 'Copy';
+  b.setAttribute('aria-label', `Copy: ${histLine(e).slice(0, 60)}`);
+  b.onclick = () => copyText(histLine(e), 'Copied one line.');
+  row.append(p, b);
+  return row;
+}
+async function pollHistory() {
+  if (hist.busy) return;
+  hist.busy = true;
+  try {
+    const r = await api(
+      `/api/converse/history?since=${hist.cursor}&limit=2000`,
+    );
+    if (!r.ok) return;
+    const j = await r.json();
+    hist.cursor = j.cursor;
+    if (!j.entries.length) return;
+    const log = $('cvLog');
+    const atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 8;
+    if (!hist.entries.length) log.textContent = '';
+    hist.entries.push(...j.entries);
+    for (const e of j.entries) log.append(histRow(e));
+    $('cvHistCount').textContent = `(${hist.entries.length})`;
+    if (atEnd) log.scrollTop = log.scrollHeight;
+  } catch {
+    /* the bridge is away */
+  } finally {
+    hist.busy = false;
+  }
+}
+$('cvHistOpen').onclick = () => {
+  $('cvHist').showModal();
+  pollHistory();
+  const log = $('cvLog');
+  log.scrollTop = log.scrollHeight;
+};
+$('cvHistClose').onclick = () => $('cvHist').close();
+$('cvHistCopy').onclick = () =>
+  hist.entries.length
+    ? copyText(
+        hist.entries.map(histLine).join('\n'),
+        'Copied the whole history.',
+      )
+    : ($('cvHistNote').textContent = 'Nothing to copy yet.');
+setInterval(pollHistory, 1500);
+
+// Personas: who each agent speaks as. Lewis picks the default, assigns agents, locks the choice, edits the
+// basic fields and the transcriber word list. Saved by the bridge in its untracked local file.
+const pz = { data: null, voices: [] };
+const pzNote = (t) => {
+  $('pzNote').textContent = t;
+  setTimeout(
+    () => $('pzNote').textContent === t && ($('pzNote').textContent = '\u00a0'),
+    4000,
+  );
+};
+const pzCall = async (path, method, body) => {
+  const r = await api(path, {
+    method,
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || `bridge said ${r.status}`);
+  return j;
+};
+const pzList = (s) =>
+  s
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean);
+const opt = (v, t, sel) => {
+  const o = document.createElement('option');
+  o.value = v;
+  o.textContent = t;
+  o.selected = sel;
+  return o;
+};
+function pzAgentRow(agent = '', persona = '') {
+  const row = document.createElement('div');
+  row.className = 'agentrow';
+  const a = document.createElement('input');
+  a.type = 'text';
+  a.maxLength = 32;
+  a.value = agent;
+  a.setAttribute('aria-label', 'Agent name, like codex');
+  a.placeholder = 'agent name';
+  const s = document.createElement('select');
+  s.setAttribute('aria-label', 'Persona for this agent');
+  for (const p of pz.data.personas)
+    s.append(opt(p.name, p.name, p.name === persona));
+  const x = document.createElement('button');
+  x.type = 'button';
+  x.textContent = 'Remove';
+  x.setAttribute('aria-label', 'Remove this agent');
+  x.onclick = () => row.remove();
+  row.append(a, s, x);
+  return row;
+}
+function pzFill(name) {
+  const p = pz.data.personas.find((q) => q.name === name);
+  const isNew = !p;
+  $('pzName').value = p?.name ?? '';
+  $('pzName').readOnly = !isNew;
+  $('pzVoice').replaceChildren(
+    opt('', 'System voice', !p?.voice),
+    ...pz.voices.map((v) => opt(v, v, v === p?.voice)),
+  );
+  $('pzRate').value = p?.rate ?? 140;
+  $('pzLevel').value = p?.level ?? 0.03;
+  $('pzStyle').value = p?.style ?? 'netrunner';
+  $('pzWake').value = (p?.wakeWords ?? []).join(', ');
+  $('pzSayAs').value = (p?.sayAs ?? [])
+    .map((x) => `${x.from} = ${x.to}`)
+    .join('\n');
+  $('pzPVocab').value = (p?.vocabulary ?? []).join(', ');
+  $('pzWakeTone').checked = p?.tones?.wake === true;
+  $('pzIntTone').checked = p?.tones?.interrupting === true;
+  $('pzDelete').disabled = !p || p.source === 'shipped';
+}
+function pzRender() {
+  const d = pz.data;
+  $('pzDefault').textContent = `(${d.default})`;
+  $('pzDef').replaceChildren(
+    ...d.personas.map((p) => opt(p.name, p.name, p.name === d.default)),
+  );
+  $('pzLock').checked = d.lock;
+  $('pzVocab').value = d.vocabulary.join(', ');
+  $('pzAgents').replaceChildren(
+    ...Object.entries(d.agents).map(([a, p]) => pzAgentRow(a, p)),
+  );
+  const keep = $('pzPick').value;
+  $('pzPick').replaceChildren(
+    ...d.personas.map((p) => opt(p.name, p.name, p.name === keep)),
+    opt('', 'New persona...', false),
+  );
+  pzFill($('pzPick').value);
+}
+async function pzLoad() {
+  try {
+    pz.data = await pzCall('/api/personas', 'GET');
+    if (!pz.voices.length)
+      pz.voices = (await pzCall('/api/voices', 'GET')).voices ?? [];
+    pzRender();
+  } catch (e) {
+    pzNote(`Could not load: ${e.message}`);
+  }
+}
+$('pzOpen').onclick = async () => {
+  $('pz').showModal();
+  await pzLoad();
+  $('pzDef').focus();
+};
+$('pzClose').onclick = () => $('pz').close();
+$('pzPick').onchange = () => pzFill($('pzPick').value);
+$('pzAddAgent').onclick = () => {
+  const r = pzAgentRow();
+  $('pzAgents').append(r);
+  r.querySelector('input').focus();
+};
+$('pzSaveSettings').onclick = async () => {
+  try {
+    const agents = {};
+    for (const row of $('pzAgents').children) {
+      const a = row.querySelector('input').value.trim().toLowerCase();
+      if (a) agents[a] = row.querySelector('select').value;
+    }
+    await pzCall('/api/personas/settings', 'POST', {
+      default: $('pzDef').value,
+      lock: $('pzLock').checked,
+      agents,
+      vocabulary: pzList($('pzVocab').value),
+    });
+    await pzLoad();
+    pzNote('Saved. New calls use it now.');
+  } catch (e) {
+    pzNote(`Not saved: ${e.message}`);
+  }
+};
+$('pzSave').onclick = async () => {
+  try {
+    const name = $('pzName').value.trim().toLowerCase();
+    const sayAs = $('pzSayAs')
+      .value.split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .map((l) => {
+        const [from, ...to] = l.split('=');
+        if (!to.length)
+          throw new Error(`"${l}" needs = between written and spoken`);
+        return { from: from.trim(), to: to.join('=').trim() };
+      });
+    const body = {
+      name,
+      voice: $('pzVoice').value,
+      rate: Number($('pzRate').value),
+      level: Number($('pzLevel').value),
+      style: $('pzStyle').value.trim(),
+      wakeWords: pzList($('pzWake').value),
+      sayAs,
+      vocabulary: pzList($('pzPVocab').value),
+      tones: {
+        wake: $('pzWakeTone').checked,
+        interrupting: $('pzIntTone').checked,
+      },
+    };
+    // keep what this form does not edit (glossary, greeting, signoff, the other tones)
+    const old = pz.data.personas.find((p) => p.name === name);
+    if (old) {
+      body.glossary = old.glossary;
+      body.greeting = old.greeting;
+      body.signoff = old.signoff;
+      body.tones = { ...old.tones, ...body.tones };
+    }
+    await pzCall(`/api/personas/${encodeURIComponent(name)}`, 'PUT', body);
+    $('pzPick').value = name;
+    await pzLoad();
+    $('pzPick').value = name;
+    pzFill(name);
+    pzNote(`Saved ${name}.`);
+  } catch (e) {
+    pzNote(`Not saved: ${e.message}`);
+  }
+};
+$('pzDelete').onclick = async () => {
+  try {
+    await pzCall(
+      `/api/personas/${encodeURIComponent($('pzName').value)}`,
+      'DELETE',
+    );
+    await pzLoad();
+    pzNote('Removed.');
+  } catch (e) {
+    pzNote(`Not removed: ${e.message}`);
+  }
+};
 setInterval(pollConverse, 1000);
 
 // Name the shot in a small form that takes the strip's place (no pop-up).

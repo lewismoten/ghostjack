@@ -763,6 +763,114 @@
                   History <small id="cvHistCount"></small>
                 </button>
               </p>
+              <p class="row">
+                <button type="button" id="pzOpen">
+                  Personas <small id="pzDefault"></small>
+                </button>
+              </p>
+              <dialog class="cvhist pz" id="pz" aria-labelledby="pzTitle">
+                <div class="row">
+                  <h3 id="pzTitle">Personas</h3>
+                  <button type="button" id="pzClose">Close</button>
+                </div>
+                <div class="pzbody">
+                  <fieldset>
+                    <legend>Who agents are</legend>
+                    <label
+                      >Default persona (used when a call names none)
+                      <select id="pzDef"></select>
+                    </label>
+                    <label class="chk"
+                      ><input type="checkbox" id="pzLock" /> Lock: agents cannot
+                      choose a persona; my assignments below and the default
+                      decide</label
+                    >
+                    <p class="mono-l">Assign an agent to a persona</p>
+                    <div id="pzAgents"></div>
+                    <div class="row">
+                      <button type="button" id="pzAddAgent">Add agent</button>
+                    </div>
+                    <label
+                      >Words the transcriber should know (all agents, 400
+                      characters, commas)
+                      <textarea
+                        id="pzVocab"
+                        rows="3"
+                        maxlength="400"
+                      ></textarea>
+                    </label>
+                    <div class="row">
+                      <button type="button" id="pzSaveSettings">
+                        Save these settings
+                      </button>
+                    </div>
+                  </fieldset>
+                  <fieldset>
+                    <legend>Edit a persona</legend>
+                    <label
+                      >Persona
+                      <select id="pzPick"></select>
+                    </label>
+                    <label
+                      >Name (a to z, 0 to 9, dash)
+                      <input type="text" id="pzName" maxlength="24" />
+                    </label>
+                    <label
+                      >Voice
+                      <select id="pzVoice"></select>
+                    </label>
+                    <div class="pzpair">
+                      <label
+                        >Rate (words a minute, 90 to 220)
+                        <input type="number" id="pzRate" min="90" max="220" />
+                      </label>
+                      <label
+                        >Level (0.01 to 0.05)
+                        <input
+                          type="number"
+                          id="pzLevel"
+                          min="0.01"
+                          max="0.05"
+                          step="0.01"
+                        />
+                      </label>
+                    </div>
+                    <label
+                      >Style (netrunner, plain, or your own word)
+                      <input type="text" id="pzStyle" maxlength="24" />
+                    </label>
+                    <label
+                      >Wake words (commas, 3 to 30 letters, 6 at most)
+                      <input type="text" id="pzWake" maxlength="200" />
+                    </label>
+                    <label
+                      >Pronunciations (one per line: written = spoken)
+                      <textarea id="pzSayAs" rows="3"></textarea>
+                    </label>
+                    <label
+                      >Extra transcriber words (commas, this persona)
+                      <textarea id="pzPVocab" rows="2"></textarea>
+                    </label>
+                    <label class="chk"
+                      ><input type="checkbox" id="pzWakeTone" /> Bleep when it
+                      hears the wake word</label
+                    >
+                    <label class="chk"
+                      ><input type="checkbox" id="pzIntTone" /> Tone when an
+                      agent cuts in</label
+                    >
+                    <div class="row">
+                      <button type="button" id="pzSave">Save persona</button>
+                      <button type="button" id="pzDelete" class="ghost">
+                        Remove my edits
+                      </button>
+                    </div>
+                  </fieldset>
+                </div>
+                <p class="mono-l pznote" id="pzNote" aria-live="polite">
+                  &nbsp;
+                </p>
+              </dialog>
               <dialog class="cvhist" id="cvHist" aria-labelledby="cvHistTitle">
                 <div class="row">
                   <h3 id="cvHistTitle">Conversation history</h3>

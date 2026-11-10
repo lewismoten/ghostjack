@@ -1775,6 +1775,73 @@ dialog.cvhist .chatlog {
 dialog.cvhist .row {
   justify-content: space-between;
 }
+/* Personas dialog: fixed size, the form scrolls inside so nothing jumps */
+dialog.pz {
+  height: min(40rem, calc(100vh - 2rem));
+}
+dialog.pz[open] {
+  display: flex;
+  flex-direction: column;
+}
+dialog.pz .pzbody {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+dialog.pz fieldset {
+  border: 1px solid var(--line);
+  margin: 0 0 0.75rem;
+  display: grid;
+  gap: 0.5rem;
+}
+dialog.pz legend {
+  color: var(--cyan);
+  padding: 0 0.3rem;
+}
+dialog.pz label {
+  display: grid;
+  gap: 0.2rem;
+}
+dialog.pz label.chk {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+dialog.pz input:not([type='checkbox']),
+dialog.pz select,
+dialog.pz textarea {
+  width: 100%;
+  min-height: 2rem;
+  font: inherit;
+  color: inherit;
+  background: var(--btn);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.3rem 0.4rem;
+}
+dialog.pz textarea {
+  resize: none;
+}
+dialog.pz .pzpair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+dialog.pz .agentrow {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+}
+dialog.pz .pznote {
+  height: 1.4rem;
+  margin: 0.4rem 0 0;
+  overflow: hidden;
+}
+dialog.pz :focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
 /* the History dialog replaces the live lines and the three lists */
 #cvPartial,
 #cvPlaying,
