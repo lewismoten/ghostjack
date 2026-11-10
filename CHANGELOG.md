@@ -7,6 +7,22 @@ follow [SemVer](https://semver.org/).
 
 ### Added
 
+- Conversation mode (`/api/converse/*`): listens to the camera microphone, keeps
+  what contains a wake word (patchwork, glasseye), writes transcripts as JSON
+  lines to `~/.cache/ghostjack/converse/inbox.jsonl` and
+  `GET /api/converse/heard`; off by default, auto-off after 15 minutes of no
+  wake word, audio deleted after transcribing. Control page: Listening light,
+  switch, live partial transcript, what was heard, said and interrupted.
+- Streamed replies (`POST /api/reply`): the next sentence is synthesized while
+  the last plays; `POST /api/say/many` for several lines in order.
+- Barge-in (Lewis talks over the camera: playback stops, and the agent gets a
+  report of what was heard, cut and never played), the agent cutting in
+  (`POST /api/converse/interrupt`), optional short tones
+  (`POST /api/converse/tones`), end-of-utterance events and partial transcripts.
+  The echo gate is uncalibrated until measured in the room
+  (docs/converse-design.md).
+- `GJ_WHISPER_SERVER` (a loopback whisper-server) cuts a transcription from
+  about 5 s to about 1.2 s.
 - `GET /api/picture` and `POST /api/picture` (wide dynamic range and backlight
   fix on or off, with the four sliders); Dials tab checkboxes.
 - Night vision "Color" (forced day mode) on the Dials tab and `POST /api/night`;

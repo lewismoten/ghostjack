@@ -1479,6 +1479,90 @@ async function answerAsk(id, choice, text) {
 }
 setInterval(pollAsk, 2000);
 
+// Conversation (POST /api/converse/start and /stop): the switch, a Listening light in the header that is
+// on whenever the microphone is being heard, the live partial transcript, what is playing, what was heard
+// and said, and where interruptions happened.
+const cvList = (id, rows, empty) => {
+  const ul = $(id);
+  ul.replaceChildren();
+  if (!rows.length) {
+    const li = document.createElement('li');
+    li.className = 'empty';
+    li.textContent = empty;
+    ul.append(li);
+  }
+  for (const t of rows) {
+    const li = document.createElement('li');
+    li.textContent = t;
+    ul.append(li);
+  }
+};
+let cvBusy = false;
+async function pollConverse() {
+  if (!connected) return;
+  try {
+    const r = await api('/api/converse');
+    if (!r.ok) return;
+    const j = await r.json();
+    const on = j.on;
+    $('cvSwitch').checked = on;
+    $('listenPill').classList.toggle('on', on);
+    $('listenPill').textContent = on ? 'Listening' : 'Mic off';
+    $('listenPill').setAttribute(
+      'aria-label',
+      on
+        ? `Listening: on, ${j.state}. Open the Relay tab to turn it off`
+        : 'Listening: off. Open the Relay tab to turn conversation on',
+    );
+    $('cvState').textContent = on
+      ? `Listening. ${j.state}. Off in ${Math.ceil(j.idleLeftSeconds / 60)} min without a wake word.`
+      : j.lastStop
+        ? `Off (${j.lastStop.reason}).`
+        : 'Off';
+    $('cvPartial').textContent = j.partial ? `Hearing: ${j.partial.text}` : '';
+    $('cvPlaying').textContent = j.playing ? `Speaking: ${j.playing.text}` : '';
+    cvList(
+      'cvHeard',
+      j.heard.map((e) => e.text),
+      'Nothing yet.',
+    );
+    cvList(
+      'cvReplies',
+      j.replies.map((e) => e.text),
+      'Nothing yet.',
+    );
+    cvList(
+      'cvMarks',
+      j.marks.map((m) =>
+        m.type === 'barge'
+          ? `You cut in. Heard: "${m.heardText || ''}". Not heard: "${m.unheardText || ''}"`
+          : `Agent cut in${m.partialText ? ` after "${m.partialText}"` : ''}: ${m.text}`,
+      ),
+      'None.',
+    );
+  } catch {
+    /* the bridge is away; the connection light says so */
+  }
+}
+$('cvSwitch').onchange = async () => {
+  if (cvBusy) return;
+  cvBusy = true;
+  try {
+    const r = await api(
+      `/api/converse/${$('cvSwitch').checked ? 'start' : 'stop'}`,
+      { method: 'POST', body: '{}' },
+    );
+    if (!r.ok) setStatus(`Conversation: ${(await r.json()).error}`, true);
+  } catch (e) {
+    setStatus(e.message, true);
+  } finally {
+    cvBusy = false;
+    pollConverse();
+  }
+};
+$('listenPill').onclick = () => selectTab('glass', true);
+setInterval(pollConverse, 1000);
+
 // Name the shot in a small form that takes the strip's place (no pop-up).
 var naming = 0;
 function askName(n) {

@@ -155,3 +155,19 @@ test('tone switches: quiet by default except the interruption cue; unknown kinds
   setTones({ done: false });
   assert.throws(() => setTones({ siren: true }), /unknown tone/);
 });
+
+test('a whisper server must be on this computer', async () => {
+  const { whisperServer } = await import('../src/ask.mjs');
+  const old = process.env.GJ_WHISPER_SERVER;
+  try {
+    process.env.GJ_WHISPER_SERVER = 'http://127.0.0.1:8178/x';
+    assert.equal(whisperServer(), 'http://127.0.0.1:8178');
+    process.env.GJ_WHISPER_SERVER = 'http://example.com:8178';
+    assert.equal(whisperServer(), null);
+    process.env.GJ_WHISPER_SERVER = 'nonsense';
+    assert.equal(whisperServer(), null);
+  } finally {
+    if (old === undefined) delete process.env.GJ_WHISPER_SERVER;
+    else process.env.GJ_WHISPER_SERVER = old;
+  }
+});

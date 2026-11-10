@@ -4,7 +4,7 @@
 // GJ_WHISPER and GJ_WHISPER_MODEL override the program and model; if either is missing the transcript
 // is null (the ask then times out unless a button answers).
 import { spawn } from 'node:child_process';
-import { existsSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
@@ -16,7 +16,38 @@ const MODEL = () =>
   process.env.GJ_WHISPER_MODEL ||
   join(homedir(), '.cache', 'whisper-cpp', 'ggml-large-v3.bin');
 
-export const whisperReady = () => existsSync(WHISPER()) && existsSync(MODEL());
+// GJ_WHISPER_SERVER=http://127.0.0.1:8178 sends audio to a whisper-server (whisper.cpp) that keeps the model
+// loaded: about 1.2 s for a short clip instead of 4 to 5 s. Only a loopback address is accepted, so audio
+// never leaves this computer.
+export const whisperServer = () => {
+  try {
+    const u = new URL(process.env.GJ_WHISPER_SERVER || '');
+    return ['127.0.0.1', 'localhost', '[::1]'].includes(u.hostname)
+      ? u.origin
+      : null;
+  } catch {
+    return null;
+  }
+};
+export const whisperReady = () =>
+  !!whisperServer() || (existsSync(WHISPER()) && existsSync(MODEL()));
+
+async function viaServer(wav, base) {
+  try {
+    const fd = new FormData();
+    fd.append('file', new Blob([readFileSync(wav)]), 'a.wav');
+    fd.append('response_format', 'text');
+    fd.append('temperature', '0.0');
+    const r = await fetch(`${base}/inference`, {
+      method: 'POST',
+      body: fd,
+      signal: AbortSignal.timeout(60000),
+    });
+    return r.ok ? (await r.text()).replace(/\s+/g, ' ').trim() : null;
+  } catch {
+    return null;
+  }
+}
 
 export const LETTERS = ['a', 'b', 'c', 'd'];
 // Words a transcriber writes for a spoken letter. Spoken to the camera as the first word of each pair
@@ -65,6 +96,8 @@ export function mapAnswer(transcript, choices, other) {
 // Transcribe a WAV with whisper-cli. Resolves to the text, or null when whisper or its model is missing
 // or fails.
 export function transcribe(wav, model = MODEL()) {
+  const server = whisperServer();
+  if (server && model === MODEL()) return viaServer(wav, server);
   if (!existsSync(WHISPER()) || !existsSync(model))
     return Promise.resolve(null);
   return new Promise((resolve) => {

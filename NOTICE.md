@@ -37,6 +37,14 @@ ffmpeg (LGPL/GPL, ffmpeg.org) is run as an external program for the live stream,
 digital zoom and speech; it is not included. Speech uses the macOS `say` command
 and the voices installed on your Mac; they are not included either.
 
+## whisper.cpp (speech to text)
+
+Asking the room and conversation mode run whisper.cpp (`whisper-cli`, or
+`whisper-server` on a loopback address) as an external program, with the OpenAI
+Whisper model weights (ggml large-v3) you download yourself. whisper.cpp is MIT
+licensed (Georgi Gerganov and contributors) and the Whisper models are MIT
+licensed (OpenAI). Neither is included here. No audio leaves the computer.
+
 ## Credits for the making
 
 Glassmouth's character sketch came from Lewis Moten's conversation with GPT-6.1

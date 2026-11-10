@@ -43,6 +43,14 @@
       <div class="top-tools">
         <span class="light" id="light" aria-hidden="true"></span>
         <button
+          id="listenPill"
+          type="button"
+          class="pill"
+          aria-label="Listening: off. Open the Relay tab to turn conversation on"
+        >
+          Mic off
+        </button>
+        <button
           id="uplinkState"
           type="button"
           class="pill"
@@ -732,6 +740,47 @@
             tabindex="0"
             hidden
           >
+            <section aria-labelledby="cv-h" class="cv">
+              <h2 id="cv-h">Conversation <small>talk with an agent</small></h2>
+              <p class="hint" id="cvNote">
+                Off by default. When on, the camera microphone listens
+                continuously. Only what you say with a wake word in it
+                (patchwork or glasseye) is turned into text for the agent; no
+                audio is kept. It turns itself off after 15 minutes without a
+                wake word.
+              </p>
+              <div class="row">
+                <label
+                  ><input type="checkbox" id="cvSwitch" role="switch" /> Listen
+                  for the agent</label
+                >
+                <output id="cvState" class="mono-l" aria-live="polite"
+                  >Off</output
+                >
+              </div>
+              <p class="mono-l" id="cvPartial" aria-live="polite"></p>
+              <p class="mono-l" id="cvPlaying"></p>
+              <div class="gm">
+                <div>
+                  <h3>You said</h3>
+                  <ul class="queue" id="cvHeard" aria-label="Recently heard">
+                    <li class="empty">Nothing yet.</li>
+                  </ul>
+                </div>
+                <div>
+                  <h3>Agent said</h3>
+                  <ul class="queue" id="cvReplies" aria-label="Recent replies">
+                    <li class="empty">Nothing yet.</li>
+                  </ul>
+                </div>
+                <div>
+                  <h3>Interruptions</h3>
+                  <ul class="queue" id="cvMarks" aria-label="Interruptions">
+                    <li class="empty">None.</li>
+                  </ul>
+                </div>
+              </div>
+            </section>
             <h2 id="gm-h">Relay <small>agent voice queue</small></h2>
             <p class="hint" id="gmNote">
               <strong>Not enabled in this build.</strong> Netrunner messages

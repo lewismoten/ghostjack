@@ -152,6 +152,7 @@ export function start({ wake, idleSeconds, tones, endSilenceMs, chime } = {}) {
     partialBusy: false,
     addressed: new Set(), // utterance ids that have shown a wake word
     ended: new Set(), // ids whose end was reported
+    finals: new Set(), // ids already finished (a late partial is dropped)
     handle: null,
     work: Promise.resolve(),
     pending: 0,
@@ -286,6 +287,7 @@ function feed(s, chunk) {
         durationMs: u.durationMs,
       });
     }
+    u.endedAt = new Date().toISOString();
     s.pending++;
     s.work = s.work.then(() => handle(s, u)).finally(() => s.pending--);
   }
@@ -320,7 +322,7 @@ function maybePartial(s, now) {
   const t0 = Date.now();
   wavText(pcm, process.env.GJ_WHISPER_PARTIAL_MODEL || undefined)
     .then((text) => {
-      if (sess !== s || !text || s.seg.currentId !== id) return;
+      if (sess !== s || !text || s.finals.has(id)) return;
       const woke = matchWake(text, s.wake);
       if (woke) s.addressed.add(id);
       if (!s.addressed.has(id) && !s.bargeActive) return;
@@ -332,6 +334,14 @@ function maybePartial(s, now) {
 }
 
 async function handle(s, u) {
+  try {
+    await handleOne(s, u);
+  } finally {
+    s.finals.add(u.id);
+  }
+}
+
+async function handleOne(s, u) {
   const text = await wavText(u.pcm);
   if (!text || sess !== s) return;
   // The camera started talking while this was transcribed: it may be its own voice.
@@ -342,6 +352,16 @@ async function handle(s, u) {
   if (!m && !viaBarge) return;
   s.lastWake = Date.now();
   s.partial = null;
+  // Words are only known to be addressed now, so the end of the utterance is reported late, with its time.
+  if (!s.ended.has(u.id))
+    event({
+      type: 'end',
+      id: u.id,
+      endedAt: u.endedAt,
+      late: true,
+      silenceMs: s.endSilenceMs,
+      durationMs: u.durationMs,
+    });
   const e = {
     type: 'final',
     id: u.id,

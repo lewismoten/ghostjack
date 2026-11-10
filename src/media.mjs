@@ -303,6 +303,8 @@ export function listenStream() {
           '16000',
           '-ac',
           '1',
+          '-flush_packets',
+          '1',
           'pipe:1',
         ],
         { stdio: ['ignore', 'pipe', 'ignore'] },
