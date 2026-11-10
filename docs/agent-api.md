@@ -152,7 +152,18 @@ curl -s -H "$H" -X POST $B/api/converse/start -d '{"wake":["patchwork","glasseye
 curl -s -H "$H" $B/api/converse                 # state, last heard, last replies, tones
 curl -s -H "$H" "$B/api/converse/heard?after=12" # events after cursor 12: {cursor, heard:[...]}
 curl -s -H "$H" -X POST $B/api/converse/stop
+curl -s -H "$H" "$B/api/converse/history?since=0&limit=200" # the back-and-forth: {cursor, entries:[...]}
 ```
+
+**History.** `GET /api/converse/history?since=<n>&limit=<k>` returns the
+conversation in order, oldest first:
+`{cursor, entries:[{n, at, who, text, ...}]}` with `who` `you` (his final
+utterances; `followUp` / `interrupted` flags), `patchwork` (each line as sent to
+the speaker) or `mark` (an interruption, with `heard` / `unheard` or `partial`).
+Kept in `~/.cache/ghostjack/converse/history.jsonl` (mode 0600, last 2000
+entries or 7 days; `GJ_CONVERSE_HISTORY` moves it). On the control page it is
+the History fold in the Conversation panel, with Copy all and a Copy button per
+line ("You 4:20 PM: ...").
 
 **Watch the inbox.** Every event is one small JSON line appended to
 `~/.cache/ghostjack/converse/inbox.jsonl` (private to the owner; transcripts

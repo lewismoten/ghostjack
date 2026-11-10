@@ -110,9 +110,12 @@ end, 20 s at most), whisper transcribes each (`ask.mjs`; or a loopback
 `whisper-server`), and only those with a wake word become events in
 `~/.cache/ghostjack/converse/inbox.jsonl` and `GET /api/converse/heard`. WAVs
 are deleted as soon as they are transcribed. `GJ_CONVERSE_INBOX` moves the file.
-The camera's own voice: the microphone is muted while it speaks and for 2.5 s
-after (`GJ_CONVERSE_GUARD_MS`), except that an echo gate watches for Lewis
-talking over it (barge-in). Replies: `reply.mjs` and `say.mjs` (the next line is
+`src/history.mjs` also keeps a readable transcript of both sides in
+`history.jsonl` beside it (`GJ_CONVERSE_HISTORY`), served by
+`GET /api/converse/history?since=&limit=`. The camera's own voice: the
+microphone is muted while it speaks and for 2.5 s after
+(`GJ_CONVERSE_GUARD_MS`), except that an echo gate watches for Lewis talking
+over it (barge-in). Replies: `reply.mjs` and `say.mjs` (the next line is
 synthesized while the last plays; `stopAll()` cuts the line on air). The agent's
 side is in [agent-api.md](agent-api.md); the unmeasured parts are in
 [converse-design.md](converse-design.md).

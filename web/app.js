@@ -1574,6 +1574,85 @@ $('cvSwitch').onchange = async () => {
   }
 };
 $('listenPill').onclick = () => selectTab('glass', true);
+
+// History: the conversation as a chat log. Entries come from /api/converse/history by cursor; the log is
+// rebuilt only when new ones arrive, and keeps its scroll position unless it was already at the bottom.
+const hist = { cursor: 0, entries: [], busy: false };
+const histName = (e) =>
+  e.who === 'you' ? 'You' : e.who === 'patchwork' ? 'Patchwork' : 'Note';
+const histTime = (e) =>
+  new Date(e.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+function histBody(e) {
+  if (e.who !== 'mark') return e.text;
+  const bits = [e.text];
+  if (e.heard) bits.push(`Heard: "${e.heard}"`);
+  if (e.unheard) bits.push(`Not heard: "${e.unheard}"`);
+  if (e.partial) bits.push(`After: "${e.partial}"`);
+  return bits.join('. ');
+}
+const histLine = (e) => `${histName(e)} ${histTime(e)}: ${histBody(e)}`;
+async function copyText(text, note) {
+  try {
+    await navigator.clipboard.writeText(text);
+    $('cvHistNote').textContent = note;
+  } catch {
+    $('cvHistNote').textContent = 'Copy blocked; select the text and copy it.';
+  }
+  setTimeout(() => ($('cvHistNote').textContent = '\u00a0'), 2500);
+}
+function histRow(e) {
+  const row = document.createElement('div');
+  row.className = `ent ${e.who}`;
+  const p = document.createElement('p');
+  const who = document.createElement('span');
+  who.className = 'who';
+  who.textContent = `${histName(e)} ${histTime(e)}: `;
+  p.append(who, histBody(e));
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.textContent = 'Copy';
+  b.setAttribute('aria-label', `Copy: ${histLine(e).slice(0, 60)}`);
+  b.onclick = () => copyText(histLine(e), 'Copied one line.');
+  row.append(p, b);
+  return row;
+}
+async function pollHistory() {
+  if (hist.busy || !$('cvHist').open) return;
+  hist.busy = true;
+  try {
+    const r = await api(
+      `/api/converse/history?since=${hist.cursor}&limit=2000`,
+    );
+    if (!r.ok) return;
+    const j = await r.json();
+    hist.cursor = j.cursor;
+    if (!j.entries.length) return;
+    const log = $('cvLog');
+    const atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 8;
+    if (!hist.entries.length) log.textContent = '';
+    hist.entries.push(...j.entries);
+    for (const e of j.entries) log.append(histRow(e));
+    $('cvHistCount').textContent = `(${hist.entries.length})`;
+    if (atEnd) log.scrollTop = log.scrollHeight;
+  } catch {
+    /* the bridge is away */
+  } finally {
+    hist.busy = false;
+  }
+}
+$('cvHist').ontoggle = () => {
+  pollHistory();
+  const log = $('cvLog');
+  log.scrollTop = log.scrollHeight;
+};
+$('cvHistCopy').onclick = () =>
+  hist.entries.length
+    ? copyText(
+        hist.entries.map(histLine).join('\n'),
+        'Copied the whole history.',
+      )
+    : ($('cvHistNote').textContent = 'Nothing to copy yet.');
+setInterval(pollHistory, 1500);
 setInterval(pollConverse, 1000);
 
 // Name the shot in a small form that takes the strip's place (no pop-up).

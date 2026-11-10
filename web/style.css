@@ -1673,3 +1673,62 @@ code {
   height: 9em;
   overflow-y: auto;
 }
+
+/* Conversation history: a fixed-height chat log, selectable, one copy button per line. */
+.cvhist {
+  margin-top: 12px;
+}
+.cvhist summary {
+  cursor: pointer;
+  font: 600 0.95rem var(--mono);
+  color: var(--cyan);
+  min-height: 24px;
+}
+.chatlog {
+  height: 18rem;
+  overflow-y: auto;
+  margin-top: 8px;
+  padding: 6px 10px;
+  border: 1px dashed var(--line);
+  border-radius: 4px;
+  font: 0.85rem/1.4 var(--mono);
+  color: var(--fg);
+  user-select: text;
+}
+.chatlog .empty {
+  color: var(--dim);
+  margin: 4px 0;
+}
+.chatlog .ent {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 3px 0;
+}
+.chatlog .ent p {
+  flex: 1;
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.chatlog .ent.patchwork .who {
+  color: var(--magenta);
+}
+.chatlog .ent.you .who {
+  color: var(--cyan);
+}
+.chatlog .ent.mark p {
+  color: var(--dim);
+  font-style: italic;
+}
+.chatlog .who {
+  font-weight: 700;
+}
+.chatlog .ent button {
+  flex: none;
+  min-width: 44px;
+  min-height: 28px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+}

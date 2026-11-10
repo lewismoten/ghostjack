@@ -7,6 +7,9 @@ follow [SemVer](https://semver.org/).
 
 ### Added
 
+- Conversation history: both sides in order
+  (`~/.cache/ghostjack/converse/history.jsonl`, `GET /api/converse/history`),
+  shown as a copyable chat log on the control page.
 - Conversation mode (`/api/converse/*`): listens to the camera microphone, keeps
   what contains a wake word (patchwork, glasseye), writes transcripts as JSON
   lines to `~/.cache/ghostjack/converse/inbox.jsonl` and
