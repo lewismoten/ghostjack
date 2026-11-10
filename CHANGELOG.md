@@ -7,6 +7,22 @@ follow [SemVer](https://semver.org/).
 
 ### Added
 
+- Personas (`personas/*.json`, `GET /api/personas`): a voice, rate, level,
+  style, wake words, pronunciations and transcriber word list per agent. A
+  `persona` or `agent` (or `X-GJ-Agent`) on say, reply and converse start picks
+  one; Lewis sets the default, assigns agents and can lock it in the Personas
+  dialog. His choices live in `~/.config/ghostjack/personas.local.json`.
+  `GET /api/agent-guide`, `docs/agent-guide.md` and `docs/glossary.md` teach an
+  agent how to use the device and how to speak.
+- Wake acknowledgment: a short rising bleep as soon as the wake word is
+  recognized (first look at 0.7 s of speech), without muting the microphone; a
+  wake-word-only utterance opens the follow-up window (`wakeOnly` on the final,
+  "waiting" in the history).
+- The transcriber gets a word list (`prompt`) of names; utterances may run 30 s
+  (was 20 s: 4 of 10 kept utterances hit the cap); whisper's stock silence
+  phrases ("Thank you.") over quiet sound are dropped and no longer restart the
+  follow-up window.
+
 - Conversation history: both sides in order
   (`~/.cache/ghostjack/converse/history.jsonl`, `GET /api/converse/history`),
   shown as a copyable chat log on the control page.

@@ -141,6 +141,18 @@ The page can answer by button: `GET /api/ask/pending` shows it the open ask and
 `POST /api/ask/<id>/answer {"choice":"b"}` answers it; whichever comes first
 wins. Poll every second or two and give up after about thirty.
 
+## Personas and this guide
+
+`GET /api/agent-guide` returns [agent-guide.md](agent-guide.md) as
+text/markdown. `GET /api/personas` and `GET /api/personas/<name>` list the
+personas (voice, rate, level, style, wake words, pronunciations, word list).
+`say`, `reply` and `converse/start` take an optional `persona` and `agent` (or
+the `X-GJ-Agent` header): the persona's voice, rate, level and pronunciations
+apply, and its wake words and tones for a conversation. An unknown `persona` is
+a 400; with Lewis's lock on, a requested `persona` is ignored. Explicit `voice`,
+`rate` and `level` win. Lewis edits them in the Personas dialog; the edit routes
+(`PUT`/`DELETE /api/personas/<name>`, `POST /api/personas/settings`) are his.
+
 ## Conversation: `/api/converse`
 
 Lewis talks in the room, you read it as text, and your replies come out of the
@@ -171,6 +183,10 @@ only, never audio). Watch it with a file monitor:
 `tail -n0 -F ~/.cache/ghostjack/converse/inbox.jsonl`. Events (all have `n`,
 `at`, `type`):
 
+- `wake` `{id, via, afterMs}`: the wake word was recognized and the short rising
+  bleep played (once per utterance; off unless the persona's `wake` tone is on).
+  Wait for the words. A `final` with `wakeOnly:true` is just the wake word: do
+  not answer; his next sentence follows without a wake word.
 - `partial` `{id, text}`: what Lewis has said so far, while he is still talking.
   Only sent once a wake word has shown (or after an interruption).
 - `end` `{id, silenceMs, durationMs}`: he stopped talking (turn-taking). If

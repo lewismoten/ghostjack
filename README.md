@@ -45,6 +45,9 @@ and Tailscale: [docs/bridge.md](docs/bridge.md). Changes:
 
 - [The bridge and control page](docs/bridge.md): endpoints, say, the stream,
   Tailscale, GitHub Pages.
+- [Agent guide](docs/agent-guide.md) (how an agent uses Ghost Jack and speaks
+  through it), [glossary](docs/glossary.md) and [personas](personas/): a voice
+  and style per agent, set from the control page.
 - [Finding the camera](docs/discovery.md): the dated log from "is the USB cable
   data?" to signing in, moving, streaming, listening and talking.
 - [Glassmouth](docs/glassmouth.md),

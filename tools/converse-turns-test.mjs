@@ -149,7 +149,13 @@ test('tones are short, distinct and quiet', () => {
 test('tone switches: quiet by default except the interruption cue; unknown kinds refused', () => {
   assert.deepEqual(
     { ...tones },
-    { start: false, done: false, interrupting: true, heard: false },
+    {
+      start: false,
+      done: false,
+      interrupting: true,
+      heard: false,
+      wake: false,
+    },
   );
   assert.equal(setTones({ done: true }).done, true);
   setTones({ done: false });
