@@ -36,15 +36,21 @@ export const active = () =>
   [...recs.values()].find((r) => r.status === 'recording');
 
 // Set by media.mjs while an agent's clip or listen runs: one capture at a time.
-export const gate = { busy: false };
+export const gate = { busy: false, starting: false };
 
 export async function start() {
   if (gate.busy)
     throw Object.assign(new Error('a clip is being recorded'), { code: 409 });
-  if (active())
+  if (active() || gate.starting)
     throw Object.assign(new Error('already recording'), { code: 409 });
-  mkdirSync(DIR, { recursive: true });
-  const url = await camera.streamUrl(); // never logged or sent to the client
+  gate.starting = true; // set before the await: a second start in the gap is refused
+  let url;
+  try {
+    mkdirSync(DIR, { recursive: true });
+    url = await camera.streamUrl(); // never logged or sent to the client
+  } finally {
+    gate.starting = false;
+  }
   const id = randomBytes(6).toString('hex');
   const file = join(DIR, `rec-${id}.mp4`);
   const r = {
