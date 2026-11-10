@@ -392,6 +392,9 @@ async function handleOne(s, u) {
       text,
     );
   dlog('keep', u, m ? 'wake word' : viaBarge ? 'barge' : 'follow-up', text);
+  // the follow-up window also restarts when Lewis is heard, so a long answer cut at the 20 s utterance
+  // limit (or several sentences in a row) stays in the conversation (2026-11-10: the rest was dropped)
+  s.lastSpokeAt = Date.now();
   s.lastWake = Date.now();
   s.partial = null;
   // Words are only known to be addressed now, so the end of the utterance is reported late, with its time.
