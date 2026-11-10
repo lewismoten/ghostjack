@@ -1482,7 +1482,17 @@ setInterval(pollAsk, 2000);
 // Conversation (POST /api/converse/start and /stop): the switch, a Listening light in the header that is
 // on whenever the microphone is being heard, the live partial transcript, what is playing, what was heard
 // and said, and where interruptions happened.
+// Only touch the page when something changed: rebuilding every second made the panel flash and jump.
+const cvLast = new Map();
+const cvText = (id, text) => {
+  if (cvLast.get(id) === text) return;
+  cvLast.set(id, text);
+  $(id).textContent = text;
+};
 const cvList = (id, rows, empty) => {
+  const key = JSON.stringify(rows);
+  if (cvLast.get(id) === key) return;
+  cvLast.set(id, key);
   const ul = $(id);
   ul.replaceChildren();
   if (!rows.length) {
@@ -1514,13 +1524,16 @@ async function pollConverse() {
         ? `Listening: on, ${j.state}. Open the Relay tab to turn it off`
         : 'Listening: off. Open the Relay tab to turn conversation on',
     );
-    $('cvState').textContent = on
-      ? `Listening. ${j.state}. Off in ${Math.ceil(j.idleLeftSeconds / 60)} min without a wake word.`
-      : j.lastStop
-        ? `Off (${j.lastStop.reason}).`
-        : 'Off';
-    $('cvPartial').textContent = j.partial ? `Hearing: ${j.partial.text}` : '';
-    $('cvPlaying').textContent = j.playing ? `Speaking: ${j.playing.text}` : '';
+    cvText(
+      'cvState',
+      on
+        ? `Listening. ${j.state}. Off in ${Math.ceil(j.idleLeftSeconds / 60)} min without a wake word.`
+        : j.lastStop
+          ? `Off (${j.lastStop.reason}).`
+          : 'Off',
+    );
+    cvText('cvPartial', j.partial ? `Hearing: ${j.partial.text}` : '\u00a0');
+    cvText('cvPlaying', j.playing ? `Speaking: ${j.playing.text}` : '\u00a0');
     cvList(
       'cvHeard',
       j.heard.map((e) => e.text),

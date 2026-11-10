@@ -1660,3 +1660,16 @@ code {
 .help .hint {
   margin: 4px 0 0;
 }
+
+/* Conversation panel: fixed heights so live text doesn't push the page up and down */
+#cvPartial,
+#cvPlaying {
+  min-height: 3.2em;
+  overflow: hidden;
+}
+#cvHeard,
+#cvReplies,
+#cvMarks {
+  height: 9em;
+  overflow-y: auto;
+}
