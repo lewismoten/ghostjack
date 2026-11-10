@@ -11,7 +11,7 @@ import { note } from './history.mjs';
 
 // The camera's amp sleeps soon after sound stops: only a line that starts within AWAKE_MS of the last one
 // skips the wake pulse (10 s lost the first word of the next reply on the real camera, 2026-11-10).
-const AWAKE_MS = Number(process.env.GJ_AWAKE_MS) || 2500;
+const AWAKE_MS = speech.AWAKE_MS;
 
 export const MAX_REPLY_CHARS = 2400;
 // Tones, each on or off. Only the interruption tone is on by default; all are quiet and short.

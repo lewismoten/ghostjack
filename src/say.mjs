@@ -263,7 +263,9 @@ async function prepare(job) {
   const leadMs = job.fast
     ? 350
     : (1 + WAKE_SEC + WAKE_GAP + (job.chime ? 0.2 + CUE_GAP : 0)) * 1000;
-  const tailMs = job.fast ? (Number(process.env.GJ_FAST_TAIL_SEC) || 0.9) * 1000 : 1500;
+  const tailMs = job.fast
+    ? (Number(process.env.GJ_FAST_TAIL_SEC) || 0.9) * 1000
+    : 1500;
   return {
     file,
     mixed,
@@ -271,11 +273,26 @@ async function prepare(job) {
   };
 }
 
+// The camera's amp sleeps soon after sound stops: a line mixed without the wake pulse ("fast") may only
+// start within AWAKE_MS of the last publish ending (reply.mjs asks the same question when it queues a line).
+export const AWAKE_MS = Number(process.env.GJ_AWAKE_MS) || 2500;
+// A fast line was decided when it was queued; a slow camera link can delay its publish past that window
+// (2026-11-10: gaps of 5 s between lines of one reply, then the next line lost its start). True when it must
+// be mixed again with the wake pulse.
+export const staleFast = (job, lastEnd, now = Date.now()) =>
+  !!job.fast && now - lastEnd >= AWAKE_MS;
+let lastPublishEnd = 0;
+
 let current = null; // { job, proc } while a line is being published
 async function speak(job) {
   let prep = null;
   try {
     prep = await job.prep;
+    if (staleFast(job, lastPublishEnd)) {
+      job.fast = false;
+      job.prep = prepare(job); // the speech is already synthesized (job.file); only the mix is redone
+      prep = await job.prep;
+    }
     if (job.status === 'cancelled') return;
     job.status = 'speaking';
     const url = await camera.talkUrl();
@@ -299,6 +316,7 @@ async function speak(job) {
   } finally {
     current = null;
     job.endedAt = Date.now();
+    lastPublishEnd = job.endedAt;
     if (prep) {
       rmSync(prep.mixed, { force: true });
       if (existsSync(prep.file)) rmSync(prep.file, { force: true });
