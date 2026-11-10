@@ -303,7 +303,9 @@ const logLine = (o) =>
   console.log(`[say] ${JSON.stringify({ t: new Date().toISOString(), ...o })}`);
 
 let current = null; // the stream being published
+let running = null; // the stream being set up or published (current, plus while its talk link is asked for)
 async function runStream(st) {
+  running = st;
   let url = null;
   let error = null;
   let timer = null;
@@ -313,7 +315,7 @@ async function runStream(st) {
     url = await camera.talkUrl();
     st.log({ ev: 'talk', stream: st.id, talkMs: Date.now() - asked });
     if (st.stopped) return;
-    const first = st.jobs[0];
+    const first = st.jobs[0] ?? { fast: st.warm };
     const now = Date.now();
     current = st;
     st.begin(
@@ -336,6 +338,8 @@ async function runStream(st) {
   } finally {
     clearInterval(timer);
     current = null;
+    running = null;
+    if (warmStream === st) warmStream = null;
     // an unfinished publish can jam the speaker: after a cut or a failure, free it with a short silent one
     if (url && (st.stopped || error)) await silentPublish(url).catch(() => {});
     const t = Date.now();
@@ -364,8 +368,10 @@ async function pump() {
 let endedAt = 0;
 // Is the speaker busy (or about to be), when it last finished, and the sentence now on air (its loudness
 // envelope, for converse mode's echo handling).
+// A warm stream with nothing to say yet (the link held open for the wake bleep) is not the camera speaking.
+const idleWarm = (st) => st?.warm && !st.jobs.length;
 export const activity = () => ({
-  speaking: busy || streams.length > 0,
+  speaking: streams.some((st) => !idleWarm(st)) || (busy && !idleWarm(running)),
   endedAt,
   playing: current?.handle ? current.currentJob(Date.now()) : null,
 });
@@ -387,14 +393,17 @@ export const jobInfo = (id) => jobs.get(id) || null;
 
 // A stream: the pieces of one reply (or one say) played as a single continuous publish. add() a sentence as
 // soon as it exists; end() when there is no more. The first sentence's level and chime set the lead-in.
-export function openStream({ label = 'say' } = {}) {
+export function openStream({ label = 'say', warm = false, cfg = {} } = {}) {
   const id = randomBytes(6).toString('hex');
+  // a real stream takes the camera link over from a warm one right away
+  if (!warm) releaseWarm('hand over');
   const st = new SpeechStream({
     openPublish,
     log: (o) => logLine({ kind: label, ...o }),
-    cfg: streamConfig(),
+    cfg: { ...streamConfig(), ...cfg },
     id,
   });
+  st.warm = warm;
   streams.push(st);
   pump();
   return {
@@ -419,6 +428,7 @@ function addJob(
     file = null, // an audio file to play instead of synthesizing text (deleted afterward)
     band = true,
     fast = false,
+    pcm = null, // ready 16 kHz mono PCM to play as it is (no synthesis or conditioning)
   },
 ) {
   const id = randomBytes(6).toString('hex');
@@ -434,11 +444,12 @@ function addJob(
     file,
     band,
     fast,
+    pcm,
   };
   jobs.set(id, job);
   if (jobs.size > 50) jobs.delete(jobs.keys().next().value);
   st.add(job);
-  prepare(job);
+  if (!pcm) prepare(job);
   return { id, status: job.status };
 }
 
@@ -448,6 +459,55 @@ export function say(spec) {
   const s = openStream({ label: 'say' });
   const r = s.add(spec);
   s.end();
+  return r;
+}
+
+// The warm link: converse mode opens a publish when someone starts talking (before the wake word is even
+// recognized) so the bleep only has to be written into it, skipping the talk request and the publish setup.
+// It plays a very low tone (GJ_WARM_PEAK, default 0.003 of full scale; 0 is silence) and ends itself after
+// GJ_WARM_IDLE_MS (4 s). A real stream (a reply) hands it over at once; stop, converse off and errors end it.
+let warmStream = null;
+const warmUsable = () =>
+  warmStream &&
+  !warmStream.ended &&
+  !warmStream.stopped &&
+  !warmStream.finished;
+export function openWarm() {
+  if (warmUsable()) return warmStream;
+  if (streams.some((st) => !idleWarm(st)) || (running && !idleWarm(running)))
+    return null; // the camera is in use
+  const peak = process.env.GJ_WARM_PEAK ?? '0.003';
+  const w = openStream({
+    label: 'wake-warm',
+    warm: true,
+    cfg: {
+      aheadMs: 600,
+      fillAheadMs: 120,
+      tailMs: 150,
+      idleEndMs: Number(process.env.GJ_WARM_IDLE_MS) || 4000,
+      keepalive: Number(peak) > 0 ? 'tone' : 'silence',
+      keepalivePeak: Number(peak) || 0,
+    },
+  });
+  warmStream = w.stream;
+  logLine({ kind: 'wake-warm', ev: 'warm-open', stream: w.id });
+  return warmStream;
+}
+// Close the warm link cleanly (a reply needs it, the session ended, or nobody woke it).
+export function releaseWarm(why = 'released') {
+  const st = warmStream;
+  if (!st || st.ended) return false;
+  st.end();
+  logLine({ kind: 'wake-warm', ev: 'warm-release', stream: st.id, why });
+  return true;
+}
+// A short line that should come out as soon as possible: into the warm link when it is open, else its own stream.
+export function sayFast(spec) {
+  if (!warmUsable()) return say({ ...spec, fast: true });
+  const st = warmStream;
+  const r = addJob(st, { ...spec, fast: true });
+  st.end();
+  logLine({ kind: 'wake-warm', ev: 'warm-used', stream: st.id, job: r.id });
   return r;
 }
 

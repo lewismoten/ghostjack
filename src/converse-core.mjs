@@ -64,6 +64,16 @@ export class Segmenter {
   get speaking() {
     return !!this.utter;
   }
+  // The utterance in progress: how long it has been voiced, how long quiet since the last voiced frame, its length.
+  get voicedMs() {
+    return this.utter ? this.utter.voiced * this.o.frameMs : 0;
+  }
+  get quietMs() {
+    return this.utter ? this.utter.quiet * this.o.frameMs : 0;
+  }
+  get lengthMs() {
+    return this.utter ? this.utter.frames.length * this.o.frameMs : 0;
+  }
   // Feed PCM; returns the utterances that finished: [{ pcm, durationMs, voicedMs }].
   push(chunk) {
     const out = [];
@@ -340,6 +350,42 @@ export function isWakeOnly(text, wake) {
 }
 
 // One bleep per utterance: ack(id) is true the first time only.
+// When to look for a wake word in an utterance still in progress, without waiting for the end-of-utterance
+// silence: once ~0.5 s of it is voiced ('voiced'), and again when a short voiced burst has gone quiet for
+// ~250 ms ('burst'), as a wake word alone does. Long utterances are left to the ordinary partials.
+export class WakeTrigger {
+  constructor({
+    voicedMs = 500,
+    quietMs = 250,
+    maxMs = 3500,
+    spacingMs = 300,
+  } = {}) {
+    Object.assign(this, { voicedMs, quietMs, maxMs, spacingMs });
+    this.reset(null);
+  }
+  reset(id) {
+    this.id = id;
+    this.lastAt = -Infinity;
+    this.lastVoiced = 0;
+    this.checks = 0;
+  }
+  // m: { id, voicedMs, quietMs, lengthMs, now }. Returns 'voiced', 'burst' or null (and counts the check).
+  check(m) {
+    if (m.id !== this.id) this.reset(m.id);
+    if (m.lengthMs > this.maxMs || m.voicedMs < this.voicedMs) return null;
+    if (m.now - this.lastAt < this.spacingMs) return null;
+    let kind = null;
+    if (!this.checks) kind = m.quietMs >= this.quietMs ? 'burst' : 'voiced';
+    else if (m.quietMs >= this.quietMs && m.voicedMs - this.lastVoiced >= 100)
+      kind = 'burst';
+    if (!kind) return null;
+    this.checks++;
+    this.lastAt = m.now;
+    this.lastVoiced = m.voicedMs;
+    return kind;
+  }
+}
+
 export class WakeAck {
   constructor(keep = 50) {
     this.seen = new Set();

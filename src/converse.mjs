@@ -28,6 +28,7 @@ import {
   SILENCE_PHRASES,
   normText,
   WakeAck,
+  WakeTrigger,
   BleepFilter,
   matchWake,
   rms,
@@ -181,6 +182,8 @@ export function start({
     partialBusy: false,
     addressed: new Set(), // utterance ids that have shown a wake word
     wakeAck: new WakeAck(), // one bleep per utterance
+    trigger: new WakeTrigger(), // when to look for a wake word before the utterance ends
+    quickBusy: false,
     bleep: new BleepFilter(),
     persona: persona?.name ?? null,
     ended: new Set(), // ids whose end was reported
@@ -203,6 +206,7 @@ export function stop(reason = 'switched off') {
   const s = sess;
   if (!s) return status();
   sess = null;
+  speech.releaseWarm('converse stopped');
   lastStop = { reason, at: new Date().toISOString() };
   s.handle?.cancel();
   return status();
@@ -293,12 +297,15 @@ const speakingNow = (s, now = Date.now()) =>
   speech.activity().speaking && !bleeping(s, now);
 
 // A wake word was recognized in utterance `id`: play the bleep (once, only when the camera is quiet).
-function wakeBleep(s, id, via, speechStartedAt) {
+// `wakeEndAt` is when the word stopped being spoken (a guess for the final), for the audible-delay estimate.
+function wakeBleep(s, id, via, speechStartedAt, wakeEndAt = Date.now()) {
   if (!reply.tones.wake || !s.wakeAck.ack(id)) return;
   if (speech.activity().speaking) return; // a reply is on air: barge-in covers it
   const at = Date.now();
   s.bleepArmed = false;
   s.bleepSeen = at;
+  s.bleepLogged = false;
+  s.wakeEndAt = wakeEndAt;
   s.bleepJob = reply.playTone('wake', { fast: true })?.id ?? null;
   event({
     type: 'wake',
@@ -309,8 +316,70 @@ function wakeBleep(s, id, via, speechStartedAt) {
   dlog(
     'wake',
     { id, durationMs: 0 },
-    `${via} bleep after ${speechStartedAt ? at - speechStartedAt : '?'} ms of speech`,
+    `wake detected after ${speechStartedAt ? at - speechStartedAt : '?'} ms (${via}), ${at - wakeEndAt} ms after the word ended`,
   );
+}
+
+// Log when the bleep should be audible: its place in the publish plus the camera's playback delay (an estimate).
+function logBleepAudible(s) {
+  if (!s.bleepJob || s.bleepLogged) return;
+  const j = speech.jobInfo(s.bleepJob);
+  if (!j?.publishAt || !j.ref) return;
+  s.bleepLogged = true;
+  const at = j.publishAt + j.ref.leadMs + PLAY_LATENCY_MS();
+  dlog(
+    'wake',
+    { id: 0, durationMs: 0 },
+    `bleep audible at ~${Math.round(at - s.wakeEndAt)} ms after the wake word ended`,
+  );
+}
+
+// A quick look for the wake word in what has been said so far, at the moments WakeTrigger names. Also holds
+// the camera link open while someone is talking (see speech.openWarm), so the bleep can be written at once.
+function maybeQuick(s, now) {
+  if (!reply.tones.wake) return;
+  const id = s.seg.currentId;
+  if (s.addressed.has(id) || s.bargeActive) return;
+  if (
+    s.seg.voicedMs >= num('GJ_WARM_AFTER_MS', 300) &&
+    !speech.activity().speaking
+  )
+    speech.openWarm();
+  if (s.partialBusy || s.quickBusy) return;
+  const kind = s.trigger.check({
+    id,
+    voicedMs: s.seg.voicedMs,
+    quietMs: s.seg.quietMs,
+    lengthMs: s.seg.lengthMs,
+    now,
+  });
+  if (!kind) return;
+  const pcm = s.seg.snapshot();
+  if (!pcm) return;
+  const wakeEndAt = now - s.seg.quietMs;
+  s.quickBusy = true;
+  const t0 = Date.now();
+  // the first 2.5 s is plenty for a name: a short clip keeps the check fast
+  wavText(
+    pcm.subarray(0, 80000),
+    process.env.GJ_WHISPER_PARTIAL_MODEL || undefined,
+    s.persona,
+  )
+    .then((text) => {
+      dlog(
+        'quick',
+        { id, durationMs: 0 },
+        `${kind} check ${Date.now() - t0} ms`,
+        text,
+      );
+      if (sess !== s || !text || s.finals.has(id) || s.addressed.has(id))
+        return;
+      if (matchWake(text, s.wake)) {
+        s.addressed.add(id);
+        wakeBleep(s, id, kind, s.speechStart, wakeEndAt);
+      }
+    })
+    .finally(() => (s.quickBusy = false));
 }
 
 function feed(s, chunk0) {
@@ -379,8 +448,11 @@ function feed(s, chunk0) {
     s.partialAt = now - (PARTIAL_EVERY_MS() - WAKE_FIRST_MS());
     s.speechStart = now;
   }
-  if (s.seg.speaking) maybePartial(s, now);
-  else s.partial = null;
+  if (s.seg.speaking) {
+    maybeQuick(s, now);
+    maybePartial(s, now);
+  } else s.partial = null;
+  logBleepAudible(s);
 }
 
 async function wavText(pcm, model, persona) {
@@ -461,7 +533,9 @@ async function handleOne(s, u) {
       u.id,
       'final',
       u.endedAt ? Date.parse(u.endedAt) - u.durationMs : null,
+      u.endedAt ? Date.parse(u.endedAt) - s.endSilenceMs : Date.now(),
     );
+  else speech.releaseWarm('no wake word'); // nobody to bleep for
   const wakeOnly = !!m && isWakeOnly(text, s.wake);
   const viaBarge = s.bargeActive;
   // After the camera has spoken, Lewis may just answer: an utterance that starts within FOLLOW_MS of the

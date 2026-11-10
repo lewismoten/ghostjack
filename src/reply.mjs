@@ -56,8 +56,30 @@ export function noteReply(text) {
 export const recentLines = () => recent.slice(-5);
 
 // Play a named tone through the speaker (its own short stream; the lead-in is chosen when it opens).
+// A tone as ready PCM, scaled like speech.prepare would (peak -3 dBFS, then by level), so a fast tone needs no ffmpeg.
+export function tonePcm(kind, level) {
+  const w = toneWav(kind);
+  const pcm = Buffer.from(w.subarray(44));
+  let peak = 1;
+  for (let i = 0; i + 1 < pcm.length; i += 2)
+    peak = Math.max(peak, Math.abs(pcm.readInt16LE(i)));
+  const k = (0.7079 * level * 32767) / peak;
+  for (let i = 0; i + 1 < pcm.length; i += 2)
+    pcm.writeInt16LE(Math.round(pcm.readInt16LE(i) * k), i);
+  return pcm;
+}
+
 export function playTone(kind, { force = false, fast = false } = {}) {
   if (!force && !tones[kind]) return null;
+  if (fast)
+    return speech.sayFast({
+      pcm: tonePcm(
+        kind,
+        speech.capLevel(Number(process.env.GJ_REPLY_LEVEL) || 0.03),
+      ),
+      chime: false,
+      band: false,
+    });
   mkdirSync(TMP, { recursive: true });
   const file = join(TMP, `tone-${randomBytes(6).toString('hex')}.wav`);
   writeFileSync(file, toneWav(kind));
