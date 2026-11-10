@@ -8,6 +8,10 @@ import * as speech from './say.mjs';
 import { takeSegments, toneWav, TONE_KINDS } from './converse-turns.mjs';
 import { TMP } from './paths.mjs';
 
+// The camera's amp sleeps soon after sound stops: only a line that starts within AWAKE_MS of the last one
+// skips the wake pulse (10 s lost the first word of the next reply on the real camera, 2026-11-10).
+const AWAKE_MS = Number(process.env.GJ_AWAKE_MS) || 2500;
+
 export const MAX_REPLY_CHARS = 2400;
 // Tones, each on or off. Only the interruption tone is on by default; all are quiet and short.
 export const tones = {
@@ -56,7 +60,7 @@ export function playTone(kind, { force = false } = {}) {
     chime: false,
     band: false,
     level: speech.capLevel(0.02),
-    fast: a.speaking || Date.now() - a.endedAt < 10000,
+    fast: a.speaking || Date.now() - a.endedAt < AWAKE_MS,
   });
 }
 
@@ -99,7 +103,7 @@ export function append({ id, text, end, voice, level, rate }) {
       chime: false,
       chimeLevel: 0.008,
       fast:
-        r.segments.length > 0 && (a.speaking || Date.now() - a.endedAt < 10000),
+        r.segments.length > 0 && (a.speaking || Date.now() - a.endedAt < AWAKE_MS),
     });
     r.segments.push({ id: job.id, text });
     noteReply(text);

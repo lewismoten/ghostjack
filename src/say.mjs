@@ -141,7 +141,7 @@ export async function speechArgs(
   const speechPeak = 0.7079 * level; // speech is normalized to -3 dBFS, then scaled by level
   // fast: a short cue right after the speaker was in use (the amp is awake): no wake pulse, tiny lead and tail.
   const seg = fast
-    ? [sil(0.1)]
+    ? [sil(0.35)]
     : [
         sil(1), // lead-in: the link settles
         // The wake pulse (0.1.2): the camera's amp wakes on sound, and until it has, the first words are
@@ -261,9 +261,9 @@ async function prepare(job) {
   }
   const totalMs = (pcm.length / 32000) * 1000;
   const leadMs = job.fast
-    ? 100
+    ? 350
     : (1 + WAKE_SEC + WAKE_GAP + (job.chime ? 0.2 + CUE_GAP : 0)) * 1000;
-  const tailMs = job.fast ? 400 : 1500;
+  const tailMs = job.fast ? (Number(process.env.GJ_FAST_TAIL_SEC) || 0.9) * 1000 : 1500;
   return {
     file,
     mixed,
