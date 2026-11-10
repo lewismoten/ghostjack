@@ -16,6 +16,8 @@ const MODEL = () =>
   process.env.GJ_WHISPER_MODEL ||
   join(homedir(), '.cache', 'whisper-cpp', 'ggml-large-v3.bin');
 
+export const whisperReady = () => existsSync(WHISPER()) && existsSync(MODEL());
+
 export const LETTERS = ['a', 'b', 'c', 'd'];
 // Words a transcriber writes for a spoken letter. Spoken to the camera as the first word of each pair
 // (a text-to-speech voice reads a bare "A" as the article).

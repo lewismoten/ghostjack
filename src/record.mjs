@@ -36,9 +36,11 @@ export const active = () =>
   [...recs.values()].find((r) => r.status === 'recording');
 
 // Set by media.mjs while an agent's clip or listen runs: one capture at a time.
-export const gate = { busy: false, starting: false };
+export const gate = { busy: false, starting: false, preempt: null };
+// gate.preempt: set while converse mode listens; calling it frees the camera for a recording or clip.
 
 export async function start() {
+  if (gate.busy && gate.preempt) gate.preempt();
   if (gate.busy)
     throw Object.assign(new Error('a clip is being recorded'), { code: 409 });
   if (active() || gate.starting)

@@ -2,6 +2,7 @@
 // picture has settled after a move, and short recordings (MP4 clips, WAV or M4A audio) made from a
 // fresh RTSP address. One clip or listen at a time, and never while the page's recording runs.
 import { spawn } from 'node:child_process';
+import { PassThrough } from 'node:stream';
 import { mkdirSync, rmSync, statSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { dirname, join } from 'node:path';
@@ -149,6 +150,7 @@ let busy = false;
 // Record `seconds` from a fresh stream address into a temp file. Returns { done, cancel }: `done`
 // resolves to the file path (the caller deletes it) and rejects with code 409/499/502.
 function capture(seconds, ext, outArgs) {
+  if (busy && rec.gate.preempt) rec.gate.preempt(); // converse mode steps aside for a clip
   if (busy || rec.active() || rec.gate.starting)
     throw Object.assign(new Error('the camera is already recording'), {
       code: 409,
@@ -251,4 +253,74 @@ export function listen(seconds, format = 'wav') {
       ? ['-c:a', 'aac', '-ar', '16000', '-ac', '1', '-b:a', '48k']
       : ['-c:a', 'pcm_s16le', '-ar', '16000', '-ac', '1']),
   ]);
+}
+
+// Continuous microphone audio for converse mode: raw 16 kHz mono s16le on `stream`, until `cancel()`, a
+// clip or recording asking for the camera (it steps aside: `preempted()` is then true), or the camera
+// dropping the stream. Holds the same one-capture lock as clip and listen.
+export function listenStream() {
+  if (busy || rec.active() || rec.gate.starting)
+    throw Object.assign(new Error('the camera is already recording'), {
+      code: 409,
+    });
+  busy = true;
+  rec.gate.busy = true;
+  const out = new PassThrough();
+  let proc = null,
+    cancelled = false,
+    released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    busy = false;
+    rec.gate.busy = false;
+    if (rec.gate.preempt === cancel) rec.gate.preempt = null;
+  };
+  const cancel = () => {
+    cancelled = true;
+    proc?.kill('SIGKILL');
+    release();
+    out.end();
+  };
+  rec.gate.preempt = cancel;
+  (async () => {
+    try {
+      const url = await camera.streamUrl();
+      if (cancelled) return;
+      proc = spawn(
+        FFMPEG,
+        [
+          '-hide_banner',
+          '-loglevel',
+          'error',
+          ...inputArgs(url),
+          '-vn',
+          '-map',
+          '0:a:0',
+          '-f',
+          's16le',
+          '-ar',
+          '16000',
+          '-ac',
+          '1',
+          'pipe:1',
+        ],
+        { stdio: ['ignore', 'pipe', 'ignore'] },
+      );
+      children.add(proc);
+      proc.stdout.pipe(out);
+      proc.on('error', () => {
+        release();
+        out.end();
+      });
+      proc.on('close', () => {
+        children.delete(proc);
+        release();
+      });
+    } catch {
+      release();
+      out.end();
+    }
+  })();
+  return { stream: out, cancel, preempted: () => cancelled };
 }

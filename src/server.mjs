@@ -20,6 +20,8 @@ import * as speech from './say.mjs';
 import * as rec from './record.mjs';
 import * as media from './media.mjs';
 import * as asker from './ask.mjs';
+import * as converse from './converse.mjs';
+import { splitLines } from './converse-core.mjs';
 import { streamVideo } from './stream.mjs';
 
 const PORT = Number(process.env.PORT) || 8787;
@@ -648,6 +650,7 @@ const server = createServer(async (req, res) => {
         90,
         Math.min(220, Math.round(Number(b.rate ?? 140) || 140)),
       );
+      converse.noteReply(text);
       return json(res, 202, {
         level,
         chimeLevel: b.chime === false ? null : chimeLevel,
@@ -661,6 +664,68 @@ const server = createServer(async (req, res) => {
         }),
       });
     }
+    if (route === 'POST /api/say/many') {
+      const b = await readBody(req);
+      // `lines`: up to 8 texts of 300 characters, spoken in order; or `text` of any length up to 2400,
+      // split at sentence ends into lines of about 280. Only the first line gets the attention chime.
+      let lines = Array.isArray(b.lines)
+        ? b.lines.map((l) =>
+            String(l ?? '')
+              .replace(/\s+/g, ' ')
+              .trim(),
+          )
+        : splitLines(b.text);
+      lines = lines.filter(Boolean);
+      if (!lines.length)
+        return json(res, 400, { error: 'lines or text needed' });
+      if (lines.length > 8 || lines.some((l) => l.length > 300))
+        return json(res, 400, {
+          error: 'at most 8 lines of 300 characters (or text up to about 2200)',
+        });
+      const voice = b.voice ? String(b.voice) : '';
+      if (voice && !(await speech.voices()).includes(voice))
+        return json(res, 400, { error: 'unknown voice' });
+      let used = 0;
+      for (; used < lines.length; used++) if (!sayAllowed()) break;
+      if (used < lines.length) {
+        sayTimes.splice(sayTimes.length - used, used); // all or nothing
+        return json(res, 429, {
+          error: 'ten says a minute (each line counts)',
+        });
+      }
+      const level = speech.capLevel(b.level),
+        chimeLevel = speech.chimeFor(level, b.chimeLevel);
+      const rate = Math.max(
+        90,
+        Math.min(220, Math.round(Number(b.rate ?? 140) || 140)),
+      );
+      const ids = lines.map((text, i) => {
+        converse.noteReply(text);
+        return speech.say({
+          text,
+          voice,
+          level,
+          rate,
+          chime: b.chime !== false && i === 0,
+          chimeLevel,
+        }).id;
+      });
+      return json(res, 202, {
+        level,
+        lines: lines.length,
+        ids,
+        status: 'queued',
+      });
+    }
+    if (route === 'GET /api/converse') return json(res, 200, converse.status());
+    if (route === 'POST /api/converse/start') {
+      const b = await readBody(req);
+      return json(res, 200, converse.start(b));
+    }
+    if (route === 'POST /api/converse/stop')
+      return json(res, 200, converse.stop());
+    if (route === 'GET /api/converse/heard')
+      return json(res, 200, converse.heard(url.searchParams.get('after')));
     const sm = /^GET \/api\/say\/([0-9a-f]{12})$/.exec(route);
     if (sm) {
       const j = speech.sayStatus(sm[1]);
@@ -725,14 +790,19 @@ const server = createServer(async (req, res) => {
     json(res, 404, { error: 'no such route' });
   } catch (e) {
     if (!res.headersSent)
-      json(res, [400, 404, 409, 413, 415].includes(e.code) ? e.code : 502, {
-        error: String(e.message || e).slice(0, 200),
-      });
+      json(
+        res,
+        [400, 404, 409, 413, 415, 503].includes(e.code) ? e.code : 502,
+        {
+          error: String(e.message || e).slice(0, 200),
+        },
+      );
     else res.end();
   }
 });
 
 function stop() {
+  converse.stop('bridge stopping');
   for (const p of children) p.kill('SIGKILL');
   rec.cleanup();
   camera.shutdown().finally(() => process.exit(0));

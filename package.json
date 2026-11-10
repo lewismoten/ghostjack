@@ -12,7 +12,7 @@
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "test": "node --test tools/stream-test.mjs",
+    "test": "node --test tools/stream-test.mjs tools/converse-test.mjs",
     "check": "npm run format:check && npm run lint"
   },
   "dependencies": {

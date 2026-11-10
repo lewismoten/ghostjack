@@ -267,7 +267,11 @@ async function pump() {
   busy = true;
   while (queue.length) await speak(queue.shift());
   busy = false;
+  endedAt = Date.now();
 }
+let endedAt = 0;
+// Is the speaker busy (or about to be), and when it last finished: converse mode mutes the microphone then.
+export const activity = () => ({ speaking: busy || queue.length > 0, endedAt });
 
 export function say({
   text,
