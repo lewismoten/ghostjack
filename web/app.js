@@ -249,7 +249,7 @@ var lastNight = 'auto';
 const showNight = (m) => {
   lastNight = ['night', 'day'].includes(m) ? m : 'auto';
   $('hNight').textContent =
-    m === 'night' ? 'NV IR ON' : m === 'day' ? 'NV OFF' : 'NV AUTO';
+    m === 'night' ? 'NV IR ON' : m === 'day' ? 'NV COLOR?' : 'NV AUTO';
   if (m === 'night') setIR(true);
   else setTimeout(pollIR, 3000); // automatic: ask the camera what it chose
 };
@@ -1615,7 +1615,7 @@ $('night').onchange = async () => {
     showNight(j.mode);
     foley.softClick();
     setStatus(
-      `${glass.line(j.mode === 'night' ? 'nightOn' : j.mode === 'day' ? 'nightOff' : 'nightAuto')} Vision: ${j.mode === 'day' ? 'color' : j.mode}.`,
+      `${glass.line(j.mode === 'night' ? 'nightOn' : j.mode === 'day' ? 'nightOff' : 'nightAuto')} Vision: ${j.mode === 'day' ? 'color requested (experimental)' : j.mode}.`,
     );
   } catch (e) {
     $('night').value = lastNight;
