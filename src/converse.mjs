@@ -30,6 +30,11 @@ import { note } from './history.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const num = (name, def) => Number(process.env[name]) || def;
+// One log line per utterance: kept or dropped and why (bridge.log), so a lost sentence can be traced.
+const dlog = (what, u, why, text = '') =>
+  console.log(
+    `[converse] ${what} id=${u.id} ${Math.round(u.durationMs || 0)}ms ended=${u.endedAt || '?'} ${why}${text ? ` "${String(text).slice(0, 80)}"` : ''}`,
+  );
 const FOLLOW_MS = () =>
   process.env.GJ_FOLLOW_MS === '0' ? 0 : num('GJ_FOLLOW_MS', 20000);
 export const INBOX_FILE = () =>
@@ -291,7 +296,10 @@ function feed(s, chunk) {
 
   const wasIn = s.seg.speaking;
   for (const u of s.seg.push(chunk)) {
-    if (s.pending >= 3) continue; // transcription is behind; drop rather than pile up
+    if (s.pending >= 3) {
+      dlog('drop', u, 'transcription behind');
+      continue; // transcription is behind; drop rather than pile up
+    }
     // turn-taking: tell the agent Lewis stopped, if the words so far were addressed to it
     if (s.addressed.has(u.id) || s.bargeActive) {
       s.ended.add(u.id);
@@ -358,10 +366,11 @@ async function handle(s, u) {
 
 async function handleOne(s, u) {
   const text = await wavText(u.pcm);
-  if (!text || sess !== s) return;
+  if (!text || sess !== s)
+    return dlog('drop', u, text ? 'session ended' : 'no text from whisper');
   // The camera started talking while this was transcribed: it may be its own voice.
   if (!s.bargeActive && s.guard.muted(Date.now(), speech.activity().speaking))
-    return;
+    return dlog('drop', u, 'camera spoke during transcription', text);
   const m = matchWake(text, s.wake);
   const viaBarge = s.bargeActive;
   // After the camera has spoken, Lewis may just answer: an utterance that starts within FOLLOW_MS of the
@@ -375,7 +384,14 @@ async function handleOne(s, u) {
       : Date.now()) -
       s.lastSpokeAt <=
       FOLLOW_MS();
-  if (!m && !viaBarge && !follow) return;
+  if (!m && !viaBarge && !follow)
+    return dlog(
+      'drop',
+      u,
+      `no wake word, ${s.lastSpokeAt ? Math.round(((u.endedAt ? Date.parse(u.endedAt) - u.durationMs : Date.now()) - s.lastSpokeAt) / 1000) + ' s after speech' : 'no speech yet'}`,
+      text,
+    );
+  dlog('keep', u, m ? 'wake word' : viaBarge ? 'barge' : 'follow-up', text);
   s.lastWake = Date.now();
   s.partial = null;
   // Words are only known to be addressed now, so the end of the utterance is reported late, with its time.
