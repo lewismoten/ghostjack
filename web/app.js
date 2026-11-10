@@ -1617,7 +1617,7 @@ function histRow(e) {
   return row;
 }
 async function pollHistory() {
-  if (hist.busy || !$('cvHist').open) return;
+  if (hist.busy) return;
   hist.busy = true;
   try {
     const r = await api(
@@ -1640,11 +1640,13 @@ async function pollHistory() {
     hist.busy = false;
   }
 }
-$('cvHist').ontoggle = () => {
+$('cvHistOpen').onclick = () => {
+  $('cvHist').showModal();
   pollHistory();
   const log = $('cvLog');
   log.scrollTop = log.scrollHeight;
 };
+$('cvHistClose').onclick = () => $('cvHist').close();
 $('cvHistCopy').onclick = () =>
   hist.entries.length
     ? copyText(

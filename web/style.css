@@ -1754,3 +1754,30 @@ code {
   flex: 1 1 20rem;
   min-width: 0;
 }
+
+/* History dialog: centered, fits a phone, the log scrolls inside */
+dialog.cvhist {
+  width: min(48rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 4rem);
+  border: 1px solid var(--line, #888);
+  border-radius: 8px;
+  padding: 1rem;
+  background: var(--bg, Canvas);
+  color: inherit;
+}
+dialog.cvhist::backdrop {
+  background: rgb(0 0 0 / 0.5);
+}
+dialog.cvhist .chatlog {
+  height: min(60vh, 32rem);
+  overflow-y: auto;
+}
+dialog.cvhist .row {
+  justify-content: space-between;
+}
+/* the History dialog replaces the live lines and the three lists */
+#cvPartial,
+#cvPlaying,
+.cv > .gm {
+  display: none;
+}
