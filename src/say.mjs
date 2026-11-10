@@ -98,7 +98,7 @@ export const MAX_LEVEL = 0.05,
 // Wake pulse (see speechArgs): length, pitch (inside the 300 to 3000 Hz phone band) and the quiet gap after.
 export const WAKE_SEC = 0.13,
   WAKE_HZ = 1000,
-  WAKE_GAP = 0.5,
+  WAKE_GAP = Number(process.env.GJ_WAKE_GAP_SEC) || 0.9, // 0.5 left the first word garbled on the camera (2026-11-10)
   CUE_GAP = 0.3;
 export const CHIME_BELOW = 0.35; // chime peak <= speech peak x this (-9 dB)
 export const capLevel = (v) =>
