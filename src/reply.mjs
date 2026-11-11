@@ -45,8 +45,8 @@ export function setTones(t) {
 
 const replies = new Map();
 const recent = []; // the last lines said, for the page
-export function noteReply(text) {
-  note('patchwork', text);
+export function noteReply(text, output) {
+  note('patchwork', text, output ? { output } : undefined);
   recent.push({
     at: new Date().toISOString(),
     text: String(text).slice(0, 300),
@@ -69,7 +69,7 @@ export function tonePcm(kind, level) {
   return pcm;
 }
 
-export function playTone(kind, { force = false, fast = false } = {}) {
+export function playTone(kind, { force = false, fast = false, output } = {}) {
   if (!force && !tones[kind]) return null;
   if (fast)
     return speech.sayFast({
@@ -79,6 +79,7 @@ export function playTone(kind, { force = false, fast = false } = {}) {
       ),
       chime: false,
       band: false,
+      output,
     });
   mkdirSync(TMP, { recursive: true });
   const file = join(TMP, `tone-${randomBytes(6).toString('hex')}.wav`);
@@ -88,6 +89,7 @@ export function playTone(kind, { force = false, fast = false } = {}) {
     chime: false,
     band: false,
     fast,
+    output,
     level: speech.capLevel(Number(process.env.GJ_REPLY_LEVEL) || 0.03),
   });
 }
@@ -110,7 +112,7 @@ const newReply = () => {
 const err = (m, code, extra) => Object.assign(new Error(m), { code, ...extra });
 
 // Append text to a reply (a new one when `id` is missing). `end` closes it. Returns the reply's view.
-export function append({ id, text, end, voice, level, rate, persona }) {
+export function append({ id, text, end, voice, level, rate, persona, output }) {
   const r = id ? replies.get(id) : newReply();
   if (!r) throw err('no such reply', 404);
   if (r.cut)
@@ -119,6 +121,8 @@ export function append({ id, text, end, voice, level, rate, persona }) {
     });
   if (r.closed) throw err('this reply is closed', 409);
   if (persona) r.persona = persona;
+  if (speech.cleanOutput(output)) r.output = output;
+  else if (!r.output) r.output = persona?.output;
   const t = sayable(applySayAs(String(text ?? ''), r.persona?.sayAs));
   r.chars += t.length;
   if (r.chars > MAX_REPLY_CHARS)
@@ -130,10 +134,11 @@ export function append({ id, text, end, voice, level, rate, persona }) {
   });
   r.buf = rest;
   for (const text of segments) {
-    if (!r.segments.length) playTone('start');
+    if (!r.segments.length) playTone('start', { output: r.output });
     // the whole reply is one continuous publish; a new one only if the last closed itself (the agent paused
     // longer than the stream's idle limit) or was cut
-    if (!r.stream?.open) r.stream = speech.openStream({ label: 'reply' });
+    if (!r.stream?.open)
+      r.stream = speech.openStream({ label: 'reply', output: r.output });
     const job = r.stream.add({
       text,
       voice,
@@ -143,7 +148,7 @@ export function append({ id, text, end, voice, level, rate, persona }) {
       chimeLevel: 0.008,
     });
     r.segments.push({ id: job.id, text });
-    noteReply(text);
+    noteReply(text, speech.resolveOutput(r.output));
   }
   if (end === true) {
     r.closed = true;
@@ -159,7 +164,7 @@ export function append({ id, text, end, voice, level, rate, persona }) {
         band: false,
         level: speech.capLevel(Number(process.env.GJ_REPLY_LEVEL) || 0.03),
       });
-    } else if (r.segments.length) playTone('done');
+    } else if (r.segments.length) playTone('done', { output: r.output });
     r.stream?.end();
   }
   return view(r);

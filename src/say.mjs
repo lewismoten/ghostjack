@@ -282,6 +282,61 @@ function openPublish(url, onProgress) {
   };
 }
 
+// Output target: 'camera' (talk link, publish) or 'mac' (the laptop's default audio output). A call may name one;
+// otherwise the resolver (the server wires it to the default persona) decides; failing that, 'camera'.
+export const OUTPUTS = ['camera', 'mac'];
+export const cleanOutput = (o) => (OUTPUTS.includes(o) ? o : null);
+let outputResolver = () => 'camera';
+export const setOutputResolver = (f) => {
+  outputResolver = f;
+};
+export const resolveOutput = (o) =>
+  cleanOutput(o) ?? cleanOutput(outputResolver()) ?? 'camera';
+
+// The laptop speaker: ffplay reads the same raw PCM on stdin. Same handle shape as openPublish.
+const FFPLAY = process.env.FFPLAY || '/opt/homebrew/bin/ffplay';
+function spawnMacPlayer(onProgress) {
+  const p = spawn(
+    FFPLAY,
+    [
+      '-nodisp',
+      '-autoexit',
+      '-loglevel',
+      'quiet',
+      '-fflags',
+      'nobuffer',
+      '-f',
+      's16le',
+      '-ar',
+      '16000',
+      '-ac',
+      '1',
+      '-i',
+      'pipe:0',
+    ],
+    { stdio: ['pipe', 'ignore', 'ignore'] },
+  );
+  p.stdin.on('error', () => {});
+  p.once('spawn', () => setTimeout(() => onProgress(0, Date.now()), 50));
+  const exited = new Promise((resolve) => {
+    p.on('error', () => resolve(-1));
+    p.on('close', (c, sig) => resolve(sig ? -1 : (c ?? -1)));
+  });
+  return {
+    canWrite: () => !p.stdin.destroyed && p.stdin.writableLength < 32768,
+    write: (b) => p.stdin.write(b),
+    end: () => p.stdin.end(),
+    kill: () => p.kill('SIGKILL'),
+    exited,
+  };
+}
+// tests swap in a fake: (onProgress) => handle
+let macPlayer = spawnMacPlayer;
+export const setMacPlayer = (f) => {
+  macPlayer = f ?? spawnMacPlayer;
+};
+const openMac = (_url, onProgress) => macPlayer(onProgress);
+
 const streamConfig = () => ({
   ...(Number(process.env.GJ_STREAM_AHEAD_MS) && {
     aheadMs: Number(process.env.GJ_STREAM_AHEAD_MS),
@@ -311,9 +366,12 @@ async function runStream(st) {
   let timer = null;
   try {
     if (st.stopped || (st.ended && !st.jobs.length)) return;
-    const asked = Date.now();
-    url = await camera.talkUrl();
-    st.log({ ev: 'talk', stream: st.id, talkMs: Date.now() - asked });
+    const mac = st.output === 'mac';
+    if (!mac) {
+      const asked = Date.now();
+      url = await camera.talkUrl();
+      st.log({ ev: 'talk', stream: st.id, talkMs: Date.now() - asked });
+    }
     if (st.stopped) return;
     const first = st.jobs[0] ?? { fast: st.warm };
     const now = Date.now();
@@ -321,7 +379,8 @@ async function runStream(st) {
     st.begin(
       url,
       leadIn({
-        awake: isAwake(lastPublishEnd, now),
+        // the laptop needs no wake pulse and no link: a short lead only
+        awake: mac || isAwake(lastPublishEnd, now),
         level: first.level,
         chime: first.chime,
         chimeLevel: first.chimeLevel,
@@ -345,7 +404,7 @@ async function runStream(st) {
     const t = Date.now();
     if (!st.stopped && !error) st.finish(t);
     else st.finish(t, error);
-    lastPublishEnd = t;
+    if (st.output !== 'mac') lastPublishEnd = t;
     for (const j of st.jobs) {
       j.endedAt = t;
       if (j.file && existsSync(j.file)) rmSync(j.file, { force: true });
@@ -393,21 +452,29 @@ export const jobInfo = (id) => jobs.get(id) || null;
 
 // A stream: the pieces of one reply (or one say) played as a single continuous publish. add() a sentence as
 // soon as it exists; end() when there is no more. The first sentence's level and chime set the lead-in.
-export function openStream({ label = 'say', warm = false, cfg = {} } = {}) {
+export function openStream({
+  label = 'say',
+  warm = false,
+  cfg = {},
+  output,
+} = {}) {
+  const out = warm ? 'camera' : resolveOutput(output);
   const id = randomBytes(6).toString('hex');
   // a real stream takes the camera link over from a warm one right away
   if (!warm) releaseWarm('hand over');
   const st = new SpeechStream({
-    openPublish,
-    log: (o) => logLine({ kind: label, ...o }),
+    openPublish: out === 'mac' ? openMac : openPublish,
+    log: (o) => logLine({ kind: label, output: out, ...o }),
     cfg: { ...streamConfig(), ...cfg },
     id,
   });
   st.warm = warm;
+  st.output = out;
   streams.push(st);
   pump();
   return {
     id,
+    output: out,
     stream: st,
     end: () => st.end(),
     add: (spec) => addJob(st, spec),
@@ -456,7 +523,7 @@ function addJob(
 // One line, as its own short stream. (`fast` is gone: whether the amp is awake is judged when the publish
 // opens.)
 export function say(spec) {
-  const s = openStream({ label: 'say' });
+  const s = openStream({ label: 'say', output: spec.output });
   const r = s.add(spec);
   s.end();
   return r;
@@ -473,6 +540,7 @@ const warmUsable = () =>
   !warmStream.stopped &&
   !warmStream.finished;
 export function openWarm() {
+  if (resolveOutput() === 'mac') return null; // the laptop has no link to warm
   if (warmUsable()) return warmStream;
   if (streams.some((st) => !idleWarm(st)) || (running && !idleWarm(running)))
     return null; // the camera is in use
@@ -503,7 +571,9 @@ export function releaseWarm(why = 'released') {
 }
 // A short line that should come out as soon as possible: into the warm link when it is open, else its own stream.
 export function sayFast(spec) {
-  if (!warmUsable()) return say({ ...spec, fast: true });
+  // the warm link is the camera's; the laptop has nothing to warm
+  if (resolveOutput(spec.output) === 'mac' || !warmUsable())
+    return say({ ...spec, fast: true });
   const st = warmStream;
   const r = addJob(st, { ...spec, fast: true });
   st.end();

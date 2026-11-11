@@ -1733,6 +1733,7 @@ function pzFill(name) {
   );
   $('pzRate').value = p?.rate ?? 140;
   $('pzLevel').value = p?.level ?? 0.03;
+  $('pzOutput').value = p?.output ?? 'camera';
   $('pzStyle').value = p?.style ?? 'netrunner';
   $('pzWake').value = (p?.wakeWords ?? []).join(', ');
   $('pzSayAs').value = (p?.sayAs ?? [])
@@ -1820,6 +1821,7 @@ $('pzSave').onclick = async () => {
       voice: $('pzVoice').value,
       rate: Number($('pzRate').value),
       level: Number($('pzLevel').value),
+      output: $('pzOutput').value,
       style: $('pzStyle').value.trim(),
       wakeWords: pzList($('pzWake').value),
       sayAs,

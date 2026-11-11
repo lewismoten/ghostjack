@@ -93,6 +93,7 @@ const json = (res, code, obj) => {
 
 // Which persona a call uses: the call's `persona`, its `agent` (or the X-GJ-Agent header), then Lewis's
 // assignment and default (src/personas.mjs). Throws a 400 for an unknown persona name.
+speech.setOutputResolver(() => personas.resolve({})?.output);
 const personaFor = (req, b) =>
   personas.resolve({
     persona: b.persona,
@@ -700,7 +701,8 @@ const server = createServer(async (req, res) => {
           Math.round(Number(b.rate ?? persona?.rate ?? 140) || 140),
         ),
       );
-      reply.noteReply(text);
+      const output = speech.cleanOutput(b.output) ?? persona?.output;
+      reply.noteReply(text, speech.resolveOutput(output));
       return json(res, 202, {
         level,
         chimeLevel: b.chime === false ? null : chimeLevel,
@@ -712,6 +714,7 @@ const server = createServer(async (req, res) => {
           rate,
           chime: b.chime !== false,
           chimeLevel,
+          output,
         }),
       });
     }
@@ -750,7 +753,7 @@ const server = createServer(async (req, res) => {
         90,
         Math.min(220, Math.round(Number(b.rate ?? 140) || 140)),
       );
-      const stream = speech.openStream({ label: 'say-many' });
+      const stream = speech.openStream({ label: 'say-many', output: b.output });
       const ids = lines.map((text, i) => {
         reply.noteReply(text);
         return stream.add({
@@ -807,6 +810,7 @@ const server = createServer(async (req, res) => {
             level,
             rate,
             persona,
+            output: b.output,
           }),
         );
       } catch (e) {

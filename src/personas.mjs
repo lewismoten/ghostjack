@@ -113,6 +113,9 @@ export function validatePersona(p) {
   if (!Number.isFinite(level) || level < 0.01 || level > 0.05)
     throw err('level is 0.01 to 0.05');
   out.level = level;
+  if (p.output !== undefined && p.output !== 'camera' && p.output !== 'mac')
+    throw err('output is "camera" or "mac"');
+  out.output = p.output ?? 'camera';
   const style = String(p.style ?? 'netrunner')
     .trim()
     .toLowerCase();
@@ -231,7 +234,11 @@ export class Personas {
       out[n] = { ...p, source: 'shipped' };
     for (const [n, raw] of Object.entries(loc)) {
       try {
-        const p = validatePersona({ ...raw, name: n });
+        const p = validatePersona({
+          ...raw,
+          output: raw.output ?? ship[n]?.output,
+          name: n,
+        });
         out[n] = { ...p, source: ship[n] ? 'edited' : 'local' };
       } catch {
         /* skip a bad local entry */

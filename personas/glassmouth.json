@@ -3,6 +3,7 @@
   "voice": "",
   "rate": 135,
   "level": 0.03,
+  "output": "camera",
   "style": "netrunner",
   "wakeWords": ["glassmouth", "glasseye"],
   "sayAs": [

@@ -3,6 +3,7 @@
   "voice": "",
   "rate": 140,
   "level": 0.03,
+  "output": "mac",
   "style": "netrunner",
   "wakeWords": ["patchwork", "glasseye"],
   "sayAs": [{ "from": "Glasseye", "to": "glass eye" }],

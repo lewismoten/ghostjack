@@ -12,6 +12,10 @@
     },
     "rate": { "type": "integer", "minimum": 90, "maximum": 220 },
     "level": { "type": "number", "minimum": 0.01, "maximum": 0.05 },
+    "output": {
+      "enum": ["camera", "mac"],
+      "description": "Where speech comes out: the camera speaker or the Mac's own output"
+    },
     "style": {
       "type": "string",
       "pattern": "^[a-z0-9-]{1,24}$",
