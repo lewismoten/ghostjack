@@ -77,6 +77,7 @@ let lost = false,
   crop = null,
   lastMove = 0;
 const updateArrowsSoon = () => queueMicrotask(() => updateArrows());
+let ptzOn = true; // the active camera can pan and tilt (see loadCameras)
 const controls = [
   'live',
   'sound',
@@ -100,6 +101,8 @@ function setConnected(on) {
   $('device').hidden = !on; // the header shows the camera only when one is jacked in
   for (const id of controls) $(id).disabled = !on;
   updateArrowsSoon();
+  if (on) loadCameras();
+  else for (const id of ['camSel', 'micSel']) $(id).disabled = true;
   $('sayGo').disabled = !on;
   $('jackOut').disabled = !on;
   renderKeys();
@@ -206,6 +209,7 @@ async function connect(e) {
       );
       lost = false;
       loadDevice();
+      loadCameras();
       loadAim().then(showLimitsInfo);
       loadShotPics();
       loadShots();
@@ -602,6 +606,60 @@ function room(dx, dy) {
     Math.abs(ry) < 2 ? 0 : Math.round(ry),
   ];
 }
+// Cameras: the active camera (picture) and the listening mic are chosen on the bridge (GET /api/cameras).
+// Pan, tilt and Vision belong to Glasseye, so they disable when another camera is active.
+function applyPtz() {
+  $('night').disabled = !connected || !ptzOn;
+  updateArrows();
+}
+async function loadCameras() {
+  try {
+    const r = await api('/api/cameras');
+    if (!r.ok) return;
+    const j = await r.json();
+    const fill = (id, cap, current) => {
+      const sel = $(id);
+      sel.replaceChildren();
+      for (const c of j.cameras.filter((c) => c.capabilities.includes(cap))) {
+        const o = document.createElement('option');
+        o.value = c.id;
+        o.textContent = c.name;
+        sel.append(o);
+      }
+      sel.value = current;
+      sel.disabled = !connected || sel.options.length < 2;
+    };
+    fill('camSel', 'video', j.active);
+    fill('micSel', 'mic', j.mic);
+    const cam = j.cameras.find((c) => c.id === j.active);
+    ptzOn = !!cam && cam.capabilities.includes('ptz');
+    applyPtz();
+  } catch {
+    /* the selectors stay as they were */
+  }
+}
+async function pickCamera(path, sel, label) {
+  const r = await api(path, {
+    method: 'POST',
+    body: JSON.stringify({ id: sel.value }),
+  });
+  if (!r.ok) setStatus(`${label}: ${(await r.json()).error}`, true);
+  await loadCameras();
+  return r.ok;
+}
+$('camSel').onchange = async () => {
+  if (!(await pickCamera('/api/cameras/active', $('camSel'), 'Camera'))) return;
+  setStatus(`Camera: ${$('camSel').selectedOptions[0].textContent}.`);
+  if (liveOn) {
+    stopLive();
+    startLive();
+  } else if (!(Number($('stills').value) > 0)) autoSnapSoon(300);
+};
+$('micSel').onchange = async () => {
+  if (await pickCamera('/api/converse/mic', $('micSel'), 'Mic'))
+    setStatus(`Listening mic: ${$('micSel').selectedOptions[0].textContent}.`);
+};
+
 function updateArrows() {
   for (const b of pads) {
     const [rx, ry] = room(
@@ -619,13 +677,15 @@ function updateArrows() {
         (sx < 0 && pan <= limits.panMin) ||
         (sy > 0 && tilt >= limits.tiltMax) ||
         (sy < 0 && tilt <= limits.tiltMin));
-    b.disabled = !connected || wall;
+    b.disabled = !connected || wall || !ptzOn;
     b.classList.toggle('near-wall', !!near);
-    b.title = wall
-      ? 'At the wall (the picture stopped changing twice)'
-      : near
-        ? 'Near the estimated wall: press to try anyway'
-        : '';
+    b.title = !ptzOn
+      ? 'This camera cannot pan or tilt'
+      : wall
+        ? 'At the wall (the picture stopped changing twice)'
+        : near
+          ? 'Near the estimated wall: press to try anyway'
+          : '';
   }
 }
 // Range indicator in the Eye header: where the estimate sits between the walls.

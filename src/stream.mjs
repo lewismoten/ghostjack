@@ -9,6 +9,7 @@ export async function streamVideo({
   req,
   res,
   profile,
+  usb, // a USB camera's ffmpeg input arguments; Glasseye's feed is copied instead
 }) {
   // Listen for the client leaving before any await: `close` fires once, and the camera call below can
   // take seconds (sign-in retry, busy queue).
@@ -20,7 +21,7 @@ export async function streamVideo({
   };
   req.on('close', onGone);
   res.on('close', onGone);
-  const url = await camera.streamUrl(profile); // never logged or sent to the client
+  const url = usb ? null : await camera.streamUrl(profile); // never logged or sent to the client
   if (gone || res.destroyed || res.writableEnded) return;
   // Fragmented MP4: H.264 copied as-is (no re-encode), AAC copied. Low latency (0.1.2): no input
   // buffering, a short probe, and a fragment every 0.5 s (not only at keyframes: the camera sends one
@@ -39,12 +40,21 @@ export async function streamVideo({
       '32k',
       '-analyzeduration',
       '0',
-      '-rtsp_transport',
-      'tcp',
-      '-i',
-      url,
-      '-c',
-      'copy',
+      ...(usb ? usb : ['-rtsp_transport', 'tcp', '-i', url]),
+      ...(usb
+        ? [
+            '-c:v',
+            'libx264',
+            '-preset',
+            'ultrafast',
+            '-tune',
+            'zerolatency',
+            '-pix_fmt',
+            'yuv420p',
+            '-g',
+            '30',
+          ]
+        : ['-c', 'copy']),
       '-movflags',
       'frag_keyframe+empty_moov+default_base_moof',
       '-frag_duration',

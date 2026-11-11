@@ -20,6 +20,7 @@ import * as speech from './say.mjs';
 import * as speakers from './speakers.mjs';
 import * as rec from './record.mjs';
 import * as media from './media.mjs';
+import * as cameras from './cameras.mjs';
 import * as asker from './ask.mjs';
 import * as converse from './converse.mjs';
 import * as reply from './reply.mjs';
@@ -307,13 +308,33 @@ function sayAllowed() {
 }
 const children = media.children;
 
-const stream = (req, res, profile) =>
-  streamVideo({ camera, ffmpeg: FFMPEG, children, req, res, profile });
+const stream = async (req, res, profile, id) => {
+  const cam = await cameras.pickVideo(id);
+  const usb = cameras.isTethys(cam) ? undefined : media.liveInput(cam);
+  return streamVideo({
+    camera,
+    ffmpeg: FFMPEG,
+    children,
+    req,
+    res,
+    profile,
+    usb,
+  });
+};
+
+// Pan and tilt, shots and the night mode belong to Glasseye; any other camera answers 400.
+async function needPtz(res, id) {
+  const cam = await cameras.pickVideo(id);
+  if (cameras.hasPtz(cam)) return true;
+  json(res, 400, { error: `${cam.name} cannot pan or tilt` });
+  return false;
+}
 
 // Go to an absolute pan/tilt (or a saved shot) in one travel move, wait for the picture to settle and
 // answer with a snapshot. Headers: X-GJ-Pan, X-GJ-Tilt, X-GJ-Settled.
 async function goto(req, res) {
   const b = await readBody(req);
+  if (!(await needPtz(res, b.camera))) return;
   let tp, tt, crop;
   if (b.shot !== undefined) {
     const n = Number(b.shot);
@@ -380,13 +401,23 @@ async function capture(req, res, isClip) {
   const secs = Math.round(seconds * 10) / 10;
   let job, type, ext;
   if (isClip) {
-    job = media.clip(secs, media.clampWidth(b.width, 640), b.audio === true);
+    const cam = await cameras.pickVideo(b.camera);
+    job = media.clip(
+      secs,
+      media.clampWidth(b.width, 640),
+      b.audio === true,
+      cam,
+    );
     [type, ext] = ['video/mp4', 'mp4'];
   } else {
     const m4a = b.format === 'm4a';
     if (b.format !== undefined && !['wav', 'm4a'].includes(b.format))
       return json(res, 400, { error: "format is 'wav' or 'm4a'" });
-    job = media.listen(secs, m4a ? 'm4a' : 'wav');
+    job = media.listen(
+      secs,
+      m4a ? 'm4a' : 'wav',
+      await cameras.pickMic(b.camera),
+    );
     [type, ext] = [m4a ? 'audio/mp4' : 'audio/wav', m4a ? 'm4a' : 'wav'];
   }
   res.on('close', () => job.cancel());
@@ -508,10 +539,16 @@ const server = createServer(async (req, res) => {
     if (!authorized(req)) return json(res, 401, { error: 'token needed' });
     const route = `${req.method} ${url.pathname}`;
     if (route === 'GET /api/status')
-      return json(res, 200, await camera.status());
+      return json(res, 200, {
+        ...(await camera.status()),
+        activeCamera: cameras.videoNow().id,
+      });
     if (route === 'GET /api/snapshot.jpg') {
       const q = url.searchParams;
-      const jpg = await camera.snapshot(q.get('profile') || 'p0');
+      const cam = await cameras.pickVideo(q.get('camera'));
+      const jpg = cameras.isTethys(cam)
+        ? await camera.snapshot(q.get('profile') || 'p0')
+        : await media.snapshotAvf(cam);
       const crop = media.parseCrop(
         (q.get('crop') || '').split(',').map(Number),
       );
@@ -546,7 +583,32 @@ const server = createServer(async (req, res) => {
         return json(res, 200, asker.answer(km[2], b.choice, b.text));
       }
     }
+    if (route === 'GET /api/cameras')
+      return json(
+        res,
+        200,
+        await cameras.list(url.searchParams.has('refresh')),
+      );
+    if (
+      route === 'POST /api/cameras/active' ||
+      route === 'POST /api/converse/mic'
+    ) {
+      const b = await readBody(req);
+      const isMic = route.endsWith('/mic');
+      try {
+        const r = await (isMic ? cameras.setMic : cameras.setActive)(
+          String(b.id ?? ''),
+        );
+        if (isMic) converse.restartListening();
+        return json(res, 200, r);
+      } catch (e) {
+        if (e.code === 400 || e.code === 404)
+          return json(res, e.code, { error: e.message });
+        throw e;
+      }
+    }
     if (route === 'POST /api/move') {
+      if (!(await needPtz(res))) return;
       const b = await readBody(req);
       const dx = clamp(b.dx, 20),
         dy = clamp(b.dy, 20),
@@ -565,6 +627,7 @@ const server = createServer(async (req, res) => {
       return json(res, 200, { ok: true, dx, dy, speed });
     }
     if (route === 'POST /api/travel') {
+      if (!(await needPtz(res))) return;
       const b = await readBody(req);
       const dx = clamp(b.dx, 480),
         dy = clamp(b.dy, 190);
@@ -898,6 +961,7 @@ const server = createServer(async (req, res) => {
         req,
         res,
         url.searchParams.get('profile') === 'p1' ? 'p1' : 'p0',
+        url.searchParams.get('camera'),
       );
     if (route === 'GET /api/aim') return json(res, 200, aim);
     if (route === 'POST /api/aim') {
@@ -973,6 +1037,7 @@ process.on('SIGINT', stop);
 process.on('SIGTERM', stop);
 
 rec.sweep();
+cameras.refresh().catch(() => {}); // find the USB cameras so a saved choice resolves
 server.listen(PORT, HOST, () =>
   console.log(`Ghost Jack bridge on http://${HOST}:${PORT}`),
 );

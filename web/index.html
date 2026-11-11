@@ -359,6 +359,14 @@
               REC
             </button>
             <label class="vision"
+              >Camera
+              <select
+                id="camSel"
+                disabled
+                title="Which camera the picture, snapshots, clips and live view come from"
+              ></select
+            ></label>
+            <label class="vision"
               >Vision
               <select
                 id="night"
@@ -758,6 +766,16 @@
                   >Off</output
                 >
               </div>
+              <p class="row">
+                <label class="vision"
+                  >Listening mic
+                  <select
+                    id="micSel"
+                    disabled
+                    title="Which microphone the agent conversation listens through"
+                  ></select
+                ></label>
+              </p>
               <p class="row">
                 <button type="button" id="cvHistOpen">
                   History <small id="cvHistCount"></small>

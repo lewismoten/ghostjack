@@ -84,6 +84,18 @@ Not implemented on purpose: Wi-Fi setup, reboot, factory restore, firmware
 upgrade, disk format and password change. The page lists them as disabled ("not
 enabled in this build").
 
+## Cameras (`src/cameras.mjs`)
+
+`GET /api/cameras`, `POST /api/cameras/active {id}` and
+`POST /api/converse/mic {id}` choose the camera for pictures and the microphone
+for conversation; see the agent API for the details. The page has a Camera
+selector in the Eye panel and a Listening mic selector in the Relay tab's
+Conversation panel. Devices are found with
+`ffmpeg -f avfoundation -list_devices true -i ""` and kept by name; Glasseye
+stays the default. Settings: `~/.config/ghostjack/cameras.local.json` (0600,
+`GJ_CAMERAS_LOCAL` moves it). A USB device needs camera or microphone permission
+for whatever started the bridge. `tools/cameras-test.mjs` covers it.
+
 ## Say (Glassmouth's mouth)
 
 Says wait in one queue in `src/say.mjs`, because the camera's speaker takes one

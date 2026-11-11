@@ -11,6 +11,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import * as media from './media.mjs';
+import * as cameras from './cameras.mjs';
 import * as speech from './say.mjs';
 import * as reply from './reply.mjs';
 import { TMP } from './paths.mjs';
@@ -73,6 +74,11 @@ export const cleanTranscript = (t) =>
     .replace(/\s+/g, ' ')
     .trim();
 
+// The listening mic was switched: drop the current input so listening reconnects to the new one.
+export function restartListening() {
+  sess?.handle?.cancel();
+}
+
 export function status() {
   const s = sess;
   const a = speech.activity();
@@ -80,6 +86,7 @@ export function status() {
     a.playing && a.playing.status === 'speaking' ? a.playing : null;
   return {
     on: !!s,
+    mic: cameras.micNow().id,
     state: s ? s.state : 'off',
     ...(s?.why ? { why: s.why } : {}),
     ...(!s && lastStop ? { lastStop } : {}),

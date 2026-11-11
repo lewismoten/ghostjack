@@ -35,6 +35,31 @@ curl -s -H "$H" "$B/api/snapshot.jpg?width=640" -o look.jpg
 curl -s -H "$H" "$B/api/snapshot.jpg?crop=0.5,0.25,0.4,0.4&width=800" -o zoom.jpg
 ```
 
+## Cameras: more than one eye
+
+Glasseye (the Tethys camera) is the default. A USB webcam or any microphone the
+Mac lists is found by name through avfoundation. Two choices are kept apart: the
+**active camera** (look, snapshot, clip, live view) and the **listening mic**
+(listen, ask, converse).
+
+```sh
+curl -s -H "Authorization: Bearer $TOKEN" localhost:8787/api/cameras          # ?refresh=1 looks again
+# {"active":"glasseye","mic":"glasseye","cameras":[{"id":"glasseye","kind":"tethys",
+#   "capabilities":["video","mic","speaker","ptz"],…},{"id":"nexigo-n660p-fhd-webcam","kind":"avfoundation",
+#   "capabilities":["video","mic"],…}]}
+curl -s -X POST …/api/cameras/active -d '{"id":"nexigo-n660p-fhd-webcam"}'    # the picture comes from it
+curl -s -X POST …/api/converse/mic   -d '{"id":"macbook-pro-microphone"}'      # converse listens through it
+```
+
+A `camera` on one call (`?camera=` for snapshot and stream, `camera` in the body
+of clip, listen and goto) uses that camera for that call only. Pan, tilt, goto,
+travel and Vision are Glasseye's: they answer 400 when the camera in use has no
+`ptz` capability. A USB camera has its own capture lock, so a clip from it never
+blocks Glasseye's. Choices are saved in
+`~/.config/ghostjack/cameras.local.json`. Glasseye's speaker is the only voice;
+the Mac's microphone can hear it (echo and barge-in are tuned for Glasseye's
+mic).
+
 ## Picture settings
 
 ```sh

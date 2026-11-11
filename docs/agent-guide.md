@@ -34,6 +34,14 @@ Exact bodies and limits for every call are in [agent-api.md](agent-api.md);
 every route is in [bridge.md](bridge.md). Ask before you look or speak somewhere
 new, and stop when told.
 
+## More than one camera
+
+`GET /api/cameras` lists what you can look through. Glasseye (pan, tilt,
+speaker) is the default; a USB webcam may be there too. Ask Lewis before
+switching the active camera (`POST /api/cameras/active`), or take one picture
+with `?camera=<id>` and leave the setting alone. A camera without `ptz` cannot
+be aimed.
+
 ## Personas: who you speak as
 
 Each agent speaks as a persona: a voice, a rate, a loudness, wake words and a

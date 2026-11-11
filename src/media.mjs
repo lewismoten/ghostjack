@@ -9,6 +9,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { camera } from './camera-select.mjs';
 import * as rec from './record.mjs';
+import * as cameras from './cameras.mjs';
 
 export const FFMPEG = process.env.FFMPEG || '/opt/homebrew/bin/ffmpeg';
 const DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'captures');
@@ -145,18 +146,100 @@ const inputArgs = (url) => [
   url,
 ];
 
-let busy = false;
+// One capture per device at a time. Glasseye's lock ('tethys') also drives record.mjs's gate; a USB
+// camera or mic has its own key per device, so a clip from one never blocks the other.
+const TETHYS = 'tethys';
+const held = new Map(); // key -> { preempt }
+const busyError = () =>
+  Object.assign(new Error('the camera is already recording'), { code: 409 });
 
-// Record `seconds` from a fresh stream address into a temp file. Returns { done, cancel }: `done`
-// resolves to the file path (the caller deletes it) and rejects with code 409/499/502.
-function capture(seconds, ext, outArgs) {
-  if (busy && rec.gate.preempt) rec.gate.preempt(); // converse mode steps aside for a clip
-  if (busy || rec.active() || rec.gate.starting)
-    throw Object.assign(new Error('the camera is already recording'), {
-      code: 409,
+function acquire(keys, preempt = null, steal = false) {
+  if (steal) for (const k of keys) held.get(k)?.preempt?.(); // converse mode steps aside for a clip
+  if (keys.some((k) => held.has(k))) throw busyError();
+  if (keys.includes(TETHYS) && (rec.active() || rec.gate.starting))
+    throw busyError();
+  for (const k of keys) held.set(k, { preempt });
+  if (keys.includes(TETHYS)) {
+    rec.gate.busy = true;
+    if (preempt) rec.gate.preempt = preempt;
+  }
+}
+
+function release(keys, preempt = null) {
+  for (const k of keys) held.delete(k);
+  if (keys.includes(TETHYS)) {
+    rec.gate.busy = false;
+    if (preempt && rec.gate.preempt === preempt) rec.gate.preempt = null;
+  }
+}
+
+// What ffmpeg opens for a camera entry: its lock keys, input arguments and (for USB) the capture size.
+async function sourceFor(cam, { video, audio, size }) {
+  if (cam.kind === 'tethys')
+    return { keys: [TETHYS], args: inputArgs(await camera.streamUrl()) };
+  return {
+    keys: cameras.avfKeys(cam, { video, audio }),
+    args: cameras.avfInput(cam, { video, audio, size }),
+  };
+}
+
+const avfOnly = (cam) => cam.kind !== 'tethys';
+
+// The ffmpeg input for the live view of a USB camera (the stream copies Glasseye's feed instead).
+export const liveInput = (cam) =>
+  cameras.avfInput(cam, { video: true, audio: false, size: '1280x720' });
+
+// One JPEG frame from a USB camera: skips the first frames, which are dark while exposure settles.
+export async function snapshotAvf(cam) {
+  const keys = cameras.avfKeys(cam, { video: true });
+  acquire(keys);
+  try {
+    const args = [
+      '-hide_banner',
+      '-loglevel',
+      'error',
+      ...cameras.avfInput(cam, { video: true, size: '1920x1080' }),
+      '-vf',
+      'select=gte(n\\,10)',
+      '-frames:v',
+      '1',
+      '-fps_mode',
+      'passthrough',
+      '-q:v',
+      '3',
+      '-f',
+      'image2pipe',
+      '-c:v',
+      'mjpeg',
+      'pipe:1',
+    ];
+    const jpg = await new Promise((resolve, reject) => {
+      const p = spawn(FFMPEG, args, { stdio: ['ignore', 'pipe', 'ignore'] });
+      children.add(p);
+      const bufs = [];
+      const t = setTimeout(() => p.kill('SIGKILL'), 15000);
+      p.stdout.on('data', (d) => bufs.push(d));
+      p.on('error', reject);
+      p.on('close', () => {
+        clearTimeout(t);
+        children.delete(p);
+        const b = Buffer.concat(bufs);
+        b.length > 500
+          ? resolve(b)
+          : reject(new Error('the USB camera gave no picture'));
+      });
     });
-  busy = true;
-  rec.gate.busy = true;
+    return jpg;
+  } finally {
+    release(keys);
+  }
+}
+
+// Record `seconds` from the camera `cam` into a temp file. Returns { done, cancel }: `done` resolves to
+// the file path (the caller deletes it) and rejects with code 409/499/502.
+function capture(seconds, ext, outArgs, cam, want) {
+  const keys = cam.kind === 'tethys' ? [TETHYS] : cameras.avfKeys(cam, want);
+  acquire(keys, null, true);
   mkdirSync(DIR, { recursive: true });
   const file = join(DIR, `agent-${randomBytes(6).toString('hex')}.${ext}`);
   let proc = null,
@@ -164,7 +247,7 @@ function capture(seconds, ext, outArgs) {
   const stopped = () => Object.assign(new Error('cancelled'), { code: 499 });
   const done = (async () => {
     try {
-      const url = await camera.streamUrl();
+      const src = await sourceFor(cam, want);
       if (cancelled) throw stopped();
       await new Promise((resolve, reject) => {
         proc = spawn(
@@ -173,7 +256,7 @@ function capture(seconds, ext, outArgs) {
             '-hide_banner',
             '-loglevel',
             'error',
-            ...inputArgs(url),
+            ...src.args,
             '-t',
             String(seconds),
             ...outArgs,
@@ -200,8 +283,7 @@ function capture(seconds, ext, outArgs) {
       rmSync(file, { force: true });
       throw e;
     } finally {
-      busy = false;
-      rec.gate.busy = false;
+      release(keys);
     }
   })();
   return {
@@ -213,10 +295,11 @@ function capture(seconds, ext, outArgs) {
   };
 }
 
-// An MP4 clip. Re-encodes (H.264, scaled) only when width is under 1920; at 1920 the video is copied.
-export function clip(seconds, width, audio) {
+// An MP4 clip. Re-encodes (H.264, scaled) only when width is under 1920; at 1920 Glasseye's video is
+// copied (a USB camera is always encoded: it sends raw frames).
+export function clip(seconds, width, audio, cam = cameras.videoNow()) {
   const v =
-    width >= 1920
+    width >= 1920 && !avfOnly(cam)
       ? ['-c:v', 'copy']
       : [
           '-vf',
@@ -231,61 +314,73 @@ export function clip(seconds, width, audio) {
           'yuv420p',
         ];
   const a = audio ? ['-c:a', 'aac', '-ar', '16000', '-ac', '1'] : ['-an'];
-  return capture(seconds, 'mp4', [
-    '-map',
-    '0:v:0',
-    ...(audio ? ['-map', '0:a:0?'] : []),
-    ...v,
-    ...a,
-    '-movflags',
-    '+faststart',
-  ]);
+  const want = {
+    video: true,
+    audio: audio && cam.capabilities.includes('mic'),
+    size: width >= 1920 ? '1920x1080' : '1280x720',
+  };
+  return capture(
+    seconds,
+    'mp4',
+    [
+      '-map',
+      '0:v:0',
+      ...(want.audio ? ['-map', '0:a:0?'] : []),
+      ...v,
+      ...(want.audio ? a : ['-an']),
+      '-movflags',
+      '+faststart',
+    ],
+    cam,
+    want,
+  );
 }
 
-// Microphone audio only (no video decoded): 16 kHz mono WAV, or AAC in M4A.
-export function listen(seconds, format = 'wav') {
+// Microphone audio only (no video decoded): 16 kHz mono WAV, or AAC in M4A. From the listening mic
+// unless `cam` names another.
+export function listen(seconds, format = 'wav', cam = cameras.micNow()) {
   const m4a = format === 'm4a';
-  return capture(seconds, m4a ? 'm4a' : 'wav', [
-    '-vn',
-    '-map',
-    '0:a:0',
-    ...(m4a
-      ? ['-c:a', 'aac', '-ar', '16000', '-ac', '1', '-b:a', '48k']
-      : ['-c:a', 'pcm_s16le', '-ar', '16000', '-ac', '1']),
-  ]);
+  return capture(
+    seconds,
+    m4a ? 'm4a' : 'wav',
+    [
+      '-vn',
+      '-map',
+      '0:a:0',
+      ...(m4a
+        ? ['-c:a', 'aac', '-ar', '16000', '-ac', '1', '-b:a', '48k']
+        : ['-c:a', 'pcm_s16le', '-ar', '16000', '-ac', '1']),
+    ],
+    cam,
+    { audio: true },
+  );
 }
 
 // Continuous microphone audio for converse mode: raw 16 kHz mono s16le on `stream`, until `cancel()`, a
-// clip or recording asking for the camera (it steps aside: `preempted()` is then true), or the camera
-// dropping the stream. Holds the same one-capture lock as clip and listen.
-export function listenStream() {
-  if (busy || rec.active() || rec.gate.starting)
-    throw Object.assign(new Error('the camera is already recording'), {
-      code: 409,
-    });
-  busy = true;
-  rec.gate.busy = true;
+// clip or recording asking for the same device (it steps aside: `preempted()` is then true), or the
+// device dropping the stream. Holds the same one-capture lock as clip and listen.
+export function listenStream(cam = cameras.micNow()) {
+  const keys =
+    cam.kind === 'tethys' ? [TETHYS] : cameras.avfKeys(cam, { audio: true });
   const out = new PassThrough();
   let proc = null,
     cancelled = false,
     released = false;
-  const release = () => {
+  const free = () => {
     if (released) return;
     released = true;
-    busy = false;
-    rec.gate.busy = false;
-    if (rec.gate.preempt === cancel) rec.gate.preempt = null;
+    release(keys, cancel);
   };
   const cancel = () => {
     cancelled = true;
     proc?.kill('SIGKILL');
-    release();
+    free();
     out.end();
   };
-  rec.gate.preempt = cancel;
+  acquire(keys, cancel);
   (async () => {
     try {
-      const url = await camera.streamUrl();
+      const src = await sourceFor(cam, { audio: true });
       if (cancelled) return;
       proc = spawn(
         FFMPEG,
@@ -293,7 +388,7 @@ export function listenStream() {
           '-hide_banner',
           '-loglevel',
           'error',
-          ...inputArgs(url),
+          ...src.args,
           '-vn',
           '-map',
           '0:a:0',
@@ -312,15 +407,15 @@ export function listenStream() {
       children.add(proc);
       proc.stdout.pipe(out);
       proc.on('error', () => {
-        release();
+        free();
         out.end();
       });
       proc.on('close', () => {
         children.delete(proc);
-        release();
+        free();
       });
     } catch {
-      release();
+      free();
       out.end();
     }
   })();

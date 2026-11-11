@@ -7,6 +7,13 @@ follow [SemVer](https://semver.org/).
 
 ### Added
 
+- Cameras: Glasseye plus USB cameras and microphones found by name through
+  avfoundation (`GET /api/cameras`). An active camera for snapshot, clip, live
+  view and the page (`POST /api/cameras/active`, a `camera` on single calls) and
+  a separate listening mic for listen, ask and converse
+  (`POST /api/converse/mic`). Selectors in the Eye and Conversation panels; pan,
+  tilt and Vision disable on a camera without them. A USB device has its own
+  capture lock. Choices live in `~/.config/ghostjack/cameras.local.json`.
 - Personas (`personas/*.json`, `GET /api/personas`): a voice, rate, level,
   style, wake words, pronunciations and transcriber word list per agent. A
   `persona` or `agent` (or `X-GJ-Agent`) on say, reply and converse start picks

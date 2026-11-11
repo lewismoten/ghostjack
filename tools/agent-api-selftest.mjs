@@ -37,6 +37,15 @@ const ok = (cond, name, extra = '') => {
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+writeFileSync(
+  join(home, 'avf-list.txt'),
+  `AVFoundation video devices:
+[0] Test USB Cam
+AVFoundation audio devices:
+[0] Test USB Cam Audio
+[1] Test Desk Mic
+`,
+);
 const server = spawn('node', [join(ROOT, 'src', 'server.mjs')], {
   env: {
     ...process.env,
@@ -47,6 +56,7 @@ const server = spawn('node', [join(ROOT, 'src', 'server.mjs')], {
     GJ_WHISPER: whisper,
     GJ_WHISPER_MODEL: join(home, 'model.bin'),
     GJ_FAKE_HEARD: 'bee',
+    GJ_FAKE_AVF_LIST: join(home, 'avf-list.txt'),
   },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
@@ -409,6 +419,33 @@ try {
   ok(r.status === 400, 'ask needs 2 to 4 choices');
   const none = await jsonOf(await api('GET', '/api/ask/pending'));
   ok(none.id === null, 'nothing pending afterwards', JSON.stringify(none));
+  // cameras: the registry, switching, and Glasseye-only controls
+  let cams = await jsonOf(await api('GET', '/api/cameras?refresh=1'));
+  ok(
+    cams.active === 'glasseye' && cams.mic === 'glasseye',
+    'Glasseye is the default',
+    JSON.stringify(cams),
+  );
+  ok(
+    cams.cameras.some((c) => c.id === 'test-usb-cam'),
+    'a USB camera is listed',
+  );
+  r = await api('POST', '/api/cameras/active', { id: 'test-desk-mic' });
+  ok(r.status === 400, 'a mic-only device cannot be the camera');
+  r = await api('POST', '/api/cameras/active', { id: 'nope' });
+  ok(r.status === 404, 'unknown camera 404');
+  r = await api('POST', '/api/cameras/active', { id: 'test-usb-cam' });
+  ok(r.status === 200, 'switch to the USB camera');
+  r = await api('POST', '/api/move', { dx: 5, dy: 0 });
+  ok(r.status === 400, 'pan and tilt refuse a camera without ptz');
+  r = await api('POST', '/api/clip', { seconds: 1, camera: 'glasseye' });
+  ok(r.status === 200, 'a clip can name Glasseye per call');
+  r = await api('POST', '/api/converse/mic', { id: 'test-desk-mic' });
+  ok(r.status === 200, 'switch the listening mic');
+  r = await api('POST', '/api/cameras/active', { id: 'glasseye' });
+  r = await api('POST', '/api/converse/mic', { id: 'glasseye' });
+  cams = await jsonOf(await api('GET', '/api/cameras'));
+  ok(cams.active === 'glasseye' && cams.mic === 'glasseye', 'switched back');
 } catch (e) {
   failed++;
   console.log('FAIL', e.stack || e);
