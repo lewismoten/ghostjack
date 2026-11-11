@@ -187,7 +187,11 @@ const avfOnly = (cam) => cam.kind !== 'tethys';
 
 // The ffmpeg input for the live view of a USB camera (the stream copies Glasseye's feed instead).
 export const liveInput = (cam) =>
-  cameras.avfInput(cam, { video: true, audio: false, size: process.env.GJ_USB_LIVE_SIZE || '1920x1080' });
+  cameras.avfInput(cam, {
+    video: true,
+    audio: false,
+    size: process.env.GJ_USB_LIVE_SIZE || '1920x1080', // used only when the camera's modes are unknown
+  });
 
 // One JPEG frame from a USB camera: skips the first frames, which are dark while exposure settles.
 export async function snapshotAvf(cam) {
@@ -303,7 +307,7 @@ export function clip(seconds, width, audio, cam = cameras.videoNow()) {
       ? ['-c:v', 'copy']
       : [
           '-vf',
-          `scale=${width}:-2`,
+          `scale=min(${width}\\,iw):-2`,
           '-c:v',
           'libx264',
           '-preset',

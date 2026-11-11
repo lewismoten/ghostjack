@@ -589,6 +589,24 @@ const server = createServer(async (req, res) => {
         200,
         await cameras.list(url.searchParams.has('refresh')),
       );
+    if (route === 'POST /api/cameras/mode') {
+      const b = await readBody(req);
+      try {
+        return json(
+          res,
+          200,
+          await cameras.setMode(
+            String(b.id ?? ''),
+            String(b.size ?? ''),
+            b.fps,
+          ),
+        );
+      } catch (e) {
+        if (e.code === 400 || e.code === 404)
+          return json(res, e.code, { error: e.message });
+        throw e;
+      }
+    }
     if (
       route === 'POST /api/cameras/active' ||
       route === 'POST /api/converse/mic'

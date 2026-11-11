@@ -424,12 +424,17 @@ button[aria-pressed='true'] {
   background: rgba(255, 255, 255, 0.15);
   pointer-events: none;
 }
-.vision {
+.vision,
+.camMode {
   display: flex;
   gap: 6px;
   align-items: center;
 }
-.vision select {
+.camMode[hidden] {
+  display: none;
+}
+.vision select,
+.camMode select {
   min-height: 32px;
 }
 .zoom {
