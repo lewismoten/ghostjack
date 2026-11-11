@@ -77,6 +77,9 @@ let lost = false,
   crop = null,
   lastMove = 0;
 const updateArrowsSoon = () => queueMicrotask(() => updateArrows());
+let activeCam = '';
+let activeEntry = null; // the active camera's entry from /api/cameras
+let frameSize = null; // width and height of the last full-frame snapshot // the active camera's id (the zoomed view is remembered per camera)
 let ptzOn = true; // the active camera can pan and tilt (see loadCameras)
 const controls = [
   'live',
@@ -243,6 +246,10 @@ function setEye(who) {
   $('eye').classList.add('flip');
 }
 async function loadDevice() {
+  if (activeEntry && !activeEntry.capabilities.includes('ptz')) {
+    $('device').textContent = `Rig: ${activeEntry.name} (USB camera)`;
+    return;
+  }
   try {
     const r = await api('/api/info');
     const j = await r.json();
@@ -310,7 +317,15 @@ async function snapshot(auto = false) {
     lastShot = await r.blob();
     rememberFrame(lastShot);
     rememberPose(lastShot);
-    if (!crop) paintBlob(lastShot);
+    if (!crop) {
+      paintBlob(lastShot);
+      createImageBitmap(lastShot)
+        .then((b) => {
+          frameSize = [b.width, b.height];
+          b.close();
+        })
+        .catch(() => {});
+    }
     $('shotSave').disabled = $('shotDl').disabled = false;
     showImage(URL.createObjectURL(lastShot));
     setStatus(
@@ -636,6 +651,13 @@ async function loadCameras() {
     fill('micSel', 'mic', j.mic);
     const cam = j.cameras.find((c) => c.id === j.active);
     ptzOn = !!cam && cam.capabilities.includes('ptz');
+    activeEntry = cam ?? null;
+    frameSize = null;
+    loadDevice();
+    if (j.active !== activeCam) {
+      activeCam = j.active;
+      restoreView();
+    }
     applyPtz();
   } catch {
     /* the selectors stay as they were */
@@ -680,10 +702,24 @@ function updateArrows() {
         (sx < 0 && pan <= limits.panMin) ||
         (sy > 0 && tilt >= limits.tiltMax) ||
         (sy < 0 && tilt <= limits.tiltMin));
-    b.disabled = !connected || wall || !ptzOn;
+    if (digitalPad()) {
+      const [cx, cy, cw, ch] = crop,
+        dx = +b.dataset.dx,
+        dy = +b.dataset.dy;
+      const edge =
+        (dx > 0 && cx >= 1 - cw - 0.001) ||
+        (dx < 0 && cx <= 0.001) ||
+        (dy > 0 && cy <= 0.001) ||
+        (dy < 0 && cy >= 1 - ch - 0.001);
+      b.disabled = !connected || edge;
+      b.classList.remove('near-wall');
+      b.title = edge ? 'At the edge of the picture' : 'Pan the zoomed view';
+      continue;
+    }
+    b.disabled = !connected || wall || (!ptzOn && !zoomed());
     b.classList.toggle('near-wall', !!near);
     b.title = !ptzOn
-      ? 'This camera cannot pan or tilt'
+      ? 'This camera cannot pan or tilt (zoom in to pan the view)'
       : wall
         ? 'At the wall (the picture stopped changing twice)'
         : near
@@ -940,8 +976,15 @@ function shiftRangeToFit() {
 // Hold a control: one step now, then one more every STEP_MS until released. Moves queue in the camera
 // and a stop does not cancel them, so steps stay small and nothing is sent after the release.
 let holdTimer = 0;
-function holdStart(dx, dy) {
+function holdStart(dx, dy, digital = false) {
   holdStop();
+  if (digital) {
+    panStep(dx, dy);
+    holdTimer = setInterval(() => {
+      if (!panStep(dx, dy)) holdStop();
+    }, 160);
+    return;
+  }
   move(dx, dy);
   holdTimer = setInterval(() => {
     const [rx, ry] = room(dx, dy);
@@ -964,13 +1007,13 @@ for (const b of pads) {
   b.addEventListener('pointerdown', (e) => {
     if (e.button !== 0 || b.disabled) return;
     b.setPointerCapture(e.pointerId);
-    holdStart(...vec());
+    holdStart(...vec(), digitalPad());
   });
   for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture'])
     b.addEventListener(ev, holdStop);
   // Keyboard activation (Enter or Space on a focused arrow) has no pointer: one step.
   b.addEventListener('click', (e) => {
-    if (e.detail === 0) move(...vec());
+    if (e.detail === 0) digitalPad() ? panStep(...vec()) : move(...vec());
   });
 }
 const keys = {
@@ -990,7 +1033,9 @@ document.addEventListener('keydown', (e) => {
   e.preventDefault();
   if (e.repeat || heldKey) return; // the page repeats on its own timer
   heldKey = e.key;
-  holdStart(keys[e.key][0] * stepSize(), keys[e.key][1] * stepSize());
+  // Shift or the focused picture pans a zoomed view on any camera; a camera that cannot move always does
+  const digital = zoomed() && (!ptzOn || e.shiftKey || e.target === stage);
+  holdStart(keys[e.key][0] * stepSize(), keys[e.key][1] * stepSize(), digital);
 });
 document.addEventListener('keyup', (e) => {
   if (e.key !== heldKey) return;
@@ -1223,17 +1268,8 @@ async function pressSlot(n) {
   atSlot = n;
   renderKeys();
   // zoom first, so the snapshot after the move is already framed
-  if (s.crop) {
-    crop = s.crop;
-    $('zoom').value = Math.min(
-      4,
-      Math.max(1, Math.round((1 / s.crop[2]) * 4) / 4),
-    );
-    $('zoomOut').textContent = `${(1 / s.crop[2]).toFixed(1)}x`;
-  } else {
-    $('zoom').value = 1;
-    setZoom(1);
-  }
+  crop = s.crop ? clampCrop(...s.crop) : null;
+  viewChanged();
   setStatus(`Shot ${n}: ${s.name}.`);
   if (Math.abs(s.pan - pan) < 2 && Math.abs(s.tilt - tilt) < 2) {
     if (!liveOn) snapshot(true);
@@ -2099,18 +2135,124 @@ $('night').onchange = async () => {
   }
 };
 
-// Digital zoom: a slider (centered crop) or a dragged box on the picture; the bridge crops the 1080p snapshot.
+// Digital zoom: a slider (zoomed about the current center) or a dragged box on the picture; the bridge crops
+// the 1080p snapshot. A zoomed view pans digitally: the move pad (cameras that cannot move), Shift or focused
+// arrow keys, a drag or swipe on the picture, and a scroll. The window stays inside the frame; a minimap shows
+// where it is; the view is remembered per camera.
+function zoomed() {
+  return !!crop && crop[2] < 1;
+}
+const clampCrop = (x, y, w, h) => [
+  Math.min(1 - w, Math.max(0, x)),
+  Math.min(1 - h, Math.max(0, y)),
+  w,
+  h,
+];
+const viewKey = () => `gj-view-${activeCam || 'default'}`;
+// Sync everything that shows the view: slider, label, minimap, arrows; remember it for this camera.
+function viewChanged() {
+  const z = zoomed() ? 1 / crop[2] : 1;
+  $('zoom').value = Math.min(4, Math.max(1, Math.round(z * 4) / 4));
+  $('zoomOut').textContent = `${Number.isInteger(z) ? z : z.toFixed(1)}x`;
+  const mini = $('mini');
+  mini.hidden = !zoomed();
+  if (zoomed()) {
+    const [x, y, w, h] = crop;
+    Object.assign(mini.firstElementChild.style, {
+      left: `${x * 100}%`,
+      top: `${y * 100}%`,
+      width: `${w * 100}%`,
+      height: `${h * 100}%`,
+    });
+    const at = (v, size) =>
+      size >= 1
+        ? 'center'
+        : v < 0.001
+          ? 'start'
+          : v > 1 - size - 0.001
+            ? 'end'
+            : 'middle';
+    mini.setAttribute(
+      'aria-label',
+      `Zoomed ${z.toFixed(1)}x. View position: horizontal ${at(x, w)}, vertical ${at(y, h)}`,
+    );
+  }
+  $('stage').tabIndex = zoomed() ? 0 : -1;
+  store.set(viewKey(), crop ? JSON.stringify(crop) : '');
+  updateArrows();
+}
+function restoreView() {
+  let c = null;
+  try {
+    const v = JSON.parse(store.get(viewKey(), '') || 'null');
+    if (
+      Array.isArray(v) &&
+      v.length === 4 &&
+      v.every((n) => Number.isFinite(n)) &&
+      v[2] > 0.2 &&
+      v[2] < 1 &&
+      v[3] > 0.2 &&
+      v[3] < 1
+    )
+      c = clampCrop(...v);
+  } catch {
+    /* keep the full frame */
+  }
+  crop = c;
+  viewChanged();
+}
 function setZoom(z) {
-  $('zoomOut').textContent = `${z}x`;
-  crop = z <= 1 ? null : [(1 - 1 / z) / 2, (1 - 1 / z) / 2, 1 / z, 1 / z];
+  if (z <= 1) crop = null;
+  else {
+    const [x, y, w, h] = crop ?? [0, 0, 1, 1],
+      s = 1 / z;
+    crop = clampCrop(x + w / 2 - s / 2, y + h / 2 - s / 2, s, s);
+  }
+  viewChanged();
+}
+// One snapshot at a time while panning: a move made during a fetch is picked up by the next one.
+let panBusy = false,
+  panAgain = false;
+async function refreshView() {
+  if (panBusy) {
+    panAgain = true;
+    return;
+  }
+  panBusy = true;
+  try {
+    do {
+      panAgain = false;
+      await snapshot(true);
+    } while (panAgain);
+  } finally {
+    panBusy = false;
+  }
+}
+// Pan the zoomed window by fractions of the frame.
+function panBy(fx, fy) {
+  if (!zoomed()) return false;
+  const [x, y, w, h] = crop,
+    n = clampCrop(x + fx, y + fy, w, h);
+  if (n[0] === x && n[1] === y) return false;
+  crop = n;
+  viewChanged();
+  refreshView();
+  return true;
+}
+// Pad and key steps: a quarter of the window, in the pad's directions (up is tilt up).
+const panStep = (dx, dy) =>
+  panBy(Math.sign(dx) * crop[2] * 0.25, -Math.sign(dy) * crop[3] * 0.25);
+// The pad pans the view when the camera cannot move; a camera that can keeps the pad for the camera.
+function digitalPad() {
+  return zoomed() && !ptzOn;
 }
 $('zoom').oninput = () => {
   setZoom(+$('zoom').value);
   snapshot();
 };
 $('zoomReset').onclick = () => {
-  $('zoom').value = 1;
-  setZoom(1);
+  crop = null; // also recenters
+  viewChanged();
   snapshot();
 };
 let drag = null;
@@ -2126,46 +2268,69 @@ stage.addEventListener('pointerdown', (e) => {
   if (!connected || $('snap').hidden) return;
   // controls over the picture (grid tiles, questions, arrows) keep their clicks
   if (e.target.closest('button, input, form, .shotgrid')) return;
-  drag = frac(e);
+  drag = { at: frac(e), pan: zoomed() };
   stage.setPointerCapture(e.pointerId);
 });
 stage.addEventListener('pointermove', (e) => {
   if (!drag) return;
-  const [x, y] = frac(e),
-    b = $('box');
+  const [x, y] = frac(e);
+  if (drag.pan) {
+    // the picture follows the pointer; the window moves on release
+    const r = stage.getBoundingClientRect();
+    $('snap').style.transform =
+      `translate(${(x - drag.at[0]) * r.width}px, ${(y - drag.at[1]) * r.height}px)`;
+    return;
+  }
+  const b = $('box');
   b.hidden = false;
   Object.assign(b.style, {
-    left: `${Math.min(x, drag[0]) * 100}%`,
-    top: `${Math.min(y, drag[1]) * 100}%`,
-    width: `${Math.abs(x - drag[0]) * 100}%`,
-    height: `${Math.abs(y - drag[1]) * 100}%`,
+    left: `${Math.min(x, drag.at[0]) * 100}%`,
+    top: `${Math.min(y, drag.at[1]) * 100}%`,
+    width: `${Math.abs(x - drag.at[0]) * 100}%`,
+    height: `${Math.abs(y - drag.at[1]) * 100}%`,
   });
 });
 stage.addEventListener('pointerup', (e) => {
   if (!drag) return;
   const [x, y] = frac(e),
-    x0 = Math.min(x, drag[0]),
-    y0 = Math.min(y, drag[1]);
-  const w = Math.abs(x - drag[0]),
-    h = Math.abs(y - drag[1]);
+    d = drag;
   drag = null;
+  if (d.pan) {
+    $('snap').style.transform = '';
+    if (zoomed()) panBy(-(x - d.at[0]) * crop[2], -(y - d.at[1]) * crop[3]);
+    return;
+  }
+  const x0 = Math.min(x, d.at[0]),
+    y0 = Math.min(y, d.at[1]),
+    w = Math.abs(x - d.at[0]),
+    h = Math.abs(y - d.at[1]);
   $('box').hidden = true;
   if (w < 0.04 || h < 0.04) return;
   zoomTo(x0, y0, w, h);
 });
+stage.addEventListener('pointercancel', () => {
+  drag = null;
+  $('snap').style.transform = '';
+  $('box').hidden = true;
+});
+// Two-finger or trackpad scroll pans the zoomed view (a pinch, with Ctrl, is left to the page).
+stage.addEventListener(
+  'wheel',
+  (e) => {
+    if (!connected || !zoomed() || e.ctrlKey) return;
+    e.preventDefault();
+    const r = stage.getBoundingClientRect();
+    panBy((e.deltaX / r.width) * crop[2], (e.deltaY / r.height) * crop[3]);
+  },
+  { passive: false },
+);
 function zoomTo(x0, y0, bw, bh) {
   const w = Math.min(1, Math.max(bw, bh * (16 / 9))),
     h = w * (9 / 16);
   const cx = x0 + bw / 2,
     cy = y0 + bh / 2;
-  crop = [
-    Math.min(1 - w, Math.max(0, cx - w / 2)),
-    Math.min(1 - h, Math.max(0, cy - h / 2)),
-    w,
-    h,
-  ];
-  $('zoom').value = Math.min(4, Math.max(1, Math.round((1 / w) * 4) / 4));
-  $('zoomOut').textContent = `${(1 / w).toFixed(1)}x`;
+  crop = clampCrop(cx - w / 2, cy - h / 2, w, h);
+  viewChanged();
   snapshot();
 }
 
@@ -2176,6 +2341,40 @@ const sliders = {
   saturation: 's-saturation',
   sharpness: 's-sharpness',
 };
+function showInfoRows(rows) {
+  $('infoList').replaceChildren(
+    ...rows.flatMap(([k, v]) => {
+      const dt = document.createElement('dt'),
+        dd = document.createElement('dd');
+      dt.textContent = k;
+      dd.textContent = v;
+      return [dt, dd];
+    }),
+  );
+}
+// The info sheet for a camera that is not Glasseye: what the bridge's camera list and the last full
+// frame say (there is no camera-side settings page to read).
+function fillOther(cam) {
+  const kinds = { avfoundation: 'USB camera (macOS avfoundation)' };
+  const caps = {
+    video: 'picture',
+    mic: 'microphone',
+    speaker: 'speaker',
+    ptz: 'pan and tilt',
+  };
+  showInfoRows([
+    ['Type', kinds[cam.kind] ?? cam.kind],
+    ['Model', cam.name],
+    [
+      'Picture',
+      frameSize
+        ? `${frameSize[0]}x${frameSize[1]} (the last full frame)`
+        : 'size shows after a full-frame snapshot',
+    ],
+    ['Can', cam.capabilities.map((c) => caps[c] ?? c).join(', ')],
+    ['Pan and tilt', cam.capabilities.includes('ptz') ? 'yes' : 'no'],
+  ]);
+}
 function fill(info) {
   const rows = [];
   const add = (k, v) =>
@@ -2212,15 +2411,7 @@ function fill(info) {
     info.mic && (info.mic.silent ? 'muted' : `level ${info.mic.level}`),
   );
   add('Alerts', info.alerts && (info.alerts.enabled ? 'on' : 'off'));
-  $('infoList').replaceChildren(
-    ...rows.flatMap(([k, v]) => {
-      const dt = document.createElement('dt'),
-        dd = document.createElement('dd');
-      dt.textContent = k;
-      dd.textContent = v;
-      return [dt, dd];
-    }),
-  );
+  showInfoRows(rows);
   if (i) for (const [k, id] of Object.entries(sliders)) setSlider(id, i[k]);
   if (i) {
     $('c-wdr').checked = i.wdr === 'On';
@@ -2258,6 +2449,11 @@ function setSlider(id, v) {
 }
 async function loadInfo() {
   setStatus('Looking the rig over...');
+  if (activeEntry && !activeEntry.capabilities.includes('ptz')) {
+    fillOther(activeEntry);
+    setStatus(`Rig read: ${activeEntry.name}.`);
+    return;
+  }
   try {
     const r = await api('/api/info');
     const j = await r.json();

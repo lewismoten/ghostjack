@@ -1848,3 +1848,28 @@ dialog.pz :focus-visible {
 .cv > .gm {
   display: none;
 }
+
+/* Minimap of a zoomed view: the lit rectangle is what the picture shows. */
+.mini {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  width: 64px;
+  height: 36px;
+  border: 1px solid #fff;
+  background: rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+.mini i {
+  position: absolute;
+  border: 1px solid #fff;
+  background: rgba(255, 255, 255, 0.35);
+}
+.stage:focus-visible {
+  outline: 2px solid var(--accent, #fff);
+  outline-offset: -2px;
+}
+
+.camicon {
+  vertical-align: -3px;
+}
