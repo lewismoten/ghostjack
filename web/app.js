@@ -203,7 +203,10 @@ async function connect(e) {
       if (first && tabNow() === 'uplink') selectTab('rig');
       $('night').value = ['night', 'day'].includes(s.night) ? s.night : 'auto';
       showNight(s.night);
-      setIR(s.inNightVision);
+      // the infrared tint is Glasseye's: a USB camera's picture is never tinted (2026-11-10)
+      setIR(
+        s.inNightVision && (!s.activeCamera || s.activeCamera === 'glasseye'),
+      );
       setStatus(
         `${lost ? 'Back in sight. ' : ''}${first ? glass.line('jackIn') : 'Jacked in.'} Night vision: ${s.night}${s.inNightVision ? ' (infrared on now)' : ''}.`,
       );
