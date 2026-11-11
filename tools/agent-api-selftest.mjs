@@ -49,6 +49,9 @@ AVFoundation audio devices:
 const server = spawn('node', [join(ROOT, 'src', 'server.mjs')], {
   env: {
     ...process.env,
+    // never make sound in the room: the laptop player is a no-op here (a selftest played the ask prompt aloud, 2026-11-10)
+    FFPLAY: '/usr/bin/true',
+    GJ_SPEAKERS_LOCAL: join(ROOT, 'captures', '.selftest-speakers.json'),
     HOME: home,
     PORT: String(PORT),
     GJ_FAKE_CAMERA: join(ROOT, 'tools', 'fake-camera.mjs'),
