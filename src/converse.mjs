@@ -45,6 +45,7 @@ const dlog = (what, u, why, text = '') =>
   console.log(
     `[converse] ${what} id=${u.id} ${Math.round(u.durationMs || 0)}ms ended=${u.endedAt || '?'} ${why}${text ? ` "${String(text).slice(0, 80)}"` : ''}`,
   );
+const CONTINUE_MS = () => num('GJ_CONTINUE_MS', 3000);
 const FOLLOW_MS = () =>
   process.env.GJ_FOLLOW_MS === '0' ? 0 : num('GJ_FOLLOW_MS', 20000);
 export const INBOX_FILE = () =>
@@ -547,15 +548,18 @@ async function handleOne(s, u) {
   const viaBarge = s.bargeActive;
   // After the camera has spoken, Lewis may just answer: an utterance that starts within FOLLOW_MS of the
   // end of speech is kept without a wake word (GJ_FOLLOW_MS, default 20 s; 0 turns it off).
+  const startedAt =
+    u.endedAt && u.durationMs
+      ? Date.parse(u.endedAt) - u.durationMs
+      : Date.now();
+  // follow-up: within FOLLOW_MS after the camera/laptop spoke or after a wake word, or a continuation that
+  // starts within CONTINUE_MS of the last kept utterance's end (a long answer split at the cap). Plain kept
+  // speech no longer restarts the window, so a TV in the room can't hold it open (2026-11-10).
   const follow =
     !m &&
     !viaBarge &&
-    s.lastSpokeAt &&
-    (u.endedAt && u.durationMs
-      ? Date.parse(u.endedAt) - u.durationMs
-      : Date.now()) -
-      s.lastSpokeAt <=
-      FOLLOW_MS();
+    ((s.lastSpokeAt && startedAt - s.lastSpokeAt <= FOLLOW_MS()) ||
+      (s.lastKeptEnd && startedAt - s.lastKeptEnd <= CONTINUE_MS()));
   if (!m && !viaBarge && !follow)
     return dlog(
       'drop',
@@ -566,7 +570,8 @@ async function handleOne(s, u) {
   dlog('keep', u, m ? 'wake word' : viaBarge ? 'barge' : 'follow-up', text);
   // the follow-up window also restarts when Lewis is heard, so a long answer cut at the utterance
   // limit (or several sentences in a row) stays in the conversation (2026-11-10: the rest was dropped)
-  s.lastSpokeAt = Date.now();
+  if (m || viaBarge) s.lastSpokeAt = Date.now();
+  s.lastKeptEnd = u.endedAt ? Date.parse(u.endedAt) : Date.now();
   s.lastWake = Date.now();
   s.partial = null;
   // Words are only known to be addressed now, so the end of the utterance is reported late, with its time.
