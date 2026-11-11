@@ -59,6 +59,21 @@ $('voice').onchange = () => {
   snd.setVoice($('voice').checked);
   if ($('voice').checked) setStatus(glass.line('jackIn'));
 };
+// Agent voice lives on the bridge (so it survives a reload): the box follows /api/status and posts changes.
+$('agentVoice').onchange = async () => {
+  const want = $('agentVoice').checked;
+  try {
+    const r = await api('/api/settings', {
+      method: 'POST',
+      body: JSON.stringify({ agentVoice: want }),
+    });
+    if (!r.ok) throw new Error();
+    $('agentVoice').checked = (await r.json()).agentVoice;
+  } catch {
+    $('agentVoice').checked = !want;
+    setStatus('Could not change the agent voice.');
+  }
+};
 document.addEventListener(
   'click',
   (e) => {
@@ -214,6 +229,7 @@ async function connect(e) {
       if (first && tabNow() === 'uplink') selectTab('rig');
       $('night').value = ['night', 'day'].includes(s.night) ? s.night : 'auto';
       showNight(s.night);
+      $('agentVoice').checked = s.agentVoice !== false;
       // the infrared tint is Glasseye's: a USB camera's picture is never tinted (2026-11-10)
       setIR(
         s.inNightVision && (!s.activeCamera || s.activeCamera === 'glasseye'),

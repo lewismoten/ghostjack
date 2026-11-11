@@ -12,7 +12,7 @@
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "test": "node --test tools/stream-test.mjs tools/cameras-test.mjs tools/converse-test.mjs tools/converse-turns-test.mjs tools/history-test.mjs tools/personas-test.mjs tools/wake-test.mjs tools/say-fast-test.mjs tools/wake-fast-test.mjs tools/speech-stream-test.mjs tools/output-test.mjs tools/speakers-test.mjs tools/page-voice-test.mjs",
+    "test": "node --test tools/stream-test.mjs tools/cameras-test.mjs tools/converse-test.mjs tools/converse-turns-test.mjs tools/history-test.mjs tools/personas-test.mjs tools/wake-test.mjs tools/say-fast-test.mjs tools/wake-fast-test.mjs tools/speech-stream-test.mjs tools/output-test.mjs tools/speakers-test.mjs tools/page-voice-test.mjs tools/agent-voice-test.mjs",
     "check": "npm run format:check && npm run lint"
   },
   "dependencies": {

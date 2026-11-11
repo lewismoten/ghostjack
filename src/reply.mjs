@@ -9,6 +9,7 @@ import { takeSegments, toneWav, TONE_KINDS } from './converse-turns.mjs';
 import { TMP } from './paths.mjs';
 import { note } from './history.mjs';
 import { applySayAs } from './personas.mjs';
+import { agentVoiceOn } from './settings.mjs';
 
 // Words the macOS voice says wrong, written the way they should sound (2026-11-10: "Glasseye" came out "glassy").
 const SAY_AS = [
@@ -133,7 +134,13 @@ export function append({ id, text, end, voice, level, rate, persona, output }) {
     final: end === true,
   });
   r.buf = rest;
+  const mute = !agentVoiceOn(); // "Agent voice" off: the text still arrives and is recorded, nothing plays
   for (const text of segments) {
+    if (mute) {
+      r.segments.push({ id: `muted-${r.segments.length}`, text, muted: true });
+      noteReply(text, r.output);
+      continue;
+    }
     if (!r.segments.length) playTone('start', { output: r.output });
     // the whole reply is one continuous publish; a new one only if the last closed itself (the agent paused
     // longer than the stream's idle limit) or was cut
@@ -154,7 +161,9 @@ export function append({ id, text, end, voice, level, rate, persona, output }) {
     r.closed = true;
     // the done tone rides at the end of the reply's own stream, right after the last word: a separate
     // publish came 5.5 s late and muted the mic while Lewis started answering (2026-11-10)
-    if (r.segments.length && tones.done && r.stream?.open) {
+    if (mute) {
+      /* silent */
+    } else if (r.segments.length && tones.done && r.stream?.open) {
       mkdirSync(TMP, { recursive: true });
       const file = join(TMP, `tone-${randomBytes(6).toString('hex')}.wav`);
       writeFileSync(file, toneWav('done'));
@@ -178,7 +187,7 @@ export const view = (r) => ({
   segments: r.segments.map((s) => ({
     id: s.id,
     text: s.text,
-    status: speech.sayStatus(s.id)?.status ?? 'gone',
+    status: s.muted ? 'muted' : (speech.sayStatus(s.id)?.status ?? 'gone'),
   })),
 });
 export const get = (id) => replies.get(id);

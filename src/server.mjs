@@ -23,6 +23,7 @@ import * as media from './media.mjs';
 import * as cameras from './cameras.mjs';
 import * as asker from './ask.mjs';
 import * as converse from './converse.mjs';
+import * as settings from './settings.mjs';
 import * as reply from './reply.mjs';
 import { history } from './history.mjs';
 import { personas, applySayAs } from './personas.mjs';
@@ -542,7 +543,16 @@ const server = createServer(async (req, res) => {
       return json(res, 200, {
         ...(await camera.status()),
         activeCamera: cameras.videoNow().id,
+        agentVoice: settings.agentVoiceOn(),
       });
+    if (route === 'POST /api/settings') {
+      const b = await readBody(req);
+      if (typeof b.agentVoice !== 'boolean')
+        return json(res, 400, { error: 'agentVoice is true or false' });
+      return json(res, 200, {
+        agentVoice: settings.setAgentVoice(b.agentVoice),
+      });
+    }
     if (route === 'GET /api/snapshot.jpg') {
       const q = url.searchParams;
       const cam = await cameras.pickVideo(q.get('camera'));
