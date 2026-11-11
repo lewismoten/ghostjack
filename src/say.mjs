@@ -464,7 +464,7 @@ export function say(spec) {
 
 // The warm link: converse mode opens a publish when someone starts talking (before the wake word is even
 // recognized) so the bleep only has to be written into it, skipping the talk request and the publish setup.
-// It plays a very low tone (GJ_WARM_PEAK, default 0.003 of full scale; 0 is silence) and ends itself after
+// It plays a very low tone (GJ_WARM_PEAK, default 0, silence: 0.003 was a steady high tone on the camera speaker, 2026-11-10) and ends itself after
 // GJ_WARM_IDLE_MS (4 s). A real stream (a reply) hands it over at once; stop, converse off and errors end it.
 let warmStream = null;
 const warmUsable = () =>
@@ -476,7 +476,7 @@ export function openWarm() {
   if (warmUsable()) return warmStream;
   if (streams.some((st) => !idleWarm(st)) || (running && !idleWarm(running)))
     return null; // the camera is in use
-  const peak = process.env.GJ_WARM_PEAK ?? '0.003';
+  const peak = process.env.GJ_WARM_PEAK ?? '0';
   const w = openStream({
     label: 'wake-warm',
     warm: true,
