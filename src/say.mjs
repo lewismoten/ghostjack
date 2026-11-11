@@ -300,6 +300,9 @@ function spawnMacPlayer(onProgress) {
     FFPLAY,
     [
       '-nodisp',
+      // speech levels are tuned for the camera's tiny speaker (capped at 0.05): lift them for the laptop (GJ_MAC_GAIN)
+      '-af',
+      `volume=${Number(process.env.GJ_MAC_GAIN) || 14}`,
       '-autoexit',
       '-loglevel',
       'quiet',
