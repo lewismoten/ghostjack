@@ -652,6 +652,7 @@ async function loadCameras() {
     const cam = j.cameras.find((c) => c.id === j.active);
     ptzOn = !!cam && cam.capabilities.includes('ptz');
     activeEntry = cam ?? null;
+    fillModes(cam);
     frameSize = null;
     loadDevice();
     if (j.active !== activeCam) {
@@ -663,6 +664,58 @@ async function loadCameras() {
     /* the selectors stay as they were */
   }
 }
+// Resolution and FPS selects: shown only for a USB camera that lists modes.
+function fillModes(cam) {
+  const list = cam?.modes ?? [];
+  const show = list.length > 0 && !!cam.mode;
+  $('modeBox').hidden = $('fpsBox').hidden = !show;
+  if (!show) return;
+  const area = (m) => m.size.split('x').reduce((a, b) => a * b, 1);
+  const opt = (v, t) =>
+    Object.assign(document.createElement('option'), {
+      value: v,
+      textContent: t,
+    });
+  const sizes = $('modeSel');
+  sizes.replaceChildren(
+    ...[...list]
+      .sort((a, b) => area(b) - area(a))
+      .map((m) => opt(m.size, m.size.replace('x', ' x '))),
+  );
+  sizes.value = cam.mode.size;
+  const fps = $('fpsSel');
+  fps.replaceChildren(
+    ...(list.find((m) => m.size === cam.mode.size)?.fps ?? []).map((f) =>
+      opt(f, String(f)),
+    ),
+  );
+  fps.value = String(cam.mode.fps);
+  sizes.disabled = fps.disabled = !connected;
+}
+async function pickMode(size, fps) {
+  const r = await api('/api/cameras/mode', {
+    method: 'POST',
+    body: JSON.stringify({ id: activeEntry.id, size, fps: Number(fps) }),
+  });
+  if (!r.ok) setStatus(`Mode: ${(await r.json()).error}`, true);
+  else setStatus(`Camera mode: ${size} at ${fps} fps.`);
+  await loadCameras();
+  if (!r.ok) return;
+  if (liveOn) {
+    stopLive();
+    startLive();
+  } else if (!(Number($('stills').value) > 0)) autoSnapSoon(300);
+}
+$('modeSel').onchange = () => {
+  // keep the fps if the new size offers it, else the nearest to 30
+  const m = activeEntry.modes.find((x) => x.size === $('modeSel').value);
+  const want = Number($('fpsSel').value);
+  const fps = m.fps.includes(want)
+    ? want
+    : [...m.fps].sort((a, b) => Math.abs(a - 30) - Math.abs(b - 30))[0];
+  pickMode($('modeSel').value, fps);
+};
+$('fpsSel').onchange = () => pickMode($('modeSel').value, $('fpsSel').value);
 async function pickCamera(path, sel, label) {
   const r = await api(path, {
     method: 'POST',
@@ -2365,6 +2418,14 @@ function fillOther(cam) {
   showInfoRows([
     ['Type', kinds[cam.kind] ?? cam.kind],
     ['Model', cam.name],
+    ...(cam.mode
+      ? [
+          [
+            'Mode',
+            `${cam.mode.size} at ${cam.mode.fps} fps (change it next to Camera)`,
+          ],
+        ]
+      : []),
     [
       'Picture',
       frameSize

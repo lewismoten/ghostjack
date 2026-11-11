@@ -80,3 +80,83 @@ test('a USB camera has its own capture lock, apart from Glasseye', async () => {
   const c = media.listenStream(mic); // freed again
   c.cancel();
 });
+
+const MODES = `[avfoundation @ 0x1] Selected framerate (1.000000) is not supported by the device.
+[avfoundation @ 0x1] Supported modes:
+[avfoundation @ 0x1]   640x360@[5.000000 5.000000]fps
+[avfoundation @ 0x1]   640x480@[5.000000 5.000000]fps
+[avfoundation @ 0x1]   640x480@[30.000000 30.000000]fps
+[avfoundation @ 0x1]   1280x720@[30.000000 30.000000]fps
+[avfoundation @ 0x1]   1280x720@[60.000000 60.000000]fps
+[avfoundation @ 0x1]   1920x1080@[5.000000 5.000000]fps
+[avfoundation @ 0x1]   1920x1080@[30.000000 30.000000]fps
+[avfoundation @ 0x1]   1024x768@[30.000000 30.000000]fps
+`;
+const modeSetup = () => {
+  const asked = [];
+  cameras._reset({
+    lister: async () => LIST,
+    modeLister: async (n) => (asked.push(n), MODES),
+    file: false,
+  });
+  return asked;
+};
+
+test('parses supported modes and picks the largest 16:9 at 30 fps', () => {
+  const m = cameras.parseModes(MODES);
+  assert.deepEqual(m.find((x) => x.size === '1920x1080').fps, [5, 30]);
+  assert.deepEqual(cameras.defaultMode(m), { size: '1920x1080', fps: 30 });
+  assert.equal(cameras.defaultMode([]), null);
+});
+
+test('list shows modes (cached per device) and the chosen mode', async () => {
+  const asked = modeSetup();
+  const nx = (await cameras.list()).cameras.find(
+    (c) => c.id === 'nexigo-n660p-fhd-webcam',
+  );
+  assert.equal(nx.modes.length, 5);
+  assert.deepEqual(nx.mode, { size: '1920x1080', fps: 30 });
+  await cameras.list();
+  assert.equal(asked.length, 1);
+  await cameras.list(true);
+  assert.equal(asked.length, 2);
+});
+
+test('setMode validates against the list, saves, and drives avfInput', async () => {
+  modeSetup();
+  await assert.rejects(
+    cameras.setMode('nexigo-n660p-fhd-webcam', '800x600', 30),
+    { code: 400 },
+  );
+  await assert.rejects(
+    cameras.setMode('nexigo-n660p-fhd-webcam', '1280x720', 15),
+    { code: 400 },
+  );
+  await assert.rejects(cameras.setMode('glasseye', '1280x720', 30), {
+    code: 400,
+  });
+  await assert.rejects(cameras.setMode('nope', '1280x720', 30), { code: 404 });
+  const r = await cameras.setMode('nexigo-n660p-fhd-webcam', '1280x720', 60);
+  assert.deepEqual(
+    r.cameras.find((c) => c.id === 'nexigo-n660p-fhd-webcam').mode,
+    { size: '1280x720', fps: 60 },
+  );
+  assert.deepEqual(
+    JSON.parse(readFileSync(file, 'utf8')).modes['nexigo-n660p-fhd-webcam'],
+    { size: '1280x720', fps: 60 },
+  );
+  const cam = await cameras.pickVideo('nexigo-n660p-fhd-webcam');
+  const a = cameras.avfInput(cam, { video: true, size: '1920x1080' });
+  assert.deepEqual(a.slice(2, 6), [
+    '-framerate',
+    '60',
+    '-video_size',
+    '1280x720',
+  ]);
+  assert.deepEqual(media.liveInput(cam).slice(2, 6), [
+    '-framerate',
+    '60',
+    '-video_size',
+    '1280x720',
+  ]);
+});

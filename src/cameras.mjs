@@ -32,7 +32,9 @@ const GLASSEYE_ENTRY = {
 let lister = defaultLister; // () => Promise<string>: ffmpeg's device list text
 let found = []; // avfoundation entries from the last discovery
 let foundAt = 0;
-let choice = load(); // { active, mic }
+let modeLister = defaultModeLister; // (videoName) => Promise<string>: ffmpeg's "Supported modes" text
+const modes = new Map(); // video device name -> [{ size: 'WxH', fps: [numbers] }], cached
+let choice = load(); // { active, mic, modes: { [cameraId]: { size, fps } } }
 
 function defaultLister() {
   if (process.env.GJ_FAKE_AVF_LIST)
@@ -48,15 +50,71 @@ function defaultLister() {
   );
 }
 
+function defaultModeLister(name) {
+  if (process.env.GJ_FAKE_AVF_MODES)
+    return Promise.resolve(readFileSync(process.env.GJ_FAKE_AVF_MODES, 'utf8'));
+  return new Promise((resolve) =>
+    // Asking for 1 fps makes ffmpeg fail and print every mode the device offers.
+    execFile(
+      FFMPEG,
+      [
+        '-hide_banner',
+        '-f',
+        'avfoundation',
+        '-framerate',
+        '1',
+        '-i',
+        `${name}:none`,
+      ],
+      { timeout: 10000 },
+      (_e, _out, err) => resolve(String(err || '')),
+    ),
+  );
+}
+
+// Parse "Supported modes" lines such as `640x480@[5.000000 30.000000]fps` into [{ size, fps: [..] }].
+export function parseModes(text) {
+  const by = new Map();
+  for (const m of text.matchAll(/(\d+)x(\d+)@\[([\d.]+)\s+([\d.]+)\]fps/g)) {
+    const size = `${m[1]}x${m[2]}`;
+    const set = by.get(size) || new Set();
+    for (const f of [m[3], m[4]]) set.add(Math.round(Number(f) * 100) / 100);
+    by.set(size, set);
+  }
+  return [...by].map(([size, set]) => ({
+    size,
+    fps: [...set].sort((a, b) => a - b),
+  }));
+}
+
+// The default mode: the largest 16:9 size at 30 fps (else the largest size, at its fps nearest 30).
+export function defaultMode(list) {
+  if (!list.length) return null;
+  const area = (m) => m.size.split('x').reduce((a, b) => a * b, 1);
+  const wide = (m) => {
+    const [w, h] = m.size.split('x').map(Number);
+    return Math.abs(w / h - 16 / 9) < 0.02;
+  };
+  const pool = list.filter(wide);
+  const best = [...(pool.length ? pool : list)].sort(
+    (a, b) => area(b) - area(a),
+  )[0];
+  const fps = [...best.fps].sort(
+    (a, b) => Math.abs(a - 30) - Math.abs(b - 30),
+  )[0];
+  return { size: best.size, fps };
+}
+
 function load() {
   try {
     const j = JSON.parse(readFileSync(FILE, 'utf8'));
     return {
       active: typeof j.active === 'string' ? j.active : GLASSEYE,
       mic: typeof j.mic === 'string' ? j.mic : GLASSEYE,
+      modes: j.modes && typeof j.modes === 'object' ? j.modes : {},
     };
   } catch {
-    return { active: GLASSEYE, mic: GLASSEYE };
+    return { active: GLASSEYE, mic: GLASSEYE, modes: {} };
   }
 }
 
@@ -127,6 +185,25 @@ export async function refresh(force = false) {
   foundAt = Date.now();
 }
 
+// The mode a USB camera captures in: the saved choice if the camera still offers it, else the default.
+export function modeFor(e) {
+  if (!e || !e.device || !e.device.video) return null;
+  const list = modes.get(e.device.video) || [];
+  const c = choice.modes[e.id];
+  if (c && list.some((m) => m.size === c.size && m.fps.includes(c.fps)))
+    return { size: c.size, fps: c.fps };
+  return defaultMode(list);
+}
+
+async function loadModes(e, force) {
+  const name = e.device && e.device.video;
+  if (!name || (!force && modes.has(name))) return;
+  const text = await modeLister(name);
+  const list = parseModes(text);
+  // a failed or busy probe keeps what was known; an empty first probe is retried next time
+  if (list.length) modes.set(name, list);
+}
+
 const publicEntry = (e) => ({
   id: e.id,
   name: e.name,
@@ -134,6 +211,9 @@ const publicEntry = (e) => ({
   capabilities: e.capabilities,
   active: e.id === choice.active,
   mic: e.id === choice.mic,
+  ...(e.device && e.device.video
+    ? { modes: modes.get(e.device.video) || [], mode: modeFor(e) }
+    : {}),
 });
 
 const all = () => [GLASSEYE_ENTRY, ...found];
@@ -141,6 +221,9 @@ const entry = (id) => all().find((e) => e.id === id);
 
 export async function list(force = false) {
   await refresh(force);
+  await Promise.all(
+    found.filter((e) => e.device.video).map((e) => loadModes(e, force)),
+  );
   return {
     active: choice.active,
     mic: choice.mic,
@@ -167,6 +250,32 @@ export async function setActive(id) {
   return list();
 }
 
+// Choose a USB camera's live/snapshot/clip mode. Must be one the camera lists.
+export async function setMode(id, size, fps) {
+  await refresh();
+  const e = need(id, 'video');
+  if (e.kind === 'tethys')
+    throw Object.assign(new Error('Glasseye has no choice of mode'), {
+      code: 400,
+    });
+  await loadModes(e);
+  const offered = modes.get(e.device.video) || [];
+  const f = Number(fps);
+  const m = offered.find((x) => x.size === size);
+  if (!m)
+    throw Object.assign(new Error(`${e.name} has no ${size} mode`), {
+      code: 400,
+    });
+  if (!m.fps.includes(f))
+    throw Object.assign(
+      new Error(`${e.name} has no ${size} mode at ${fps} fps`),
+      { code: 400 },
+    );
+  choice.modes[id] = { size, fps: f };
+  save();
+  return list();
+}
+
 export async function setMic(id) {
   await refresh(true);
   need(id, 'mic');
@@ -180,8 +289,9 @@ export async function setMic(id) {
 export async function pickVideo(id) {
   if (!id && choice.active === GLASSEYE) return GLASSEYE_ENTRY; // the default needs no discovery
   await refresh();
-  if (id) return need(id, 'video');
-  return entry(choice.active) || GLASSEYE_ENTRY;
+  const e = id ? need(id, 'video') : entry(choice.active) || GLASSEYE_ENTRY;
+  if (e.device) await loadModes(e);
+  return e;
 }
 
 export async function pickMic(id) {
@@ -196,12 +306,20 @@ export const isTethys = (e) => e.kind === 'tethys';
 
 // The ffmpeg input for an avfoundation entry. `size` is WxH. The "video:audio" spec uses names.
 export function avfInput(e, { video, audio, size = '1280x720' }) {
+  const mode = modeFor(e); // the chosen (or default) mode wins over the caller's size
   const v = video && e.device.video ? e.device.video : 'none';
   const a = audio && e.device.audio ? e.device.audio : 'none';
   return [
     '-f',
     'avfoundation',
-    ...(v !== 'none' ? ['-framerate', '30', '-video_size', size] : []),
+    ...(v !== 'none'
+      ? [
+          '-framerate',
+          String(mode ? mode.fps : 30),
+          '-video_size',
+          mode ? mode.size : size,
+        ]
+      : []),
     '-i',
     `${v}:${a}`,
   ];
@@ -214,13 +332,15 @@ export const avfKeys = (e, { video, audio }) => [
 ];
 
 // Test hooks.
-export function _reset({ lister: l, file } = {}) {
+export function _reset({ lister: l, file, modeLister: ml } = {}) {
   lister = l || defaultLister;
+  modeLister = ml || defaultModeLister;
+  modes.clear();
   found = [];
   foundAt = 0;
   choice =
     file === false || !existsSync(FILE)
-      ? { active: GLASSEYE, mic: GLASSEYE }
+      ? { active: GLASSEYE, mic: GLASSEYE, modes: {} }
       : load();
 }
 
