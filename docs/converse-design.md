@@ -53,6 +53,19 @@ include the tail of the camera's own voice.
 burst, Lewis present) plays three tone bursts and records them, then prints the
 delay and echo ratio to put in `GJ_ECHO_DELAY_MS`.
 
+### The page's own voice
+
+Glassmouth's lines (`web/glass.js`, spoken by the browser through the Mac
+speaker) reach the microphone too. The page reports each line's start and end
+with `POST /api/converse/page-voice {speaking, text}` (authenticated; end also
+fires on a timeout if the browser never says). `src/page-voice.mjs` keeps those
+windows. A final whose audio is inside a window plus a tail (`GJ_PAGE_TAIL_MS`,
+1.5 s) is dropped (`inside page voice` in the log); one that overlaps only a
+start or an end has those words trimmed (`trim`, by word times spread over the
+audio). A text safety net removes a line the page spoke in the last 8 s from
+either end of a transcript, and drops it if nothing is left. The lines live in
+`web/lines.js` so both sides read the same data.
+
 ## Not done
 
 - **Streaming recognizer.** Partials are the whole utterance transcribed again

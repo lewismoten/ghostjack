@@ -169,6 +169,14 @@ const api = async (path, opts = {}) => {
     throw e instanceof TypeError ? new Error(BLOCKED) : e;
   }
 };
+// The bridge's microphone would hear Glassmouth's voice as Lewis: tell it when a line is spoken.
+glass.onSpeech((speaking, text) => {
+  if (!token) return;
+  api('/api/converse/page-voice', {
+    method: 'POST',
+    body: JSON.stringify({ speaking, text }),
+  }).catch(() => {});
+});
 const net = netpath($('radar'), reduced);
 
 async function connect(e) {

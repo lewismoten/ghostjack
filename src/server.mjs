@@ -943,6 +943,14 @@ const server = createServer(async (req, res) => {
         converse.interrupt({ text, level: speech.capLevel(b.level) }),
       );
     }
+    if (route === 'POST /api/converse/page-voice') {
+      const b = await readBody(req);
+      converse.pageVoiceEvent(
+        b.speaking === true,
+        String(b.text ?? '').slice(0, 300),
+      );
+      return json(res, 200, { ok: true });
+    }
     if (route === 'POST /api/converse/tones') {
       const b = await readBody(req);
       return json(res, 200, { tones: reply.setTones(b.tones ?? b) });
