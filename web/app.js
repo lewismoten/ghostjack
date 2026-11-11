@@ -1762,8 +1762,37 @@ function pzRender() {
   );
   pzFill($('pzPick').value);
 }
+// Speakers: each slider and number pair stay in step; Test saves the value, then plays one line through that speaker.
+const spPair = (range, num) => {
+  $(range).oninput = () => ($(num).value = $(range).value);
+  $(num).oninput = () => ($(range).value = $(num).value);
+};
+spPair('spCamRange', 'spCam');
+spPair('spMacRange', 'spMac');
+function spFill(d) {
+  $('spCam').value = $('spCamRange').value =
+    d.camera.level ?? d.defaults.cameraLevel;
+  $('spMac').value = $('spMacRange').value = d.mac.gain;
+  $('spMacNote').textContent = d.overrides.macGain
+    ? 'GJ_MAC_GAIN is set on the bridge and overrides this. Plays through the Mac default output.'
+    : "Plays through the Mac's default output (a different device cannot be chosen reliably).";
+}
+async function spTest(speaker, body) {
+  try {
+    await pzCall('/api/speakers', 'PUT', body);
+    await pzCall('/api/speakers/test', 'POST', { speaker });
+    pzNote('Saved. Playing: Testing, one two three.');
+  } catch (e) {
+    pzNote(`Speaker test failed: ${e.message}`);
+  }
+}
+$('spCamTest').onclick = () =>
+  spTest('camera', { camera: { level: Number($('spCam').value) } });
+$('spMacTest').onclick = () =>
+  spTest('mac', { mac: { gain: Number($('spMac').value) } });
 async function pzLoad() {
   try {
+    spFill(await pzCall('/api/speakers', 'GET'));
     pz.data = await pzCall('/api/personas', 'GET');
     if (!pz.voices.length)
       pz.voices = (await pzCall('/api/voices', 'GET')).voices ?? [];

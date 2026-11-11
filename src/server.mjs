@@ -17,6 +17,7 @@ import { dirname, extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { camera } from './camera-select.mjs';
 import * as speech from './say.mjs';
+import * as speakers from './speakers.mjs';
 import * as rec from './record.mjs';
 import * as media from './media.mjs';
 import * as asker from './ask.mjs';
@@ -676,6 +677,27 @@ const server = createServer(async (req, res) => {
       if (b.voice && !(await speech.voices()).includes(String(b.voice)))
         return json(res, 400, { error: 'unknown voice' });
       return json(res, 200, personas.save({ ...b, name }));
+    }
+    if (route === 'GET /api/speakers') return json(res, 200, speakers.get());
+    if (route === 'PUT /api/speakers')
+      return json(res, 200, speakers.set(await readBody(req)));
+    if (route === 'POST /api/speakers/test') {
+      const b = await readBody(req);
+      const output = speech.cleanOutput(b.speaker);
+      if (!output) return json(res, 400, { error: 'speaker: camera or mac' });
+      if (!sayAllowed()) return json(res, 429, { error: 'ten says a minute' });
+      const level = speech.capLevel(speakers.cameraLevel() ?? 0.03);
+      return json(res, 202, {
+        speaker: output,
+        ...speech.say({
+          text: 'Testing, one two three.',
+          level,
+          rate: 140,
+          chime: output === 'camera',
+          chimeLevel: speech.chimeFor(level, 0.008),
+          output,
+        }),
+      });
     }
     if (route === 'GET /api/voices')
       return json(res, 200, { voices: await speech.voices() });

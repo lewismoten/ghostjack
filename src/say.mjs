@@ -14,6 +14,7 @@ import { randomBytes } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { camera } from './camera-select.mjs';
+import * as speakers from './speakers.mjs';
 import { SpeechStream, silence, sine } from './speech-stream.mjs';
 
 const FFMPEG = process.env.FFMPEG || '/opt/homebrew/bin/ffmpeg';
@@ -300,9 +301,9 @@ function spawnMacPlayer(onProgress) {
     FFPLAY,
     [
       '-nodisp',
-      // speech levels are tuned for the camera's tiny speaker (capped at 0.05): lift them for the laptop (GJ_MAC_GAIN)
+      // speech levels are tuned for the camera's tiny speaker (capped at 0.05): the laptop's gain comes from speakers.mjs
       '-af',
-      `volume=${Number(process.env.GJ_MAC_GAIN) || 14}`,
+      `volume=${speakers.macGain()}`,
       '-autoexit',
       '-loglevel',
       'quiet',
@@ -502,6 +503,8 @@ function addJob(
   },
 ) {
   const id = randomBytes(6).toString('hex');
+  // the camera speaker's own level (Speakers setup) decides loudness when set; the laptop's gain is applied by its player
+  if (st.output === 'camera') level = speakers.cameraLevel() ?? level;
   const job = {
     id,
     status: 'queued',
