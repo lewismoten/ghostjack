@@ -36,7 +36,15 @@ import {
   wavFromPcm,
 } from './converse-core.mjs';
 import { EchoGate, playbackReport } from './converse-turns.mjs';
+import { PageVoice } from './page-voice.mjs';
 import { note } from './history.mjs';
+
+// Glassmouth's browser voice, reported by the page (POST /api/converse/page-voice): its lines are not Lewis.
+const pageVoice = new PageVoice({
+  tailMs: Number(process.env.GJ_PAGE_TAIL_MS) || 1500,
+});
+export const pageVoiceEvent = (speaking, text) =>
+  pageVoice.set(!!speaking, text);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const num = (name, def) => Number(process.env[name]) || def;
@@ -515,9 +523,18 @@ async function handle(s, u) {
 }
 
 async function handleOne(s, u) {
-  const text = await wavText(u.pcm, undefined, s.persona);
+  let text = await wavText(u.pcm, undefined, s.persona);
   if (!text || sess !== s)
     return dlog('drop', u, text ? 'session ended' : 'no text from whisper');
+  {
+    const end = u.endedAt ? Date.parse(u.endedAt) : Date.now();
+    const f = pageVoice.filter(text, end - (u.durationMs || 0), end);
+    if (f.why) {
+      if (!f.text) return dlog('drop', u, f.why, text);
+      dlog('trim', u, f.why, text);
+      text = f.text;
+    }
+  }
   // The camera started talking while this was transcribed: it may be its own voice.
   if (!s.bargeActive && s.guard.muted(Date.now(), speakingNow(s)))
     return dlog('drop', u, 'camera spoke during transcription', text);

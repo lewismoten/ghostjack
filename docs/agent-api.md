@@ -266,3 +266,12 @@ Moves, settling and the microphone were tested offline with a fake camera
 (`node tools/agent-api-selftest.mjs`). How well the picture-settle check works
 on the real camera, how well whisper hears a room, and how long a move really
 takes are only known from use.
+
+## Agent voice switch
+
+`GET /api/status` includes `agentVoice` (default `true`).
+`POST /api/settings {"agentVoice": false}` turns the bridge's spoken replies off
+(saved in `~/.config/ghostjack/settings.json`, so it survives restarts and page
+reloads). With it off, `POST /api/reply` still answers normally and the text
+reaches the history and the page's recent lines, but nothing is played; the
+reply's segments have `status: "muted"`.
