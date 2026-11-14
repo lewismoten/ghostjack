@@ -79,28 +79,31 @@ off).
    `GET /api/converse/heard?after=<n>`. Only what is addressed to you appears,
    as text; audio is never kept.
 3. Event types: `wake` (the wake word was heard, the bleep played; wait),
-   `partial` (words so far), `end` (he stopped talking), `final` (the finished
-   text), `barge` (he talked over you), `interrupt` (you cut in).
-4. A `final` with `wakeOnly:true` is just the wake word. Do not answer. He is
-   waiting; the next `final` (with `followUp:true`) is his sentence and needs no
-   wake word.
+   `partial` (words so far), `end` (the speaker stopped talking), `final` (the
+   finished text), `barge` (the speaker talked over you), `interrupt` (you cut
+   in).
+4. A `final` with `wakeOnly:true` is just the wake word. Do not answer. The
+   speaker is waiting; the next `final` (with `followUp:true`) is their sentence
+   and needs no wake word.
 5. Answer with `POST /api/reply`: send the first sentence as soon as you have
    it, then `{"id":<reply id>,"text":"...","end":true}` for the rest. Each
    finished sentence is spoken while you write the next. Always close with
    `end:true`.
-6. After you finish, a follow-up window (about 20 seconds) takes his answer with
-   no wake word. Keep your last line a question when you want one.
-7. **Barge-in.** If he talks over you, a `barge` event says what he heard
-   (`heardText`), what he did not (`unheardText`) and what was never sent. Your
-   open reply is cut: further pieces return 409 with `interrupted:true`. Stop,
-   and answer what he said next. Do not repeat what he already heard.
-8. To cut in on him (rarely), `POST /api/converse/interrupt`.
+6. After you finish, a follow-up window (about 20 seconds) takes their answer
+   with no wake word. Keep your last line a question when you want one.
+7. **Barge-in.** If the speaker talks over you, a `barge` event says what they
+   heard (`heardText`), what they did not (`unheardText`) and what was never
+   sent. Your open reply is cut: further pieces return 409 with
+   `interrupted:true`. Stop, and answer what they said next. Do not repeat what
+   they already heard.
+8. To cut in on the speaker (rarely), `POST /api/converse/interrupt`.
 9. `GET /api/converse/history?since=<n>` is the record of both sides, if you
    lose your place.
 
 ## Speaking well through a tiny speaker
 
-- Short sentences, one idea each. Under three sentences unless he asks for more.
+- Short sentences, one idea each. Under three sentences unless the speaker asks
+  for more.
 - Say the answer first, then one detail. Pause for answers: ask one question at
   a time and stop.
 - No lists, tables, code, URLs, file paths or markup. Say them in words, or

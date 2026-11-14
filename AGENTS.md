@@ -41,7 +41,7 @@ camera, the room or the person in it.
   speed, and a stop doesn't cancel it. Use small steps (10) at speed 100, at
   most one a second. The one exception is `POST /api/travel` (saved shots and
   re-center): one long step the bridge times and guards, because it can't be
-  cancelled. Never send other big steps.
+  cancelled. Never send any other step above 20 units.
 - **One talker at a time.** Never request a talk address (`ccm_talk`) without
   publishing to it right away: an unused address jams the speaker until the
   camera is power-cycled. A finished publish frees it.

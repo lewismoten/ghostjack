@@ -194,13 +194,13 @@ curl -s -H "$H" "$B/api/converse/history?since=0&limit=200" # the back-and-forth
 
 **History.** `GET /api/converse/history?since=<n>&limit=<k>` returns the
 conversation in order, oldest first:
-`{cursor, entries:[{n, at, who, text, ...}]}` with `who` `you` (his final
-utterances; `followUp` / `interrupted` flags), `patchwork` (each line as sent to
-the speaker) or `mark` (an interruption, with `heard` / `unheard` or `partial`).
-Kept in `~/.cache/ghostjack/converse/history.jsonl` (mode 0600, last 2000
-entries or 7 days; `GJ_CONVERSE_HISTORY` moves it). On the control page it is
-the History fold in the Conversation panel, with Copy all and a Copy button per
-line ("You 4:20 PM: ...").
+`{cursor, entries:[{n, at, who, text, ...}]}` with `who` `you` (the speaker's
+final utterances; `followUp` / `interrupted` flags), `patchwork` (each line as
+sent to the speaker) or `mark` (an interruption, with `heard` / `unheard` or
+`partial`). Kept in `~/.cache/ghostjack/converse/history.jsonl` (mode 0600, last
+2000 entries or 7 days; `GJ_CONVERSE_HISTORY` moves it). On the control page it
+is the History fold in the Conversation panel, with Copy all and a Copy button
+per line ("You 4:20 PM: ...").
 
 **Watch the inbox.** Every event is one small JSON line appended to
 `~/.cache/ghostjack/converse/inbox.jsonl` (private to the owner; transcripts
@@ -211,12 +211,12 @@ only, never audio). Watch it with a file monitor:
 - `wake` `{id, via, afterMs}`: the wake word was recognized and the short rising
   bleep played (once per utterance; off unless the persona's `wake` tone is on).
   Wait for the words. A `final` with `wakeOnly:true` is just the wake word: do
-  not answer; his next sentence follows without a wake word.
-- `partial` `{id, text}`: what Lewis has said so far, while he is still talking.
-  Only sent once a wake word has shown (or after an interruption).
-- `end` `{id, silenceMs, durationMs}`: he stopped talking (turn-taking). If
-  `late` is true the words were not yet known when he stopped; `endedAt` is
-  when.
+  not answer; their next sentence follows without a wake word.
+- `partial` `{id, text}`: what Lewis has said so far, while they are still
+  talking. Only sent once a wake word has shown (or after an interruption).
+- `end` `{id, silenceMs, durationMs}`: the speaker stopped talking
+  (turn-taking). If `late` is true the words were not yet known when they
+  stopped; `endedAt` is when.
 - `final` `{id, text, wake, durationMs}`: the whole utterance. Only utterances
   with a wake word are kept. `interrupted` names the barge-in it follows (no
   wake word needed then).
@@ -226,8 +226,8 @@ only, never audio). Watch it with a file monitor:
   `cutWord` heard in part, `wordsUnheard`), `unplayed` the lines never played.
   Word times are estimated from the line's length. Stop sending that reply:
   `POST /api/reply` with its id answers 409 `{interrupted:true}`.
-- `interrupt` `{utterance, partialText, text}`: you cut in on him (below);
-  `partialText` is what he had said so far.
+- `interrupt` `{utterance, partialText, text}`: you cut in on the speaker
+  (below); `partialText` is what they had said so far.
 
 **Reply.** Use `POST /api/say` for a short line. For anything longer, stream it:
 
@@ -242,9 +242,9 @@ is 30 characters, so speech starts early) and speaks each as soon as it is
 complete; the next is synthesized while one plays. A reply counts as one of the
 ten says a minute, up to 2400 characters. `/api/say/many` counts each line.
 
-**Interrupt him** (use rarely): `POST /api/converse/interrupt {"text":"…"}`
-plays the interrupting tone, then speaks; the `interrupt` event records where in
-his sentence you cut in.
+**Interrupt the speaker** (use rarely):
+`POST /api/converse/interrupt {"text":"…"}` plays the interrupting tone, then
+speaks; the `interrupt` event records where in the sentence you cut in.
 
 **Tones** (short, quiet, each on or off):
 `POST /api/converse/tones {"tones":{"start":true,"done":true,"interrupting":true,"heard":true}}`.

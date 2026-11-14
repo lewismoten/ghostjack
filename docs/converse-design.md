@@ -46,8 +46,8 @@ to 0.8 never triggers; a steady voice over it triggers within 300 ms; a voice in
 a pause of the reply triggers. Other options, not built: cross-correlation
 (`estimateLag` is the first half), a real echo canceller (speexdsp or WebRTC AEC
 as a native or WASM module) which would also let Lewis's words be transcribed
-cleanly while the camera speaks. Until then the words he says during a barge-in
-include the tail of the camera's own voice.
+cleanly while the camera speaks. Until then the words the speaker says during a
+barge-in include the tail of the camera's own voice.
 
 `node tools/echo-calibrate.mjs` (needs the bridge and the camera, one short
 burst, Lewis present) plays three tone bursts and records them, then prints the
