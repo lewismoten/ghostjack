@@ -21,13 +21,13 @@ camera, the room or the person in it.
 ## The camera
 
 - The camera stays on an isolated cable in the owner's setup (straight into the
-  computer, built-in address 192.168.187.254); don't change that or add Wi-Fi
-  setup. That is a recommendation, not a limit of the code: on a normal network
-  the camera could reach the maker's cloud. Only the bridge talks to it, behind
-  its access token, and by default the bridge listens only on 127.0.0.1.
-  `tailscale serve` shares it with the owner's own tailnet devices (reachable
-  over the internet through Tailscale, so only as private as the tailnet and the
-  token).
+  computer, with the camera using its built-in address); don't change that or
+  add Wi-Fi setup. That is a recommendation, not a limit of the code: on a
+  normal network the camera could reach the maker's cloud. Only the bridge talks
+  to it, behind its access token, and by default the bridge listens only on
+  loopback. `tailscale serve` shares it with the owner's own tailnet devices
+  (reachable over the internet through Tailscale, so only as private as the
+  tailnet and the token).
 - Never use `tailscale funnel` or port forwarding for the bridge: that would put
   the camera's eye, ears and mouth on the public internet.
 - Look before touching: no factory reset, firmware change, disk format, password

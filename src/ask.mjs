@@ -1,8 +1,9 @@
 // Ask the room a question: say it (with the choices) through the camera, listen on the microphone for a
-// few seconds, transcribe locally with whisper-cli and map what was said to a choice. The page can answer
-// by button instead; whichever comes first wins. One ask at a time.
-// GJ_WHISPER and GJ_WHISPER_MODEL override the program and model; if either is missing the transcript
-// is null (the ask then times out unless a button answers).
+// few seconds, transcribe locally with whisper-cli or whisper-server and map the words to a choice.
+// The page can answer by button instead; whichever comes first wins. One ask at a time.
+// GJ_WHISPER and GJ_WHISPER_MODEL override the default program and model paths. A configured loopback
+// GJ_WHISPER_SERVER uses whisper-server instead. Unavailable or failed transcription returns null
+// (the ask then times out unless a button answers).
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -95,8 +96,8 @@ export function mapAnswer(transcript, choices, other) {
   return other ? 'other' : null;
 }
 
-// Transcribe a WAV with whisper-cli. Resolves to the text, or null when whisper or its model is missing
-// or fails.
+// Transcribe a WAV with the configured loopback server, or whisper-cli (always for a nondefault model).
+// Resolves to text, or null when transcription is unavailable or fails.
 // `prompt` is the initial prompt (a word list that helps with names; whisper-cli --prompt, the server's
 // `prompt` field).
 export function transcribe(wav, model = MODEL(), prompt = '') {

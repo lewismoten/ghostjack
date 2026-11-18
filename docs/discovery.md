@@ -1,5 +1,10 @@
 # Finding the camera on the network
 
+Publication note (2026-11-18): address values in this dated log were replaced
+with placeholders. For shell examples, set `CAMERA_IP` to the camera's built-in
+address, `COMPUTER_IP` to the computer's address on the isolated cable, and
+`NETMASK` to that link's subnet mask. The observations below are unchanged.
+
 How I found out what the Tethys 825-C is and how to reach it, using a Mac and an
 Ethernet cable. Each step says what to run, what it showed, and what it means.
 Commands marked `sudo` need an administrator password.
@@ -64,8 +69,8 @@ sudo tcpdump -i en10 -n -e -c 30
 
 - DHCP requests twice a second from its hardware address (a locally assigned
   one, not a registered maker's ID). It wants an address and gets no answer.
-- Broadcasts to UDP port 3703 **from 192.168.187.254**. So it already has a
-  built-in address to fall back on.
+- Broadcasts to UDP port 3703 **from the camera's built-in address**. So it
+  already has a built-in address to fall back on.
 
 ## 5. Read its announcement
 
@@ -73,12 +78,12 @@ Give the computer an address on the camera's network, on that cable only (Wi-Fi
 is unaffected), then look inside the broadcasts:
 
 ```sh
-sudo ifconfig en10 alias 192.168.187.10 255.255.255.0
+sudo ifconfig en10 alias "$COMPUTER_IP" "$NETMASK"
 sudo tcpdump -i en10 -n -X -c 4 udp port 3703
 ```
 
 **Result:** a text message,
-`HelloRequest {_msysenv:{...}, Nick:"Camera-…", type:"IPC", sn:"…", XAddrs:"192.168.187.254", listen_port:0}`.
+`HelloRequest {_msysenv:{...}, Nick:"Camera-…", type:"IPC", sn:"…", XAddrs:"<camera-address>", listen_port:0}`.
 That's the MIPC app's own discovery protocol (port 3703, next to ONVIF's 3702
 but not the same). It names the camera, its type (IPC, an IP camera) and its
 serial.
@@ -88,9 +93,9 @@ serial.
 These are just connection attempts, no administrator rights needed:
 
 ```sh
-ping -c 2 192.168.187.254
+ping -c 2 "$CAMERA_IP"
 for p in 21 22 23 80 81 443 554 1935 3702 5000 6668 7070 8000 8001 8080 8081 8088 8554 8899 9000 9527 10554 34567 37777 40000 49152; do
-  nc -z -G 2 -w 2 192.168.187.254 $p >/dev/null 2>&1 && echo "OPEN $p"
+  nc -z -G 2 -w 2 "$CAMERA_IP" $p >/dev/null 2>&1 && echo "OPEN $p"
 done
 ```
 
@@ -102,7 +107,7 @@ which the maker's FAQ says shouldn't be.
 The web page's headers and title:
 
 ```sh
-curl -s -D - -o page.html http://192.168.187.254/
+curl -s -D - -o page.html "http://${CAMERA_IP}/"
 grep -o -i 'title>[^<]*' page.html
 ```
 
@@ -112,7 +117,7 @@ grep -o -i 'title>[^<]*' page.html
 RTSP's list of supported commands, without logging in:
 
 ```sh
-printf 'OPTIONS rtsp://192.168.187.254:554/ RTSP/1.0\r\nCSeq: 1\r\n\r\n' | nc -w 8 192.168.187.254 554
+printf 'OPTIONS rtsp://%s:554/ RTSP/1.0\r\nCSeq: 1\r\n\r\n' "$CAMERA_IP" | nc -w 8 "$CAMERA_IP" 554
 ```
 
 **Result:** the connection opens, but no reply in 8 seconds. Port 554 may need a
@@ -120,7 +125,7 @@ stream path or a login first, or it may not be RTSP at all.
 
 ## 8. The browser can't reach it, but curl can
 
-`curl http://192.168.187.254/` returned the page, yet Chrome just spun. A
+`curl http://<camera-address>/` returned the page, yet Chrome just spun. A
 headless Chromium run from Terminal also loaded it fine: a dark login page with
 a language button, the user name already filled in (the camera's serial), a
 password box and "Stay signed in".
@@ -136,7 +141,7 @@ insecure page (the camera has no https).
 ## 9. Chrome still fails: it switched to https
 
 Chrome's error was
-`https://192.168.187.254/ is unreachable. ERR_ADDRESS_UNREACHABLE`, with only
+`https://<camera-address>/ is unreachable. ERR_ADDRESS_UNREACHABLE`, with only
 "provisional headers" in the network panel. Note the `https`: Chrome upgraded
 the typed `http://` address, and the camera has no https (port 443 is closed).
 Safari didn't upgrade and showed the login page. On this Mac there was no Local
@@ -144,7 +149,7 @@ Network entry under Privacy & Security to change, so the permission wasn't the
 cause here.
 
 **Fix:** `chrome://settings/security` → turn off **Always use secure
-connections**, then type `http://192.168.187.254/` again (an Incognito window
+connections**, then type `http://<camera-address>/` again (an Incognito window
 helps if Chrome remembered the upgrade).
 
 ## 10. The printed password doesn't work
@@ -170,7 +175,7 @@ address without a session.
 The web app's script shows how it does it (it's served gzipped; unzip it first):
 
 ```sh
-curl -s -o mipc.js.gz "http://192.168.187.254/scripts/mipc.v2n.min.js?v2n.8.1.1508311025"
+curl -s -o mipc.js.gz "http://${CAMERA_IP}/scripts/mipc.v2n.min.js?v2n.8.1.1508311025"
 gunzip -c mipc.js.gz > mipc.js
 python3 -c "import re;d=open('mipc.js',encoding='latin-1').read();print(sorted(set(re.findall(r'ccm_[a-z_]+',d))))"
 grep -o '.\{200\}ccm_pic_get.jpg.\{200\}' mipc.js
@@ -185,8 +190,9 @@ What it shows:
   The session id comes from signing in, and the token from the snapshot reply.
 - **Live video:** `ccm_play` returns a stream address; the settings offer the
   protocols rtmp, rtsp, rtdp and mutp.
-- VLC can't open `rtsp://192.168.187.254:554` ("Your input can't be opened"), as
-  expected: the stream address only exists after a signed-in `ccm_play` request.
+- VLC can't open `rtsp://<camera-address>:554` ("Your input can't be opened"),
+  as expected: the stream address only exists after a signed-in `ccm_play`
+  request.
 - The device id doesn't need storing: the camera announces it in its port-3703
   HelloRequest (step 5).
 
@@ -267,7 +273,7 @@ fields are leftovers from the shared MIPC software. Digital zoom (cropping the
 
 **Live stream: `ccm_play`** with
 `setup: { stream: 'RTP_Unicast', trans: { proto: 'rtsp' } }, token: 'p0'`
-returns `rtsp://192.168.187.254:554/live/<device id>_p0_<random>` (also
+returns `rtsp://<camera-address>:554/live/<device id>_p0_<random>` (also
 `rtmp://…:7010/…` and the maker's `rtdp://…:7030/…`).
 
 - `ffprobe -rtsp_transport tcp <url>` shows **H.264 1920x1080 video and AAC 16
@@ -314,7 +320,7 @@ over RTMP**.
 
 1. `ccm_talk` with
    `setup: { stream: 'RTP_Unicast', trans: { proto: 'rtmp' } }, token: 'p0'`
-   returns `rtmp://192.168.187.254:7010/pub/<random>`.
+   returns `rtmp://<camera-address>:7010/pub/<random>`.
 2. Publish to it:
    `ffmpeg -re -i speech.wav -c:a aac -ar 16000 -ac 1 -b:a 32k -f flv <url>`.
 3. Start with about 3 seconds of silence: the camera begins playing late and
@@ -390,7 +396,7 @@ the pipeline is unchanged.
 Remove the extra address when done:
 
 ```sh
-sudo ifconfig en10 -alias 192.168.187.10
+sudo ifconfig en10 -alias "$COMPUTER_IP"
 ```
 
 ## Next (written at step 1; done since: steps 11 to 13, then the bridge in `docs/bridge.md`)

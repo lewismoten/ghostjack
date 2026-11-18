@@ -7,7 +7,7 @@ Read this once before you use Ghost Jack. It is also served by the bridge:
 
 Ghost Jack is a small local bridge between you and a $2 IP camera in someone's
 home. The camera is **Glasseye**: it has a lens, a microphone and a tiny
-speaker. The bridge is at `http://127.0.0.1:8787`. You can look (snapshot and
+speaker. The bridge is at `http://localhost:8787`. You can look (snapshot and
 short clips), move the camera, listen, speak, ask a question and hold a spoken
 conversation. The voice you speak with through the bridge is **Glassmouth**. The
 owner (Lewis) sees everything on a control page and can switch you off.
@@ -16,7 +16,7 @@ owner (Lewis) sees everything on a control page and can switch you off.
 
 ```sh
 export GJ_TOKEN=$(cat ~/.config/ghostjack/token)
-H="Authorization: Bearer $GJ_TOKEN"; B=http://127.0.0.1:8787
+H="Authorization: Bearer $GJ_TOKEN"; B=http://localhost:8787
 A="X-GJ-Agent: myagent"        # who you are: a to z, 0 to 9, - and _ (32 at most)
 curl -s -H "$H" $B/api/hello                                   # no token needed; is a bridge there?
 curl -s -H "$H" $B/api/status                                  # state of the camera

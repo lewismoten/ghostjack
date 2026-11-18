@@ -51,3 +51,6 @@ Glassmouth's character sketch came from Lewis Moten's conversation with GPT-6.1
 Sol (OpenAI). The code was written with Claude (Anthropic: Opus 5.5 and Sonnet
 5.5). Review fixes and regression tests also used OpenAI Codex (GPT-6.1 Sol),
 from an adversarial review by GPT-6.2 Astra.
+
+Technical-writing review also used OpenAI Codex (GPT-6.1 Sol), directed by Lewis
+Moten.

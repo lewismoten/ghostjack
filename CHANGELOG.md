@@ -264,7 +264,7 @@ and a mouth in meatspace.
 ### Added
 
 - Local bridge (`npm start`, `src/server.mjs`): one signed-in session with the
-  camera, a token-protected HTTP API on 127.0.0.1.
+  camera, a token-protected HTTP API bound to loopback by default.
 - Snapshot with digital zoom (`crop`), pan and tilt steps, night vision (forced
   infrared or automatic), image and microphone settings, setting the camera
   clock, read-only camera info.

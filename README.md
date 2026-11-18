@@ -32,7 +32,7 @@ and Deck as tabs. Every cryptic label has a plain-language sublabel.
 ```sh
 PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install   # uses an installed Chromium
 security add-generic-password -s tethys-camera -a <device id> -w   # once: stores the camera's password
-npm start                                          # http://127.0.0.1:8787; prints an access token once
+npm start                                          # http://localhost:8787; prints an access token once
 ```
 
 Open `http://localhost:8787/`, paste the token and Jack in (Connect). Flatline
@@ -66,7 +66,7 @@ to the internet (that is how it is tested). If it sits on your normal network or
 Wi-Fi it can talk to the maker's cloud, and anything on that network can reach
 its web page. Ghost Jack itself doesn't connect the camera to the internet. Only
 the bridge talks to it, behind its access token (the ICE), and the bridge
-listens on 127.0.0.1 unless you share it. With `tailscale serve`, your own
+listens on loopback unless you share it. With `tailscale serve`, your own
 Tailscale devices can reach it over the internet through Tailscale's encrypted
 network, so it is only as private as your tailnet and the token. Never use
 `tailscale funnel` or port forwarding for the bridge: that would put the

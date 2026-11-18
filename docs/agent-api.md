@@ -1,13 +1,13 @@
 # Agent API
 
 A short guide for AI agents that use the camera through the bridge. Every route
-is on `http://127.0.0.1:8787` (or the owner's tailnet address) and needs the
+is on `http://localhost:8787` (or the owner's tailnet address) and needs the
 same token as the page. Full route list: [bridge.md](bridge.md).
 
 ```sh
 export GJ_TOKEN=$(cat ~/.config/ghostjack/token)
 H="Authorization: Bearer $GJ_TOKEN"
-B=http://127.0.0.1:8787
+B=http://localhost:8787
 ```
 
 ## Etiquette first
@@ -43,12 +43,12 @@ Mac lists is found by name through avfoundation. Two choices are kept apart: the
 (listen, ask, converse).
 
 ```sh
-curl -s -H "Authorization: Bearer $TOKEN" localhost:8787/api/cameras          # ?refresh=1 looks again
+curl -s -H "$H" "$B/api/cameras"          # ?refresh=1 looks again
 # {"active":"glasseye","mic":"glasseye","cameras":[{"id":"glasseye","kind":"tethys",
 #   "capabilities":["video","mic","speaker","ptz"],…},{"id":"nexigo-n660p-fhd-webcam","kind":"avfoundation",
 #   "capabilities":["video","mic"],…}]}
-curl -s -X POST …/api/cameras/active -d '{"id":"nexigo-n660p-fhd-webcam"}'    # the picture comes from it
-curl -s -X POST …/api/converse/mic   -d '{"id":"macbook-pro-microphone"}'      # converse listens through it
+curl -s -H "$H" -X POST "$B/api/cameras/active" -d '{"id":"nexigo-n660p-fhd-webcam"}'    # the picture comes from it
+curl -s -H "$H" -X POST "$B/api/converse/mic"   -d '{"id":"macbook-pro-microphone"}'      # converse listens through it
 ```
 
 A `camera` on one call (`?camera=` for snapshot and stream, `camera` in the body
@@ -56,9 +56,10 @@ of clip, listen and goto) uses that camera for that call only. Pan, tilt, goto,
 travel and Vision are Glasseye's: they answer 400 when the camera in use has no
 `ptz` capability. A USB camera has its own capture lock, so a clip from it never
 blocks Glasseye's. Choices are saved in
-`~/.config/ghostjack/cameras.local.json`. Glasseye's speaker is the only voice;
-the Mac's microphone can hear it (echo and barge-in are tuned for Glasseye's
-mic).
+`~/.config/ghostjack/cameras.local.json`. Speech can use Glasseye's speaker or
+the Mac's default audio output, selected by `output` (`camera` or `mac`) or the
+persona. The Mac's microphone can hear Glasseye's speaker (echo and barge-in are
+tuned for Glasseye's mic).
 
 ## Picture settings
 
@@ -155,10 +156,11 @@ curl -s -H "$H" $B/api/ask/<id>
 
 Says the question, then each choice with its letter ("Say ay for Yes, bee for
 No…"), listens `listen` seconds (default 6, max 15) and transcribes locally with
-`whisper-cli` (override with `GJ_WHISPER` and `GJ_WHISPER_MODEL`; if either is
-missing the transcript is `null`). The words map to a choice: a letter word (a,
-ay, bee, see, dee) or the choice's own text; anything else is `other` (if
-allowed) or `null`.
+`whisper-cli` by default. `GJ_WHISPER` and `GJ_WHISPER_MODEL` override the
+executable and model paths; a configured loopback `GJ_WHISPER_SERVER` uses
+`whisper-server` instead. Unavailable or failed transcription returns `null`.
+The words map to a choice: a letter word (a, ay, bee, see, dee) or the choice's
+own text; anything else is `other` (if allowed) or `null`.
 
 Status goes `asking`, `listening`, then `answered` (`choice` is `a` to `d` or
 `other`), `timeout` (nothing usable heard) or `failed`. One ask at a time (409).
@@ -256,7 +258,7 @@ own voice is never transcribed. It turns itself off after `idleSeconds` (30 to
 3600, default 900) without a wake word, and says so in `GET /api/converse`
 (`lastStop`). A clip or recording takes the camera: listening pauses
 (`state: paused`) and resumes after. Set
-`GJ_WHISPER_SERVER=http://127.0.0.1:8178` (a running
+`GJ_WHISPER_SERVER=http://localhost:8178` (a running
 `whisper-server -m <model> --port 8178 -l en`) to transcribe in about a second
 instead of five.
 
