@@ -9,7 +9,7 @@ isolated cable; only this service talks to it.
 
 ```sh
 PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install   # once; uses Playwright's cached Chromium
-npm start                                        # http://127.0.0.1:8787
+npm start                                        # http://localhost:8787
 ```
 
 It reads the device id and password from the macOS Keychain item `tethys-camera`
@@ -25,8 +25,8 @@ Check a build with `ffmpeg -hide_banner -encoders | grep aac` and
 `ffmpeg -hide_banner -protocols | grep rtmp`. If both builds are installed,
 Homebrew keeps `ffmpeg-full` out of the path, and
 `FFMPEG=/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg npm start` selects it.
-Environment: `PORT` (8787), `HOST` (127.0.0.1), `CAMERA_IP` (192.168.187.254).
-Open `http://localhost:8787/` for the page.
+Environment: `PORT` (8787), `HOST` (loopback by default), `CAMERA_IP` (defaults
+to the camera's built-in address). Open `http://localhost:8787/` for the page.
 
 ## The token (the ICE)
 
@@ -165,7 +165,7 @@ network with no route to the internet (that is how it is tested). If it sits on
 your normal network or Wi-Fi it can talk to the maker's cloud, and anything on
 that network can reach its web page. Ghost Jack itself doesn't connect the
 camera to the internet. Only the bridge talks to it, behind its access token
-(the ICE), and the bridge listens on 127.0.0.1 unless you share it. With
+(the ICE), and the bridge listens on loopback unless you share it. With
 `tailscale serve`, your own Tailscale devices can reach it over the internet
 through Tailscale's encrypted network, so it is only as private as your tailnet
 and the token.

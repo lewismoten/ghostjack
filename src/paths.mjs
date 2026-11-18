@@ -1,4 +1,4 @@
-// Where scratch audio goes: captures/ (git-ignored), deleted as soon as it has been used.
+// Scratch audio uses GJ_CAPTURES, defaulting to captures/ (git-ignored), and is deleted after use.
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 export const TMP =
