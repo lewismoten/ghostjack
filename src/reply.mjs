@@ -39,8 +39,12 @@ export function setTones(t) {
         new Error(`unknown tone; kinds are ${TONE_KINDS.join(', ')}`),
         { code: 400 },
       );
-    tones[k] = v === true;
+    if (typeof v !== 'boolean')
+      throw Object.assign(new Error('tone values are true or false'), {
+        code: 400,
+      });
   }
+  Object.assign(tones, t);
   return { ...tones };
 }
 
@@ -125,9 +129,9 @@ export function append({ id, text, end, voice, level, rate, persona, output }) {
   if (speech.cleanOutput(output)) r.output = output;
   else if (!r.output) r.output = persona?.output;
   const t = sayable(applySayAs(String(text ?? ''), r.persona?.sayAs));
-  r.chars += t.length;
-  if (r.chars > MAX_REPLY_CHARS)
+  if (r.chars + t.length > MAX_REPLY_CHARS)
     throw err(`a reply is ${MAX_REPLY_CHARS} characters at most`, 400);
+  r.chars += t.length;
   r.buf += t;
   const { segments, rest } = takeSegments(r.buf, {
     first: r.segments.length === 0,

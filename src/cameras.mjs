@@ -95,7 +95,7 @@ export function defaultMode(list) {
     const [w, h] = m.size.split('x').map(Number);
     return Math.abs(w / h - 16 / 9) < 0.02;
   };
-  const pool = list.filter(wide);
+  const pool = list.filter((m) => wide(m) && m.fps.includes(30));
   const best = [...(pool.length ? pool : list)].sort(
     (a, b) => area(b) - area(a),
   )[0];

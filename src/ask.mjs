@@ -41,6 +41,7 @@ async function viaServer(wav, base, prompt) {
     if (prompt) fd.append('prompt', prompt);
     const r = await fetch(`${base}/inference`, {
       method: 'POST',
+      redirect: 'error',
       body: fd,
       signal: AbortSignal.timeout(60000),
     });

@@ -12,7 +12,9 @@ import * as rec from './record.mjs';
 import * as cameras from './cameras.mjs';
 
 export const FFMPEG = process.env.FFMPEG || '/opt/homebrew/bin/ffmpeg';
-const DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'captures');
+const DIR =
+  process.env.GJ_CAPTURES ||
+  join(dirname(fileURLToPath(import.meta.url)), '..', 'captures');
 export const children = new Set();
 
 export const clampWidth = (v, def) => {

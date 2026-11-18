@@ -7,7 +7,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const FFMPEG = process.env.FFMPEG || '/opt/homebrew/bin/ffmpeg';
-const DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'captures');
+const DIR =
+  process.env.GJ_CAPTURES ||
+  join(dirname(fileURLToPath(import.meta.url)), '..', 'captures');
 mkdirSync(DIR, { recursive: true });
 export const files = {
   still: join(DIR, 'fake-still.jpg'),

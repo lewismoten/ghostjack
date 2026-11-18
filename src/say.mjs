@@ -18,7 +18,9 @@ import * as speakers from './speakers.mjs';
 import { SpeechStream, silence, sine } from './speech-stream.mjs';
 
 const FFMPEG = process.env.FFMPEG || '/opt/homebrew/bin/ffmpeg';
-const TMP = join(dirname(fileURLToPath(import.meta.url)), '..', 'captures');
+const TMP =
+  process.env.GJ_CAPTURES ||
+  join(dirname(fileURLToPath(import.meta.url)), '..', 'captures');
 // Phone band and gentle compression first (0.1.1: measured on their own output, so the gain that
 // normalizes the speech is exact), then gain and level, then a true-peak limiter (about -6 dBFS).
 const BAND =

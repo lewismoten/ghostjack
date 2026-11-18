@@ -116,6 +116,7 @@ function setStatus(t, bad) {
 function setConnected(on) {
   const was = connected;
   connected = on;
+  if (!on) resetHistory();
   $('device').hidden = !on; // the header shows the camera only when one is jacked in
   for (const id of controls) $(id).disabled = !on;
   updateArrowsSoon();
@@ -196,6 +197,8 @@ const net = netpath($('radar'), reduced);
 
 async function connect(e) {
   e?.preventDefault();
+  setConnected(false);
+  const connection = hist.connection;
   base = $('addr').value.trim().replace(/\/+$/, '');
   token = $('token').value.trim();
   store.set('bridge', base);
@@ -206,8 +209,10 @@ async function connect(e) {
   try {
     try {
       const hello = await fetch(base + '/api/hello').then((r) => r.json());
+      if (connection !== hist.connection) return;
       if (!hello.ok) throw new Error('not a camera bridge');
     } catch {
+      if (connection !== hist.connection) return;
       setConnected(false);
       $('demo').hidden = false;
       return setStatus(
@@ -217,11 +222,13 @@ async function connect(e) {
     }
     try {
       const r = await api('/api/status');
+      if (connection !== hist.connection) return;
       if (r.status === 401) {
         setConnected(false);
         return setStatus('Wrong token. The ICE held.', true);
       }
       const s = await r.json();
+      if (connection !== hist.connection) return;
       if (!r.ok) throw new Error(s.error);
       const first = !connected;
       ok = true;
@@ -245,6 +252,7 @@ async function connect(e) {
       loadShots();
       if (first && !liveOn) autoSnapSoon(300);
     } catch (err) {
+      if (connection !== hist.connection) return;
       setConnected(false);
       lost = true;
       setStatus(`Lost the angle. The rig did not answer: ${err.message}`, true);
@@ -1767,7 +1775,16 @@ $('listenPill').onclick = () => selectTab('glass', true);
 
 // History: the conversation as a chat log. Entries come from /api/converse/history by cursor; the log is
 // rebuilt only when new ones arrive, and keeps its scroll position unless it was already at the bottom.
-const hist = { cursor: 0, entries: [], busy: false };
+const hist = { cursor: 0, entries: [], busy: false, connection: 0 };
+function resetHistory() {
+  hist.connection++;
+  hist.cursor = 0;
+  hist.entries = [];
+  hist.busy = false;
+  $('cvLog').textContent = '';
+  $('cvHistCount').textContent = '';
+  $('cvHistNote').textContent = '\u00a0';
+}
 const histName = (e) =>
   e.who === 'you' ? 'You' : e.who === 'patchwork' ? 'Patchwork' : 'Note';
 const histTime = (e) =>
@@ -1807,14 +1824,16 @@ function histRow(e) {
   return row;
 }
 async function pollHistory() {
-  if (hist.busy) return;
+  if (!connected || hist.busy) return;
+  const connection = hist.connection;
   hist.busy = true;
   try {
     const r = await api(
       `/api/converse/history?since=${hist.cursor}&limit=2000`,
     );
-    if (!r.ok) return;
+    if (!r.ok || !connected || connection !== hist.connection) return;
     const j = await r.json();
+    if (!connected || connection !== hist.connection) return;
     hist.cursor = j.cursor;
     if (!j.entries.length) return;
     const log = $('cvLog');
@@ -1827,7 +1846,7 @@ async function pollHistory() {
   } catch {
     /* the bridge is away */
   } finally {
-    hist.busy = false;
+    if (connection === hist.connection) hist.busy = false;
   }
 }
 $('cvHistOpen').onclick = () => {
@@ -3301,7 +3320,7 @@ $('forgetIce').onclick = () => {
   } catch {
     /* private window */
   }
-  if (connected) setConnected(false);
+  setConnected(false);
   setStatus('ICE forgotten. This browser no longer holds the token.');
 };
 
