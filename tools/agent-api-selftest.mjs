@@ -1,7 +1,7 @@
 // Offline self-test for the agent endpoints (goto, snapshot width, clip, listen, play, ask).
 // Starts the bridge on a private port with a fake camera (tools/fake-camera.mjs), a throwaway HOME for
 // the token, aim and shots, and a fake whisper-cli, so it never touches the real camera or the owner's
-// bridge. Generated media lives in captures/ (git-ignored) and is deleted at the end.
+// bridge. Generated media lives in a temporary directory and is deleted at the end.
 // Run: node tools/agent-api-selftest.mjs
 import { spawn, spawnSync, execFileSync } from 'node:child_process';
 import {
@@ -9,16 +9,16 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  readdirSync,
   rmSync,
   writeFileSync,
   chmodSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const CAP = join(ROOT, 'captures');
+const CAP = mkdtempSync(join(tmpdir(), 'gj-agent-selftest-'));
 const FFMPEG = process.env.FFMPEG || '/opt/homebrew/bin/ffmpeg';
 const FFPROBE = FFMPEG.replace(/ffmpeg$/, 'ffprobe');
 const PORT = 18790; // never the real bridge's 8787
@@ -51,7 +51,8 @@ const server = spawn('node', [join(ROOT, 'src', 'server.mjs')], {
     ...process.env,
     // never make sound in the room: the laptop player is a no-op here (a selftest played the ask prompt aloud, 2026-11-10)
     FFPLAY: '/usr/bin/true',
-    GJ_SPEAKERS_LOCAL: join(ROOT, 'captures', '.selftest-speakers.json'),
+    GJ_SPEAKERS_LOCAL: join(CAP, '.selftest-speakers.json'),
+    GJ_CAPTURES: CAP,
     HOME: home,
     PORT: String(PORT),
     GJ_FAKE_CAMERA: join(ROOT, 'tools', 'fake-camera.mjs'),
@@ -457,9 +458,7 @@ try {
   await sleep(300);
   server.kill('SIGKILL');
   rmSync(home, { recursive: true, force: true });
-  for (const f of readdirSync(CAP))
-    if (/^(fake-|agent-|play-|say-)/.test(f))
-      rmSync(join(CAP, f), { force: true });
+  rmSync(CAP, { recursive: true, force: true });
   console.log(failed ? `${failed} failed` : 'all passed');
   process.exit(failed ? 1 : 0);
 }

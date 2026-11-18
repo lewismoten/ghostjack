@@ -568,11 +568,12 @@ const server = createServer(async (req, res) => {
         : crop
           ? 1280
           : 0;
+      const picture = await media.reshapeJpeg(jpg, { crop, width });
       res.writeHead(200, {
         'Content-Type': 'image/jpeg',
         'Cache-Control': 'no-store',
       });
-      return res.end(await media.reshapeJpeg(jpg, { crop, width }));
+      return res.end(picture);
     }
     if (route === 'POST /api/goto') return await goto(req, res);
     if (route === 'POST /api/clip' || route === 'POST /api/listen')

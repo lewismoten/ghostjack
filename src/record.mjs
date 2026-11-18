@@ -10,7 +10,9 @@ import { fileURLToPath } from 'node:url';
 import { camera } from './camera-select.mjs';
 
 const FFMPEG = process.env.FFMPEG || '/opt/homebrew/bin/ffmpeg';
-const DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'captures');
+const DIR =
+  process.env.GJ_CAPTURES ||
+  join(dirname(fileURLToPath(import.meta.url)), '..', 'captures');
 export const MAX_SECONDS = Math.max(
   5,
   Math.min(3600, Number(process.env.GJ_REC_MAX) || 600),
@@ -24,11 +26,15 @@ export function cleanup() {
   }
   recs.clear();
 }
-// Recordings the last run left behind (a crash): only our own rec-*.mp4 names.
+// Private recordings, agent captures and uploads left behind by an interrupted run.
 export function sweep() {
-  if (!existsSync(DIR)) return;
+  if (process.env.GJ_FAKE_CAMERA || !existsSync(DIR)) return;
   for (const f of readdirSync(DIR))
-    if (/^rec-[0-9a-f]{12}\.mp4$/.test(f))
+    if (
+      /^(rec-[0-9a-f]{12}\.mp4|agent-[0-9a-f]{12}\.(mp4|wav|m4a)|play-[0-9a-f]{12}\.(in|wav))$/.test(
+        f,
+      )
+    )
       rmSync(join(DIR, f), { force: true });
 }
 
@@ -98,9 +104,11 @@ export async function start() {
         /* no file */
       }
       r.bytes = size;
-      r.status = size > 1000 ? 'ready' : 'failed';
+      // A clean 'q' exits 0; the SIGINT fallback after a deliberate stop still finalizes but exits 255.
+      const finished = code === 0 || (r.stopping && code === 255);
+      r.status = finished && size > 1000 ? 'ready' : 'failed';
       if (r.status === 'failed') {
-        r.error = `ffmpeg exited ${code} without a picture`;
+        r.error = `ffmpeg exited ${code} without a finalized recording`;
         rmSync(file, { force: true });
       }
       resolve();
